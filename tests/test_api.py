@@ -92,3 +92,10 @@ def test_cors_allows_the_local_apps_and_the_draft_room(client):
     r = client.options("/health", headers={"Origin": "https://evil.example",
                                            "Access-Control-Request-Method": "GET"})
     assert "access-control-allow-origin" not in r.headers
+
+
+def test_board_returns_per_category_change(client):
+    client.post("/draft/session", json={"draft_id": "mock", "my_slot": 1})
+    rec = client.get("/draft/board").json()["recommendations"][0]
+    keys = [f"dp_{k}" for k in ("fg_pct", "ft_pct", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov")]
+    assert all(isinstance(rec[k], float) for k in keys)

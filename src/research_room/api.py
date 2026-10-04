@@ -225,7 +225,8 @@ def create_app(db_path: str | None = None, image_root=None) -> FastAPI:
             if s.state.current_pick is None:
                 return {"complete": True, **session_json(s)}
             res = s.board.recommend(s.state, s.punts)
-            cols = PLAYER_COLS + ["starts", "expected_cats", "gain", "p_win_week", "p_win_week_mc",
+            cols = PLAYER_COLS + [f"dp_{c.key}" for c in s.cfg.categories] + [
+                                  "starts", "expected_cats", "gain", "p_win_week", "p_win_week_mc",
                                   "p_available_at_decision", "p_available_next", "reasons"]
             mine = s.state.roster(s.state.my_slot)
             roster = s.valued[s.valued["player_id"].isin(mine["player_id"])]
