@@ -119,3 +119,21 @@ def test_one_bad_file_writes_nothing(universe, inbox):
 def test_empty_inbox_ingests_only_league_settings(universe, tmp_path):
     assert yahoo.ingest_inbox(universe, yahoo.CsvBackend(tmp_path)) == {}
     assert universe.execute("SELECT count(*) FROM yahoo_league").fetchone()[0] == 1
+
+
+def test_pull_from_downloads_moves_only_newer_files(tmp_path):
+    from jobs.ingest_inbox import pull_from_downloads
+    inbox, downloads = tmp_path / "inbox", tmp_path / "dl"
+    inbox.mkdir()
+    downloads.mkdir()
+    (inbox / "roster.csv").write_text("old")
+    (downloads / "roster.csv").write_text("new")
+    (downloads / "players.csv").write_text("p")
+    (downloads / "unrelated.csv").write_text("x")
+    os.utime(inbox / "roster.csv", (1, 1))
+    assert sorted(pull_from_downloads(inbox, downloads)) == ["players.csv", "roster.csv"]
+    assert (inbox / "roster.csv").read_text() == "new" and (downloads / "unrelated.csv").exists()
+    (downloads / "matchup.csv").write_text("stale")
+    os.utime(downloads / "matchup.csv", (1, 1))
+    (inbox / "matchup.csv").write_text("fresh")
+    assert pull_from_downloads(inbox, downloads) == []
