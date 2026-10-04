@@ -2,7 +2,14 @@
 
 A personal, single-user Python application I am building to analyze my own Fantasy Basketball league.
 
-NBA Research Room is a local Streamlit app for one Yahoo head-to-head league. It runs a live draft
+### ▶ [Open the prototype](https://girardjustin1.github.io/nba-research-room/?path=/story/prototype--draft)
+
+Every app screen at phone size, with sample data: open the link, then use **☰** inside the screen
+to switch between Draft, League and System. All screens and components:
+[Storybook](https://girardjustin1.github.io/nba-research-room/).
+
+NBA Research Room is a local app for one Yahoo head-to-head league (React front end on a Python
+engine, with a Streamlit fallback for the draft). It runs a live draft
 board, projects player stats, recommends daily lineups and weekly pickups, and reports
 head-to-head win probability. **It only recommends.** Every move is made by hand in the Yahoo app;
 nothing here acts inside Yahoo.
