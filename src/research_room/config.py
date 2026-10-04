@@ -167,6 +167,11 @@ class FeaturesConfig(BaseModel):
     rotation_minutes: float
 
 
+class BaselineConfig(BaseModel):
+    preseason_prior_games: float
+    min_play_prob: float
+
+
 class XFeedConfig(BaseModel):
     daily_read_budget: int
 
@@ -179,6 +184,7 @@ class Settings(BaseModel):
     season: Season
     draft: Draft
     features: FeaturesConfig
+    baseline: BaselineConfig
     paths: Paths
     bdl: BdlConfig
     x_feed: XFeedConfig

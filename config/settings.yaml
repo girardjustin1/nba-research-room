@@ -96,6 +96,10 @@ features:                      # chosen from 2024-26 data: see DECISIONS.md (Pha
   rolling_windows: [3, 5, 10]
   rotation_minutes: 20         # a teammate with EWMA minutes >= this is "rotation" for usage-out
 
+baseline:
+  preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
+  min_play_prob: 0.0           # floor on P(plays) from the play-rate EWMA (overrides can set 0)
+
 paths:
   db: data/research_room.duckdb
   parquet_dir: data/parquet

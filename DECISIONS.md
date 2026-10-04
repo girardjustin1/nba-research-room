@@ -177,3 +177,12 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   reports, so it stands in for the report until overrides.py supplies it.
 - Vegas and prop-line features are absent from history (no odds archive) and come in as the nightly
   archive grows.
+- **Baseline projection** (`projections/baseline.py`): per game, EWMA per-minute rate x minutes
+  when playing x P(plays), with over-dispersed variance (phi fitted per stat on 2023-25: pts 2.35,
+  FT 1.9-2.1, most others ~1.0-1.1). Out of sample on 2025-26: bias near zero (pts +0.04,
+  reb -0.03, ast +0.01) and calibrated (pts 70% within 1 sd vs 68% expected; blocks run wide at
+  84%, typical for small counts).
+- **Season carry-over fix**: last season's play rate leaked end-of-season rest into October (Jokic
+  projected low). P(plays) now blends toward the preseason games projection (games / 82) with the
+  same n / (n + 10) weight as the stat line; overrides win outright. Only current players (played
+  last season or this one, or in the preseason pool) are projected.
