@@ -187,3 +187,19 @@ def test_pick_owners_my_slots_and_compare_percentages(client):
     assert len(team["slots"]) == 10 and sum(x["player_id"] == 2 for x in team["slots"]) == 1
     cmp = client.get("/draft/compare", params={"ids": "3"}).json()["players"][0]
     assert cmp["fg_pct_mean"] == pytest.approx(cmp["fgm_mean"] / cmp["fga_mean"])
+
+
+def test_strength_compares_me_with_the_league(client):
+    client.post("/draft/session", json={"draft_id": "mock", "my_slot": 2})
+    first = client.get("/draft/strength").json()
+    assert first["teams"] == 4 and len(first["categories"]) == 9
+    for row in [*first["categories"], first["expected_cats"]]:
+        assert 1 <= row["rank"] <= 4 and row["best"] >= row["me"] and row["best"] >= row["league_avg"]
+        assert row["best_team_name"]
+
+    # I take the best player in the pool; other teams take nothing -> my expected cats lead.
+    best = client.get("/draft/board").json()["recommendations"][0]["player_id"]
+    client.post("/draft/pick", json={"player_id": 1, "team_id": 1})
+    client.post("/draft/pick", json={"player_id": best if best != 1 else 2})
+    after = client.get("/draft/strength").json()["expected_cats"]
+    assert after["me"] > first["expected_cats"]["me"]

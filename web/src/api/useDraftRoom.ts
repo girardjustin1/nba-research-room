@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, ApiUnreachableError, type DraftApi } from './client';
-import type { Board, DraftTeam, PickIn, PickInsight, PoolPlayer, PositionalValue, Session, TeamWeeksResponse } from './types';
+import type { Board, DraftTeam, PickIn, PickInsight, PoolPlayer, PositionalValue, Session, StrengthResponse, TeamWeeksResponse } from './types';
 
 export type Connection = 'connecting' | 'up' | 'down';
 
@@ -30,6 +30,8 @@ export interface DraftRoomState {
   pool: Map<number, PoolPlayer>;
   teams: Resource<DraftTeam[]>;
   positional: Resource<PositionalValue[]>;
+  /** Me vs the league per category (GET /draft/strength). */
+  strength: Resource<StrengthResponse>;
   /** The engine's note on the positional values, when it sends one. */
   positionalNote?: string | null;
   /** The live read after recent picks, newest last (GET /draft/insights). */
@@ -74,7 +76,7 @@ function asApiError(reason: unknown): ApiError | null {
 /**
  * Polls GET /draft/session every ~1.5 s (the Tampermonkey listener posts picks straight to
  * the API, so the UI must follow without user action). When the pick state changes it
- * refetches the board, the player pool, the teams and the positional value together. Only
+ * refetches the board, the player pool, the teams, the positional value and the strength together. Only
  * one refetch runs at a time; if picks land meanwhile, one more runs after it.
  */
 export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, DraftRoomActions] {
@@ -89,6 +91,7 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
     pool: new Map(),
     teams: emptyResource(),
     positional: emptyResource(),
+    strength: emptyResource(),
     insights: emptyResource(),
     schedule: emptyResource(),
     lastUpdated: null,
@@ -109,12 +112,13 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
         const key = boardKey(latest.current);
         loadedKey.current = key;
         setState((s) => ({ ...s, boardLoading: true }));
-        const [board, pool, teams, positional, insights] = await Promise.allSettled([
+        const [board, pool, teams, positional, insights, strength] = await Promise.allSettled([
           api.getBoard(),
           api.getPlayers({ availableOnly: false, limit: 2000 }),
           api.getTeams(),
           api.getPositionalValue(),
           api.getInsights(),
+          api.getStrength(),
         ]);
         if (!alive.current) return;
         const drafted = new Set((latest.current?.picks ?? []).map((p) => p.player_id));
@@ -135,6 +139,10 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
               positional.status === 'fulfilled'
                 ? { data: positional.value.positions, error: null }
                 : { data: s.positional.data, error: asApiError(positional.reason) },
+            strength:
+              strength.status === 'fulfilled'
+                ? { data: strength.value, error: null }
+                : { data: s.strength.data, error: asApiError(strength.reason) },
             positionalNote: positional.status === 'fulfilled' ? (positional.value.note ?? null) : s.positionalNote,
             insights:
               insights.status === 'fulfilled'

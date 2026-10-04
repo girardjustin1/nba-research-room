@@ -2,7 +2,7 @@ import { ApiError } from '../../api/client';
 import type { Board, PoolPlayer, Session } from '../../api/types';
 import type { DraftRoomActions, DraftRoomState } from '../../api/useDraftRoom';
 import { SAMPLE_PLAYERS } from './players';
-import { makeInsights, makePool, makePositional, makeTeams, makeTeamWeeks } from './fixtures';
+import { makeInsights, makePool, makePositional, makeStrength, makeTeams, makeTeamWeeks } from './fixtures';
 
 /** A DraftRoomState built from invented fixtures, for stories. */
 export function mockRoomState(session: Session | null, board: Board | null, extra: Partial<DraftRoomState> = {}): DraftRoomState {
@@ -20,6 +20,7 @@ export function mockRoomState(session: Session | null, board: Board | null, extr
     pool,
     teams: { data: session ? makeTeams(session) : null, error: null },
     positional: { data: session ? makePositional() : null, error: null },
+    strength: { data: session ? makeStrength(session) : null, error: null },
     insights: { data: session ? makeInsights(session) : null, error: null },
     schedule: { data: makeTeamWeeks(), error: null },
     lastUpdated: 0,

@@ -5,7 +5,7 @@ import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
 import type { AppApis } from '../app/types';
 import { healthWarn, modelsNormal, notesNormal, readinessWarn } from '../mocks/app-shell/system';
-import { CATEGORIES, makeBoard, makeCompare, makeInsights, makePool, makePositional, makeTeams } from '../mocks/draft/fixtures';
+import { CATEGORIES, makeBoard, makeCompare, makeInsights, makePool, makePositional, makeStrength, makeTeams } from '../mocks/draft/fixtures';
 import { demoSession, DemoPickError, initialDemoDraft, recordDemoPick, removeDemoPick, undoDemoPick, type DemoDraft } from '../mocks/draft/demoState';
 import { SAMPLE_PLAYERS } from '../mocks/draft/players';
 import { gcMidweekClose } from '../mocks/matchup-analysis/gamecenter';
@@ -103,6 +103,7 @@ function routes(): [string, RegExp, Handler][] {
       const s = demoSession(draft);
       return { insights: makeInsights(s, Number(query.get('last') ?? 28)), current_pick: s.current_pick, categories: CATEGORIES };
     }],
+    ['GET', /^\/draft\/strength$/, ({ draft }) => makeStrength(demoSession(draft))],
     ['GET', /^\/draft\/positional_value$/, () => ({ positions: makePositional(), note: 'Sample values (demo).' })],
     ['GET', /^\/draft\/compare$/, ({ query }) => ({ players: makeCompare((query.get('ids') ?? '').split(',').map(Number).filter(Boolean)) })],
     ['POST', /^\/draft\/pick$/, ({ draft, body }) => {

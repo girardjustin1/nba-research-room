@@ -462,6 +462,18 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                 })
             return {"teams": out, "current_pick": current}
 
+    @app.get("/draft/strength")
+    def get_strength() -> dict:
+        """Me vs the league per category (P(win) vs an average team, projected final rosters)."""
+        with h.lock:
+            s = h.require()
+            out = s.board.league_strength(s.state)
+            names = s.team_names()
+            for row in [*out["categories"], out["expected_cats"]]:
+                row["best_team_name"] = names.get(row["best_team_id"])
+            return {**out, "my_slot": s.state.my_slot, "punts": sorted(s.punts),
+                    "current_pick": s.state.current_pick}
+
     @app.get("/draft/insights")
     def get_insights(last: int = 5) -> dict:
         """Live read on the most recent picks: each drafting team's needs, strengths and

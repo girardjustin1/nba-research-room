@@ -10,6 +10,8 @@ import {
   makeSession,
   onTheClockBoard,
   onTheClockSession,
+  puntBoard,
+  puntSession,
   waitingBoard,
   waitingSession,
 } from '../../../mocks/draft/fixtures';
@@ -41,13 +43,15 @@ export const OnTheClock: Story = { args: { state: mockRoomState(onTheClockSessio
 /** The live read after the newest pick slides in (tap it for that team). */
 export const LatestPick: Story = { args: { state: mockRoomState(midSession, midBoard), showLatestOnLoad: true } };
 export const PuntDrift: Story = { args: { state: mockRoomState(driftSession, driftBoard) } };
-/** ADP sort with the PROJ. PICK divider where my next pick falls. */
-export const AvailableHalf: Story = { args: { initialSnap: 'half' } };
-export const AvailableFull: Story = { args: { initialSnap: 'full' } };
-export const Favorites: Story = { args: { initialSnap: 'half', initialTab: 'favorites' } };
-export const MyTeam: Story = { args: { state: mockRoomState(driftSession, driftBoard), initialSnap: 'full', initialTab: 'team' } };
+/** Me vs league: my standing per category against the league, the market by position,
+ * suggested picks, then the available players (ADP sort, PROJ. PICK divider at my next pick). */
+export const MeVsLeague: Story = { args: { initialTab: 'league' } };
+export const MeVsLeagueOnTheClock: Story = { args: { state: mockRoomState(onTheClockSession, onTheClockBoard), initialTab: 'league' } };
+export const MeVsLeaguePunting: Story = { args: { state: mockRoomState(puntSession, puntBoard), initialTab: 'league' } };
+export const Favorites: Story = { args: { initialTab: 'league', initialPlayers: 'favorites' } };
+export const MyTeam: Story = { args: { state: mockRoomState(driftSession, driftBoard), initialPanel: 'myteam' } };
 /** Strategize: teams picking before my next pick come first. */
-export const Teams: Story = { args: { state: mockRoomState(midSession, midBoard), initialSnap: 'full', initialTab: 'teams' } };
+export const Teams: Story = { args: { state: mockRoomState(midSession, midBoard), initialPanel: 'teams' } };
 export const TopTenWithReasons: Story = { args: { initialPanel: 'recommendations' } };
 export const EnterPickAndUndo: Story = { args: { initialPanel: 'entry' } };
 export const DraftLog: Story = { args: { state: mockRoomState(driftSession, driftBoard), initialPanel: 'log' } };
@@ -60,9 +64,9 @@ export const NewEndpointsMissing: Story = {
       teams: { data: null, error: notFound },
       positional: { data: null, error: notFound },
       insights: { data: null, error: notFound },
+      strength: { data: null, error: notFound },
     }),
-    initialSnap: 'half',
-    initialTab: 'teams',
+    initialTab: 'league',
   },
 };
 export const FirstLoad: Story = {

@@ -14,6 +14,7 @@ import type {
   PoolPlayer,
   Recommendation,
   Session,
+  StrengthResponse,
 } from '../../api/types';
 import { SAMPLE_PLAYERS, seeded } from './players';
 
@@ -247,6 +248,37 @@ export function makeTeams(session: Session): DraftTeam[] {
       picks_until_next: next == null || current == null ? null : next - current,
     };
   });
+}
+
+/** GET /draft/strength: invented league comparison. My values are SAMPLE_P_CAT, so the Me vs
+ * league table agrees with the board's per-category chances. */
+export function makeStrength(session: Session, pCat: Record<string, number> = SAMPLE_P_CAT): StrengthResponse {
+  const rnd = seeded(23);
+  const me = session.my_slot;
+  // scale 1: probabilities (kept inside 3%..97%); scale 6: expected categories (0..9).
+  const row = (mine: number, scale: number, key: string) => {
+    const hi = scale === 1 ? 0.97 : 9;
+    const lo = scale === 1 ? 0.03 : 0;
+    const others = Array.from({ length: session.teams - 1 }, () => Math.min(hi, Math.max(lo, mine + (rnd() - 0.5) * 0.5 * scale)));
+    const all = [mine, ...others];
+    const bestIdx = all.indexOf(Math.max(...all));
+    const otherSlots = Array.from({ length: session.teams }, (_, i) => i + 1).filter((t) => t !== me);
+    const bestTeam = bestIdx === 0 ? (me ?? 1) : otherSlots[bestIdx - 1]!;
+    return {
+      key,
+      me: me == null ? null : mine,
+      league_avg: all.reduce((a, b) => a + b, 0) / all.length,
+      best: all[bestIdx]!,
+      best_team_id: bestTeam,
+      best_team_name: bestTeam === me ? 'You' : (TEAM_NAMES[String(bestTeam)] ?? `Team ${bestTeam}`),
+      rank: me == null ? null : 1 + others.filter((v) => v > mine).length,
+    };
+  };
+  const categories = CATEGORIES.map((c) => ({ ...row(pCat[c.key] ?? 0.5, 1, c.key), label: c.label }));
+  const expected = Object.values(pCat).reduce((a, b) => a + b, 0);
+  const { key: _omit, ...expected_cats } = row(expected, 6, 'expected');
+  void _omit;
+  return { teams: session.teams, categories, expected_cats, my_slot: me, punts: session.punts, current_pick: session.current_pick };
 }
 
 /** GET /draft/positional_value: invented VOR per position. */

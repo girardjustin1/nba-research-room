@@ -145,6 +145,27 @@ export interface TeamsResponse {
   teams: DraftTeam[];
 }
 
+/** One row of GET /draft/strength. Values are P(win this category) vs a league-average team
+ * (expected categories won, 0-9, for the totals row), each team on its projected final roster. */
+export interface StrengthRow {
+  me: number | null;
+  league_avg: number;
+  best: number;
+  best_team_id: number;
+  best_team_name?: string | null;
+  /** 1 = best in the league; ties share the better rank. */
+  rank: number | null;
+}
+
+export interface StrengthResponse {
+  teams: number;
+  categories: (StrengthRow & { key: string; label: string })[];
+  expected_cats: StrengthRow;
+  my_slot: number | null;
+  punts: string[];
+  current_pick: number | null;
+}
+
 /** One row of GET /draft/compare: player fields + per-game means + per-category z. */
 export interface ComparePlayer extends Player {
   pts_mean?: number | null;

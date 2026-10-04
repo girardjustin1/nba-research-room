@@ -1,5 +1,5 @@
 import type { DraftApi } from '../../api/client';
-import { makeBoard, makeCompare, makeInsights, makePool, makePositional, makeSession, makeTeamDays, makeTeams, makeTeamWeeks } from './fixtures';
+import { makeBoard, makeCompare, makeInsights, makePool, makePositional, makeSession, makeStrength, makeTeamDays, makeTeams, makeTeamWeeks } from './fixtures';
 
 /**
  * A DraftApi backed by the invented draft fixtures, so the real DraftRoom container runs in
@@ -26,6 +26,7 @@ export function createMockDraftApi(currentPick = 30): DraftApi {
     getTeams: async () => ({ teams: makeTeams(session) }),
     setTeamNames: ok,
     getPositionalValue: async () => ({ positions: makePositional() }),
+    getStrength: async () => makeStrength(session),
     compare: async (ids) => ({ players: makeCompare(ids) }),
     getInsights: async () => ({ insights: makeInsights(session), current_pick: session.current_pick, categories: session.categories }),
     getTeamWeeks: async () => makeTeamWeeks(),

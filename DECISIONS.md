@@ -175,6 +175,15 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   not start: no projections, no schedule, or an unmatched keeper. Runbook: `docs/draft-night.md`.
 - `make nightly --schedule` never worked (make rejects the flag). It is now `make nightly-schedule`.
 
+**Draft room in two tabs (owner's call, 2026-10-04).** The local pick clock is gone: Yahoo's room
+has the real one. The draggable bottom sheet is gone too. **Board** is the grid of every team's
+picks. **Me vs league** compares me with the league side by side (my value, league average, best
+team, my rank per category), then the market by position, suggested picks and Available /
+Favorites. My team and Teams moved to the tools menu. The comparison is GET /draft/strength. Each
+team is scored on its projected final roster (picks so far plus a typical player at each remaining
+pick) as P(win the category) against a league-average team, so teams with one pick more or less
+still compare fairly. The ▲/▼ cut-off (1 point, 0.05 categories) is display only.
+
 ## Phase 1 — started 2026-10-04 (in parallel with Phase D UI work, owner's choice)
 
 - **EWMA half-lives chosen from data** (2024-25 and 2025-26, next-game relative MAE, players with

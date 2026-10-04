@@ -9,14 +9,16 @@ import DriveFileRenameOutlineOutlinedIcon from '@mui/icons-material/DriveFileRen
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { useColorScheme } from '@mui/material/styles';
 import { SAFE_TOP } from '../../../lib/layout';
 import { useResolvedMode } from '../../../theme/viz';
 
-export type MenuPanel = 'recommendations' | 'entry' | 'log' | 'tiers' | 'names';
+export type MenuPanel = 'recommendations' | 'entry' | 'myteam' | 'teams' | 'log' | 'tiers' | 'names';
 
 export interface DraftMenuProps {
   open: boolean;
@@ -29,6 +31,8 @@ export interface DraftMenuProps {
 const ITEMS: { panel: MenuPanel; label: string; detail: string; icon: React.ReactNode }[] = [
   { panel: 'recommendations', label: 'Top 10 with reasons', detail: 'Gain, win chance, availability, why', icon: <FormatListNumberedOutlinedIcon /> },
   { panel: 'entry', label: 'Enter pick / Undo', detail: 'Manual entry for any team', icon: <EditNoteOutlinedIcon /> },
+  { panel: 'myteam', label: 'My team', detail: 'Roster by slot, category outlook, punts', icon: <PersonOutlineIcon /> },
+  { panel: 'teams', label: 'Teams', detail: "Every team's roster, needs and next pick", icon: <GroupsOutlinedIcon /> },
   { panel: 'log', label: 'Draft log', detail: 'Every pick, newest first', icon: <HistoryOutlinedIcon /> },
   { panel: 'tiers', label: 'Tiers', detail: 'Available players by tier', icon: <LayersOutlinedIcon /> },
   { panel: 'names', label: 'Edit team names', detail: 'As shown in the Yahoo room', icon: <DriveFileRenameOutlineOutlinedIcon /> },

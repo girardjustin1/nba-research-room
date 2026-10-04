@@ -11,10 +11,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SensorsOutlinedIcon from '@mui/icons-material/SensorsOutlined';
 import type { Session } from '../../../api/types';
 import type { Connection } from '../../../api/useDraftRoom';
-import { clock } from '../../../lib/format';
 import { SAFE_TOP } from '../../../lib/layout';
 import { myNextPick, roundPickLong, teamName } from '../../../lib/picks';
-import { usePickClock } from '../../../lib/pickClock';
 import { agoLabel, useNow } from '../../../lib/useNow';
 import { STATUS, useResolvedMode } from '../../../theme/viz';
 
@@ -44,19 +42,17 @@ export interface StatusBarProps {
 
 /**
  * Sticky top bar. Red "On the clock" or blue "Up in N picks", the current pick as round.pick,
- * a local 60 s pick clock (Yahoo's is authoritative), and the listener status: picks arrive
+ * and the listener status (no local pick clock: Yahoo's room has the real one): picks arrive
  * from the Tampermonkey listener in the Yahoo draft room; manual entry is the fallback.
  */
 export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, demoBadge, now }: StatusBarProps) {
   const mode = useResolvedMode();
-  const left = usePickClock(session.pick_clock_seconds, session.current_pick, now);
   const t = useNow(1000, now);
   const current = session.current_pick;
   const complete = current == null;
   const mine = !complete && session.on_the_clock != null && session.on_the_clock === session.my_slot;
   const next = decisionPick ?? myNextPick(session);
   const until = current != null && next != null ? next - current : null;
-  const low = !complete && left <= 10;
 
   return (
     <Box
@@ -92,16 +88,6 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
             </Typography>
           )}
         </Box>
-        {!complete && (
-          <Box sx={{ textAlign: 'right' }} role="timer" aria-label={`Local pick clock ${clock(left)} left`}>
-            <Typography component="p" className="tabular" sx={{ fontWeight: 800, fontSize: 22, lineHeight: 1.1 }}>
-              {clock(left)}
-            </Typography>
-            <Typography variant="caption" component="p" sx={{ opacity: 0.85 }}>
-              {low ? 'hurry' : 'local clock'}
-            </Typography>
-          </Box>
-        )}
         <IconButton aria-label="Draft tools" onClick={onMenu} sx={{ color: 'inherit', mr: -1.5 }}>
           <MoreVertIcon />
         </IconButton>

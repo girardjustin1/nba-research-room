@@ -35,6 +35,7 @@ function fakeApi(sessions: (Session | Error)[]): DraftApi & { getBoard: ReturnTy
     getPositionalValue: async () => Promise.reject(new ApiError(404, 'Not Found')),
     compare: fail,
     getInsights: async () => Promise.reject(new ApiError(404, 'Not Found')),
+    getStrength: async () => Promise.reject(new ApiError(404, 'Not Found')),
     getTeamWeeks: async () => Promise.reject(new ApiError(404, 'Not Found')),
     getTeamDays: fail,
   } as unknown as DraftApi & { getBoard: ReturnType<typeof vi.fn> };
@@ -65,6 +66,7 @@ describe('useDraftRoom polling', () => {
     // Endpoints the API lacks are recorded as 404s, not crashes.
     expect(result.current[0].teams.error?.isNotFound).toBe(true);
     expect(result.current[0].insights.error?.isNotFound).toBe(true);
+    expect(result.current[0].strength.error?.isNotFound).toBe(true);
   });
 
   it('reports no session on the 409 and down when unreachable', async () => {

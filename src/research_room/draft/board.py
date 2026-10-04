@@ -274,6 +274,33 @@ class DraftBoard:
         team = simulate.team_week(rows) if not rows.empty else _empty_team(self.contrib)
         return team, open_slots
 
+    def league_strength(self, state: DraftState) -> dict:
+        """Me vs the league, per category: every team's projected final roster (team_projection)
+        scored as P(win that category) against a league-average team. Returns my value, the
+        league average, the best team and my rank, plus the same for expected categories won."""
+        teams = range(1, state.teams + 1)
+        per_team = {}
+        for t in teams:
+            team, _ = self.team_projection(state, t)
+            m = simulate.analytic(team, self.opponent, self.cfg)
+            per_team[t] = ({k: float(np.asarray(v).ravel()[0]) for k, v in m.p_cat.items()},
+                           float(np.asarray(m.expected_cats).ravel()[0]))
+        me = state.my_slot
+
+        def summary(values: dict[int, float]) -> dict:
+            best = max(values, key=values.get)
+            out = {"league_avg": float(np.mean(list(values.values()))), "best": values[best],
+                   "best_team_id": int(best), "me": None, "rank": None}
+            if me in values:
+                out["me"] = values[me]
+                out["rank"] = 1 + sum(v > values[me] for t, v in values.items() if t != me)
+            return out
+
+        rows = [{"key": c.key, "label": c.label, **summary({t: per_team[t][0][c.key] for t in teams})}
+                for c in self.cfg.categories]
+        return {"teams": state.teams, "categories": rows,
+                "expected_cats": summary({t: per_team[t][1] for t in teams})}
+
     def pick_insight(self, state: DraftState, pick_no: int, top_n: int = 2) -> dict:
         """What one pick means: the drafting team's needs, strengths and weaknesses (vs a
         league-average team), the projected head-to-head against my team, and what it is likely

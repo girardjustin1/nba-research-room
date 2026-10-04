@@ -7,6 +7,7 @@ import type {
   TeamWeeksResponse,
   PositionalValueResponse,
   TeamsResponse,
+  StrengthResponse,
   HealthResponse,
   PickIn,
   PlayersResponse,
@@ -86,6 +87,8 @@ export interface DraftApi {
   getTeams(): Promise<TeamsResponse>;
   setTeamNames(names: Record<string, string>): Promise<Session | TeamsResponse>;
   getPositionalValue(): Promise<PositionalValueResponse>;
+  /** GET /draft/strength: me vs the league per category (newer API). */
+  getStrength(): Promise<StrengthResponse>;
   compare(ids: number[]): Promise<CompareResponse>;
   /** GET /draft/insights?last=N: the live read after each of the last N picks. */
   getInsights(last?: number): Promise<InsightsResponse>;
@@ -153,6 +156,7 @@ export function createDraftApi(baseUrl = '/api', fetchImpl: FetchLike = (i, init
     getTeams: () => request('GET', '/draft/teams'),
     setTeamNames: (names) => request('PUT', '/draft/teams/names', { names }),
     getPositionalValue: () => request('GET', '/draft/positional_value'),
+    getStrength: () => request('GET', '/draft/strength'),
     getInsights: (last = 28) => request('GET', `/draft/insights?last=${last}`),
     getTeamWeeks: () => request('GET', '/schedule/team_weeks'),
     getTeamDays: (team, start, end) =>

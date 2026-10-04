@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Slide from '@mui/material/Slide';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Snackbar from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import { ApiError, errorMessage, type DraftApi } from '../../../api/client';
@@ -26,7 +28,6 @@ import { SessionSetup } from '../tools/SessionSetup';
 import { TierBoard } from '../tools/TierBoard';
 import { AssignPickSheet } from '../grid/AssignPickSheet';
 import { AvailableList } from '../sheet/AvailableList';
-import { BottomSheet, type SheetSnap } from '../../app-shell/BottomSheet';
 import { CompareView } from '../compare/CompareView';
 import { PlayerDetailSheet } from '../compare/PlayerDetailSheet';
 import { DraftBoardGrid, type GridCell, type TeamMeta } from '../grid/DraftBoardGrid';
@@ -34,19 +35,15 @@ import { DraftMenu, type MenuPanel } from '../tools/DraftMenu';
 import { FullScreenPanel } from '../../app-shell/FullScreenPanel';
 import { LatestPickCard } from '../status/LatestPickCard';
 import { PositionalValuePanel } from '../panels/PositionalValuePanel';
+import { StrengthTable } from '../panels/StrengthTable';
 import { StatusBar } from '../status/StatusBar';
 import { SuggestedPicks } from '../panels/SuggestedPicks';
 import { TeamNamesEditor } from '../tools/TeamNamesEditor';
 import { TeamsTab } from '../sheet/TeamsTab';
 
-export type SheetTabKey = 'available' | 'favorites' | 'team' | 'teams';
-const SHEET_TABS: { value: SheetTabKey; label: string }[] = [
-  { value: 'available', label: 'AVAILABLE' },
-  { value: 'favorites', label: 'FAVORITES' },
-  { value: 'team', label: 'TEAM' },
-  { value: 'teams', label: 'TEAMS' },
-];
-const PEEK = 104;
+/** Board: where every team drafted. League: my strength vs the league and the market. */
+export type RoomTab = 'board' | 'league';
+export type PlayersFilter = 'available' | 'favorites';
 const LATEST_MS = 12_000;
 
 export interface DraftRoomViewProps {
@@ -56,8 +53,9 @@ export interface DraftRoomViewProps {
   loadCompare: (ids: number[]) => Promise<ComparePlayer[]>;
   /** GET /schedule/team_days (cached by the container). */
   loadTeamDays?: (team: string, start: string, end: string) => Promise<TeamDay[]>;
-  initialTab?: SheetTabKey;
-  initialSnap?: SheetSnap;
+  initialTab?: RoomTab;
+  /** League tab: start on Available or Favorites. */
+  initialPlayers?: PlayersFilter;
   initialPanel?: MenuPanel | null;
   /** Stories: show the latest-pick card on first render instead of waiting for a new pick. */
   showLatestOnLoad?: boolean;
@@ -75,25 +73,26 @@ function lastLivePick(picks: PickRecord[]): PickRecord | null {
 }
 
 /**
- * The live draft room for the league's real Yahoo draft: status bar, positional value and
- * suggested picks, the draft board grid, and a draggable sheet with Available / Favorites /
- * Team / Teams. Picks arrive from the Yahoo listener; any cell can be tapped to record or fix
- * a pick by hand. Every number comes from the draft API.
+ * The live draft room for the league's real Yahoo draft, in two tabs under the status bar:
+ * Board (the grid of every team's picks; tap any cell to record or fix a pick) and Me vs league
+ * (my standing per category against the league, the market left by position, suggested picks,
+ * then Available / Favorites). Picks arrive from the Yahoo listener. My roster and every team's
+ * roster are in the tools menu. Every number comes from the draft API.
  */
 export function DraftRoomView({
   state,
   actions,
   loadCompare,
   loadTeamDays,
-  initialTab = 'available',
-  initialSnap = 'collapsed',
+  initialTab = 'board',
+  initialPlayers = 'available',
   initialPanel = null,
   showLatestOnLoad = false,
   now,
 }: DraftRoomViewProps) {
   const { session, board, connection } = state;
-  const [tab, setTab] = useState<SheetTabKey>(initialTab);
-  const [snap, setSnap] = useState<SheetSnap>(initialSnap);
+  const [tab, setTab] = useState<RoomTab>(initialTab);
+  const [playersFilter, setPlayersFilter] = useState<PlayersFilter>(initialPlayers);
   const [cell, setCell] = useState<GridCell | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState<MenuPanel | null>(initialPanel);
@@ -104,18 +103,7 @@ export function DraftRoomView({
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [notice, setNotice] = useState<{ text: string; undo?: boolean; error?: boolean } | null>(null);
   const [favorites, toggleFavorite] = useFavorites(session?.draft_id ?? 'none');
-  const statusRef = useRef<HTMLDivElement>(null);
-  const [statusH, setStatusH] = useState(120);
-  const hasSession = session != null;
   const shell = useAppShell();
-
-  useEffect(() => {
-    const el = statusRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setStatusH(el.offsetHeight));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [hasSession]);
 
   // Latest-pick card: appears when an insight newer than the first one we saw arrives.
   const insights = state.insights.data;
@@ -196,7 +184,7 @@ export function DraftRoomView({
 
   return (
     <Box sx={{ position: 'relative', height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden', maxWidth: 640, mx: 'auto' }}>
-      <Box ref={statusRef}>
+      <Box>
         <StatusBar
           session={s}
           decisionPick={live?.decision_pick}
@@ -210,50 +198,80 @@ export function DraftRoomView({
         />
       </Box>
 
-      <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: `calc(${PEEK}px + ${SAFE_BOTTOM})` }}>
-        {live && live.drift.length > 0 && (
-          <Box sx={{ px: 2, pt: 1 }}>
-            <DriftAlert drift={live.drift} categories={s.categories} />
-          </Box>
-        )}
-        {state.boardError && !state.boardError.isNoSlot && (
-          <Alert severity="error" sx={{ mx: 2, mt: 1 }} action={<Button color="inherit" onClick={actions.refresh}>Retry</Button>}>
-            Board failed: {state.boardError.message}
-          </Alert>
-        )}
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1, pb: 0.5, flexShrink: 0 }}>
-          <PositionalValuePanel positions={state.positional.data} error={state.positional.error} loading={state.boardLoading} note={state.positionalNote} />
-          <SuggestedPicks
-            recommendations={recs}
-            onTheClock={mine}
-            loading={state.boardLoading && !live}
-            pendingId={pendingId}
-            onDraft={(r: Recommendation) => void draftCurrent(r)}
-          />
+      <Tabs
+        value={tab}
+        onChange={(_, v: RoomTab) => setTab(v)}
+        variant="fullWidth"
+        aria-label="Draft views"
+        sx={{ flexShrink: 0, minHeight: 44, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 44, fontWeight: 700 } }}
+      >
+        <Tab value="board" label="Board" />
+        <Tab value="league" label="Me vs league" />
+      </Tabs>
+
+      {state.boardError && !state.boardError.isNoSlot && (
+        <Alert severity="error" sx={{ mx: 2, mt: 1 }} action={<Button color="inherit" onClick={actions.refresh}>Retry</Button>}>
+          Board failed: {state.boardError.message}
+        </Alert>
+      )}
+
+      {tab === 'board' && (
+        <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: SAFE_BOTTOM }}>
+          {live && live.drift.length > 0 && (
+            <Box sx={{ px: 2, pt: 1 }}>
+              <DriftAlert drift={live.drift} categories={s.categories} />
+            </Box>
+          )}
+          <DraftBoardGrid session={s} pool={state.pool} onCellTap={setCell} onEditNames={() => setPanel('names')} teamMeta={teamMeta} />
+
+          <Slide direction="down" in={showLatest} mountOnEnter unmountOnExit>
+            <Box sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 4 }}>
+              {latest && (
+                <LatestPickCard
+                  insight={latest}
+                  teams={s.teams}
+                  onDismiss={() => setDismissed(latest.pick_no)}
+                  onOpenTeam={(teamId) => {
+                    setDismissed(latest.pick_no);
+                    setFocusTeam(teamId);
+                    setPanel('teams');
+                  }}
+                />
+              )}
+            </Box>
+          </Slide>
         </Box>
-        <DraftBoardGrid session={s} pool={state.pool} onCellTap={setCell} onEditNames={() => setPanel('names')} teamMeta={teamMeta} />
+      )}
 
-        <Slide direction="down" in={showLatest} mountOnEnter unmountOnExit>
-          <Box sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 4 }}>
-            {latest && (
-              <LatestPickCard
-                insight={latest}
-                teams={s.teams}
-                onDismiss={() => setDismissed(latest.pick_no)}
-                onOpenTeam={(teamId) => {
-                  setDismissed(latest.pick_no);
-                  setFocusTeam(teamId);
-                  setTab('teams');
-                  setSnap('full');
-                }}
-              />
-            )}
+      {tab === 'league' && (
+        <Box component="main" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: SAFE_BOTTOM }}>
+          {live && live.drift.length > 0 && (
+            <Box sx={{ px: 2, pt: 1 }}>
+              <DriftAlert drift={live.drift} categories={s.categories} />
+            </Box>
+          )}
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <StrengthTable strength={state.strength.data} error={state.strength.error} loading={state.boardLoading} />
           </Box>
-        </Slide>
-      </Box>
-
-      <BottomSheet tabs={SHEET_TABS} tab={tab} onTabChange={setTab} snap={snap} onSnapChange={setSnap} peek={PEEK} topGap={statusH + 4}>
-        {(tab === 'available' || tab === 'favorites') && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1.5 }}>
+            <PositionalValuePanel positions={state.positional.data} error={state.positional.error} loading={state.boardLoading} note={state.positionalNote} />
+            <SuggestedPicks
+              recommendations={recs}
+              onTheClock={mine}
+              loading={state.boardLoading && !live}
+              pendingId={pendingId}
+              onDraft={(r: Recommendation) => void draftCurrent(r)}
+            />
+          </Box>
+          <Tabs
+            value={playersFilter}
+            onChange={(_, v: PlayersFilter) => setPlayersFilter(v)}
+            aria-label="Player lists"
+            sx={{ mt: 1.5, px: 1, minHeight: 40, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 40, fontWeight: 700 } }}
+          >
+            <Tab value="available" label="Available" />
+            <Tab value="favorites" label={favorites.size ? `Favorites · ${favorites.size}` : 'Favorites'} />
+          </Tabs>
           <AvailableList
             players={state.players}
             teams={s.teams}
@@ -269,41 +287,10 @@ export function DraftRoomView({
             onDraft={(p) => void draftCurrent(p)}
             onOpenPlayer={setDetail}
             pendingId={pendingId}
-            favoritesOnly={tab === 'favorites'}
+            favoritesOnly={playersFilter === 'favorites'}
           />
-        )}
-        {tab === 'team' && (
-          <Box sx={{ p: 2 }}>
-            {live ? (
-              <MyTeamPanel
-                myTeam={live.my_team}
-                categories={s.categories}
-                punts={s.punts}
-                rounds={s.rounds}
-                onPuntsChange={(p) => {
-                  actions.setPunts(p).catch((err: unknown) => setNotice({ text: errorMessage(err), error: true }));
-                }}
-              />
-            ) : (
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {current == null ? 'The draft is complete.' : 'Loading your team…'}
-              </Typography>
-            )}
-          </Box>
-        )}
-        {tab === 'teams' && (
-          <TeamsTab
-            teams={state.teams.data}
-            error={state.teams.error}
-            categories={s.categories}
-            teamsCount={s.teams}
-            currentPick={current}
-            myNextPick={next}
-            insights={insights}
-            focusTeamId={focusTeam}
-          />
-        )}
-      </BottomSheet>
+        </Box>
+      )}
 
       <AssignPickSheet
         cell={cell}
@@ -392,6 +379,37 @@ export function DraftRoomView({
           />
         </Box>
       </FullScreenPanel>
+      <FullScreenPanel open={panel === 'myteam'} title="My team" onClose={() => setPanel(null)}>
+        <Box sx={{ p: 2 }}>
+          {live ? (
+            <MyTeamPanel
+              myTeam={live.my_team}
+              categories={s.categories}
+              punts={s.punts}
+              rounds={s.rounds}
+              onPuntsChange={(p) => {
+                actions.setPunts(p).catch((err: unknown) => setNotice({ text: errorMessage(err), error: true }));
+              }}
+            />
+          ) : (
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {current == null ? 'The draft is complete.' : 'Loading your team…'}
+            </Typography>
+          )}
+        </Box>
+      </FullScreenPanel>
+      <FullScreenPanel open={panel === 'teams'} title="Teams" onClose={() => { setPanel(null); setFocusTeam(null); }}>
+        <TeamsTab
+          teams={state.teams.data}
+          error={state.teams.error}
+          categories={s.categories}
+          teamsCount={s.teams}
+          currentPick={current}
+          myNextPick={next}
+          insights={insights}
+          focusTeamId={focusTeam}
+        />
+      </FullScreenPanel>
       <FullScreenPanel open={panel === 'log'} title="Draft log" onClose={() => setPanel(null)}>
         <Box sx={{ p: 2 }}>
           <DraftLog picks={s.picks} mySlot={s.my_slot} />
@@ -449,10 +467,10 @@ export function DraftRoomView({
 }
 
 /** Container: wires the live API (polling) into the view. */
-export function DraftRoom({ api }: { api: DraftApi }) {
+export function DraftRoom({ api, initialTab }: { api: DraftApi; initialTab?: RoomTab }) {
   const [state, actions] = useDraftRoom(api);
   const loadCompare = useMemo(() => (ids: number[]) => api.compare(ids).then((r) => r.players), [api]);
   // One request per team for the whole season; the schedule does not change mid-draft.
   const loadTeamDays = useMemo(() => teamDaysLoader(api), [api]);
-  return <DraftRoomView state={state} actions={actions} loadCompare={loadCompare} loadTeamDays={loadTeamDays} />;
+  return <DraftRoomView state={state} actions={actions} loadCompare={loadCompare} loadTeamDays={loadTeamDays} initialTab={initialTab} />;
 }
