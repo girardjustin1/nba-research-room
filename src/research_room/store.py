@@ -119,7 +119,8 @@ SCHEMA: dict[str, Table] = {
     "external_projections": _t(("source", "snapshot", "ext_id"),
         "source VARCHAR", "snapshot DATE", "ext_id VARCHAR", "player_id INTEGER", "name VARCHAR",
         "team_abbr VARCHAR", "position VARCHAR", "age DOUBLE", "games DOUBLE", "minutes DOUBLE",
-        "fgm DOUBLE", "fga DOUBLE", "ftm DOUBLE", "fta DOUBLE", "fg3m DOUBLE", "fg3a DOUBLE",
+        "nba_id INTEGER", "fgm DOUBLE", "fga DOUBLE", "ftm DOUBLE", "fta DOUBLE",
+        "fg3m DOUBLE", "fg3a DOUBLE",
         "oreb DOUBLE", "dreb DOUBLE", "reb DOUBLE", "ast DOUBLE", "stl DOUBLE", "blk DOUBLE",
         "tov DOUBLE", "pts DOUBLE", "yahoo_adp DOUBLE", "adv_adp DOUBLE", "ext_rank DOUBLE",
         "injury_risk VARCHAR", "role VARCHAR", "fetched_at TIMESTAMPTZ"),
@@ -158,10 +159,16 @@ def connect(path: Path | str | None = None, read_only: bool = False) -> duckdb.D
 
 
 def init_schema(con: duckdb.DuckDBPyConnection) -> None:
-    """Create every table that does not exist yet. Safe to call repeatedly."""
+    """Create missing tables and add columns added to SCHEMA since a table was created.
+    Safe to call repeatedly. (New columns are nullable; primary keys never change in place.)"""
     for name, table in SCHEMA.items():
         cols = ", ".join(f"{c} {t}" for c, t in table.columns)
         con.execute(f"CREATE TABLE IF NOT EXISTS {name} ({cols}, PRIMARY KEY ({', '.join(table.pk)}))")
+        have = {r[0] for r in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?", [name]).fetchall()}
+        for col, typ in table.columns:
+            if col not in have:
+                con.execute(f"ALTER TABLE {name} ADD COLUMN {col} {typ.replace('NOT NULL', '').strip()}")
 
 
 def upsert(con: duckdb.DuckDBPyConnection, table: str, df: pd.DataFrame) -> int:

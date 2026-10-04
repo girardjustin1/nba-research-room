@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: setup backfill inbox projections nightly pregame draft-api app web storybook mock-draft test lint
+.PHONY: setup backfill inbox projections nightly pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -34,6 +34,9 @@ web:  ## React draft room on http://127.0.0.1:5173 (needs make draft-api running
 
 storybook:  ## component workshop on http://127.0.0.1:6006 (sample data only, local only)
 	cd web && pnpm install --frozen-lockfile && pnpm storybook
+
+images:  ## cache headshots + team logos from the NBA CDN into data/images (personal use, gitignored)
+	$(PY) jobs/fetch_images.py
 
 mock-draft:  ## timed end-to-end mock draft (12 teams by default)
 	$(PY) jobs/mock_draft.py --teams $${TEAMS:-12} --slot $${SLOT:-5}

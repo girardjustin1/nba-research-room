@@ -36,9 +36,10 @@ _RAW = {
     "threes_attempted": "fg3a", "offensive_rebounds": "oreb", "defensive_rebounds": "dreb",
     "assists": "ast", "steals": "stl", "blocks": "blk", "turnovers": "tov",
 }
-_TABLE = {"ID": "ext_id", "Name": "name", "Team": "team_abbr", "Pos": "position", "Age": "age",
-          "Y!Adp": "yahoo_adp", "Adv ADP": "adv_adp", "Rank": "ext_rank",
-          "Inj Risk": "injury_risk", "Role": "role"}
+_TABLE = {"ID": "ext_id", "NBA ID": "nba_id", "Name": "name", "Team": "team_abbr",
+          "Pos": "position", "Age": "age", "Y!Adp": "yahoo_adp", "Adv ADP": "adv_adp",
+          "Rank": "ext_rank", "Inj Risk": "injury_risk", "Role": "role"}
+_OPTIONAL = {"NBA ID"}              # used for headshots only; older exports may lack it
 _TEAM_NONE = {"FA", ""}
 
 # The nine league categories in per-game terms, plus the components percentages need.
@@ -80,11 +81,11 @@ def combine(raw: pd.DataFrame, table: pd.DataFrame, csv_name: str = "csv",
     missing = sorted((set(_RAW) | {"player_id", "games", "first_name", "last_name"}) - set(raw.columns))
     if missing:
         raise ProjectionFileError(f"{csv_name}: missing columns {missing}; use 'Export to CSV'")
-    missing = sorted(set(_TABLE) - set(table.columns))
+    missing = sorted(set(_TABLE) - _OPTIONAL - set(table.columns))
     if missing:
         raise ProjectionFileError(f"{xls_name}: missing columns {missing}; use 'Export to Excel' "
                                   "with Yahoo! ADP checked")
-    table = table[list(_TABLE)].rename(columns=_TABLE)
+    table = table.reindex(columns=list(_TABLE)).rename(columns=_TABLE)
     df = raw.rename(columns={"player_id": "ext_id"}).merge(table, on="ext_id", how="left",
                                                           validate="one_to_one")
     unjoined = int(df["name"].isna().sum())
@@ -98,7 +99,7 @@ def combine(raw: pd.DataFrame, table: pd.DataFrame, csv_name: str = "csv",
         "name": (df["first_name"].fillna("") + " " + df["last_name"].fillna("")).str.strip(),
         "team_abbr": team.where(~team.isin(_TEAM_NONE) & df["team_abbr"].notna()),
         "position": df["position"], "age": pd.to_numeric(df["age"], errors="coerce"),
-        "games": games,
+        "games": games, "nba_id": pd.to_numeric(df["nba_id"], errors="coerce").astype("Int64"),
     })
     per_game = games.where(games > 0)
     for theirs, ours in _RAW.items():
@@ -200,7 +201,7 @@ def blend_preseason(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
     pool["minutes_pg"] = np.where(use_last, blend.external * pool["minutes"]
                                   + blend.last_season * pool["minutes_mean"], pool["minutes"])
     pool["sources"] = np.where(use_last, "bbm+last_season", "bbm_only")
-    keep = ["player_id", "name", "team_abbr", "position", "age", "games", "minutes_pg",
+    keep = ["player_id", "nba_id", "name", "team_abbr", "position", "age", "games", "minutes_pg",
             "yahoo_adp", "adv_adp", "ext_rank", "injury_risk", "role", "last_season_games", "sources"]
     keep += [f"{s}_{kind}_pg" for s in STATS for kind in ("mean", "sd")]
     rename = {f"{s}_{kind}_pg": f"{s}_{kind}" for s in STATS for kind in ("mean", "sd")}

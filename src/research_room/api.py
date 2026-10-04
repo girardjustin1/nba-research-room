@@ -23,9 +23,10 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import schedule, store
+from research_room import images, schedule, store
 from research_room.config import Settings, settings
 from research_room.draft import tracker
 from research_room.draft.availability import expected_pick, picks_for_slot
@@ -57,10 +58,23 @@ class Session:
 
     def rebuild(self) -> None:
         """Re-value the pool for the current punts and rebuild the board (punt toggles)."""
-        self.valued = expected_pick(compute_values(self.pool, self.cfg, punts=self.punts), self.cfg)
+        self.valued = with_image_urls(expected_pick(compute_values(self.pool, self.cfg, punts=self.punts),
+                                                    self.cfg))
         self.board = DraftBoard(self.valued, self.cfg, self.team_games_per_week)
         self.resolver = NameResolver(self.valued[["player_id", "name", "team_abbr"]].rename(
             columns={"name": "full_name"}))
+
+
+def with_image_urls(df: pd.DataFrame, root=None) -> pd.DataFrame:
+    """Relative URLs for cached images (null when no image is cached: the UI shows initials)."""
+    root = root or images.IMAGE_DIR
+    out = df.copy()
+    out["headshot_url"] = out["player_id"].map(
+        lambda p: f"/images/players/{int(p)}.png" if images.player_path(p, root).exists() else None)
+    out["team_logo_url"] = out["team_abbr"].map(
+        lambda a: f"/images/teams/{a}.svg" if isinstance(a, str) and images.team_path(a, root).exists()
+        else None)
+    return out
 
 
 class _Holder:
@@ -131,9 +145,11 @@ def records(df: pd.DataFrame, cols: list[str] | None = None) -> list[dict]:
     return [{k: _clean(v) for k, v in row.items()} for row in frame.to_dict("records")]
 
 
-PLAYER_COLS = ["player_id", "name", "team_abbr", "position", "eligible", "games", "minutes_pg",
-               "value", "value_pg", "rank", "tier", "expected_pick", "adp_source", "yahoo_adp",
-               "injury_risk", "sources"]
+PLAYER_COLS = [
+    "player_id", "headshot_url", "team_logo_url", "name", "team_abbr", "position", "eligible",
+    "games", "minutes_pg", "value", "value_pg", "rank", "tier", "expected_pick", "adp_source",
+    "yahoo_adp", "injury_risk", "sources",
+]
 
 
 def session_json(s: Session) -> dict:
@@ -148,12 +164,13 @@ def session_json(s: Session) -> dict:
 
 
 # ------------------------------------------------------------------ app
-def create_app(db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, image_root=None) -> FastAPI:
     app = FastAPI(title="NBA Research Room", version="0.1.0")
     app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"],
                        allow_headers=["*"])
     h = _Holder()
     app.state.holder = h
+    image_root = image_root or images.IMAGE_DIR
 
     def write(fn):
         con = store.connect(db_path)
@@ -208,7 +225,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             if s.state.current_pick is None:
                 return {"complete": True, **session_json(s)}
             res = s.board.recommend(s.state, s.punts)
-            cols = PLAYER_COLS + ["expected_cats", "gain", "p_win_week", "p_win_week_mc",
+            cols = PLAYER_COLS + ["starts", "expected_cats", "gain", "p_win_week", "p_win_week_mc",
                                   "p_available_at_decision", "p_available_next", "reasons"]
             mine = s.state.roster(s.state.my_slot)
             roster = s.valued[s.valued["player_id"].isin(mine["player_id"])]
@@ -276,6 +293,22 @@ def create_app(db_path: str | None = None) -> FastAPI:
             except tracker.PickError as exc:
                 raise HTTPException(409, str(exc)) from exc
             return session_json(s)
+
+    @app.get("/images/players/{player_id}.png")
+    def player_image(player_id: int) -> FileResponse:
+        path = images.player_path(player_id, image_root)
+        if not path.exists():
+            raise HTTPException(404, "no cached headshot; run `make images`")
+        return FileResponse(path, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
+    @app.get("/images/teams/{abbr}.svg")
+    def team_image(abbr: str) -> FileResponse:
+        if not abbr.isalpha() or len(abbr) > 4:
+            raise HTTPException(400, "bad team abbreviation")
+        path = images.team_path(abbr, image_root)
+        if not path.exists():
+            raise HTTPException(404, "no cached logo; run `make images`")
+        return FileResponse(path, media_type="image/svg+xml", headers={"Cache-Control": "max-age=86400"})
 
     @app.post("/draft/export")
     def post_export() -> dict:
