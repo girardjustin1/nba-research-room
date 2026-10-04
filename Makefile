@@ -23,8 +23,8 @@ nightly:  ## ingest -> features -> projections -> optimize (Phase 1+)
 pregame:  ## pre-tip injuries / status refresh (Phase 3)
 	@echo "pregame job arrives in Phase 3" && exit 1
 
-draft-api:  ## FastAPI endpoint the Tampermonkey listener posts picks to (Phase D)
-	@echo "draft API arrives in Phase D" && exit 1
+draft-api:  ## local draft API on 127.0.0.1:8765 (React app, Streamlit Draft page, Tampermonkey)
+	$(PY) jobs/draft_api.py
 
 app:  ## run the Streamlit app (reads the store only)
 	$(PY) -m streamlit run app/Home.py --server.address 127.0.0.1 --server.port 8501 --browser.gatherUsageStats false
