@@ -61,14 +61,14 @@ draft:
   my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order
   keepers: []                  # [{team_id, round, player_id | player}] once declared
   confirmed:                   # flip each to true once checked in Yahoo (make doctor flags the rest)
-    rounds: false
+    rounds: true
     keepers: false
     listener: false            # Tampermonkey listener read a Yahoo mock draft correctly
   readiness:                   # make doctor thresholds
     yahoo_eligibility_min_share: 0.9   # of the top pool_size players by value
     board_refresh_budget_ms: 500
     api_url: http://127.0.0.1:8765
-  rounds: 13                   # ASSUMED: one per non-IL roster slot; confirm in Yahoo draft settings
+  rounds: 13                   # confirmed by the owner 2026-10-04 (one per non-IL roster slot)
   pool_size: 200               # z-scores are computed over the top N by value
   tiers: 16                    # natural-break tiers across the top pool (1-D optimal clustering)
   position_eligibility:        # Basketball Monster primary position -> Yahoo slots it can fill,
