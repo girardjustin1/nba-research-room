@@ -3,15 +3,17 @@
 # tier (authority, highest first):
 #   official   - team accounts: injury reports, starting lineups. Outrank everything.
 #   insider    - national reporters who break injury and rotation news first.
+#   beat       - team beat reporters: practice reports, minutes limits, lineups.
 #   aggregator - injury/lineup aggregators; fast, but secondhand.
 #
 # Approved by the owner 2026-10-04: keep every account below. Every handle is `verified: false` until Phase 3 confirms it
-# with one X users-by-username lookup (100 handles per request). Beat writers are left out on
-# purpose: they change outlets and handles often; add any you trust with tier: beat.
+# with one X users-by-username lookup (100 handles per request). Beat writers change outlets
+# and handles often, so that lookup matters most for them.
 #
-# Budget note: settings.yaml caps reads at 300/day. Polling 40 accounts separately every
-# 15 minutes for 3 hours would be 480 requests, so Phase 3 should read them through one private
-# X list (one request per poll) and count posts read against the budget.
+# Budget note: settings.yaml caps reads at 300/day. With ~100 accounts, polling each separately
+# is impossible; Phase 3 reads them through one private X list (one request per poll), counts
+# posts read against the budget, and may need to poll beat accounts only for teams playing
+# that day.
 
 accounts:
   # --- official team accounts (30) ---
@@ -56,3 +58,70 @@ accounts:
   - {handle: FantasyLabsNBA,   team: null, tier: aggregator, verified: false}
   - {handle: Rotoworld_BK,     team: null, tier: aggregator, verified: false}
   - {handle: BBMonsterNBA,     team: null, tier: aggregator, verified: false}  # Basketball Monster, if it posts news
+  # --- beat reporters + more national (from a deep-research pass, 2026-10-04) ---
+  # The research's evidence links were fabricated (sequential post ids), so none are kept;
+  # every handle here is unverified until the Phase 3 lookup.
+  - {handle: louwillx3,        team: ATL,  tier: beat, verified: false}
+  - {handle: BRowlandNBA,      team: ATL,  tier: beat, verified: false}
+  - {handle: ByJayKing,        team: BOS,  tier: beat, verified: false}
+  - {handle: JaredWeissNBA,    team: BOS,  tier: beat, verified: false}
+  - {handle: ErikSlater_,      team: BKN,  tier: beat, verified: false}
+  - {handle: NYPost_Lewis,     team: BKN,  tier: beat, verified: false}
+  - {handle: rodboone,         team: CHA,  tier: beat, verified: false}
+  - {handle: KCJHoop,          team: CHI,  tier: beat, verified: false}
+  - {handle: DarnellMayberry,  team: CHI,  tier: beat, verified: false}
+  - {handle: ChrisFedor,       team: CLE,  tier: beat, verified: false}
+  - {handle: AmNotEvan,        team: CLE,  tier: beat, verified: false}
+  - {handle: townbrad,         team: DAL,  tier: beat, verified: false}
+  - {handle: espn_macmahon,    team: DAL,  tier: beat, verified: false}
+  - {handle: HarrisonWind,     team: DEN,  tier: beat, verified: false}
+  - {handle: BennettDurando,   team: DEN,  tier: beat, verified: false}
+  - {handle: omarisankofa,     team: DET,  tier: beat, verified: false}
+  - {handle: JLEdwardsIII,     team: DET,  tier: beat, verified: false}
+  - {handle: anthonyVslater,   team: GSW,  tier: beat, verified: false}
+  - {handle: kendra__andrews,  team: GSW,  tier: beat, verified: false}
+  - {handle: Jonathan_Feigen,  team: HOU,  tier: beat, verified: false}
+  - {handle: KellyIko,         team: HOU,  tier: beat, verified: false}
+  - {handle: ScottAgness,      team: IND,  tier: beat, verified: false}
+  - {handle: DustinDopirak,    team: IND,  tier: beat, verified: false}
+  - {handle: LawMurrayTheNU,   team: LAC,  tier: beat, verified: false}
+  - {handle: BA_Turner,        team: LAC,  tier: beat, verified: false}
+  - {handle: jovanbuha,        team: LAL,  tier: beat, verified: false}
+  - {handle: mcten,            team: LAL,  tier: beat, verified: false}
+  - {handle: DamichaelC,       team: MEM,  tier: beat, verified: false}
+  - {handle: DrewHill_DM,      team: MEM,  tier: beat, verified: false}
+  - {handle: Anthony_Chiang,   team: MIA,  tier: beat, verified: false}
+  - {handle: IraHeatBeat,      team: MIA,  tier: beat, verified: false}
+  - {handle: eric_nehm,        team: MIL,  tier: beat, verified: false}
+  - {handle: JimOwczarski,     team: MIL,  tier: beat, verified: false}
+  - {handle: JonKrawczynski,   team: MIN,  tier: beat, verified: false}
+  - {handle: DaneMooreNBA,     team: MIN,  tier: beat, verified: false}
+  - {handle: WillGuillory,     team: NOP,  tier: beat, verified: false}
+  - {handle: cclark_13,        team: NOP,  tier: beat, verified: false}
+  - {handle: FredKatz,         team: NYK,  tier: beat, verified: false}
+  - {handle: IanBegley,        team: NYK,  tier: beat, verified: false}
+  - {handle: joemussatto,      team: OKC,  tier: beat, verified: false}
+  - {handle: ClementeAlmanza,  team: OKC,  tier: beat, verified: false}
+  - {handle: beedeedee,        team: ORL,  tier: beat, verified: false}
+  - {handle: PRossmanReich,    team: ORL,  tier: beat, verified: false}
+  - {handle: PompeyOnSixers,   team: PHI,  tier: beat, verified: false}
+  - {handle: DerekBodnerNBA,   team: PHI,  tier: beat, verified: false}
+  - {handle: KellanOlson,      team: PHX,  tier: beat, verified: false}
+  - {handle: GPHX_Bourguet,    team: PHX,  tier: beat, verified: false}
+  - {handle: highkin,          team: POR,  tier: beat, verified: false}
+  - {handle: AaronJFentress,   team: POR,  tier: beat, verified: false}
+  - {handle: James_HamNBA,     team: SAC,  tier: beat, verified: false}
+  - {handle: JandersonSacBee,  team: SAC,  tier: beat, verified: false}
+  - {handle: JMcDonald_SAEN,   team: SAS,  tier: beat, verified: false}
+  - {handle: tom_orsborn,      team: SAS,  tier: beat, verified: false}
+  - {handle: ekoreen,          team: TOR,  tier: beat, verified: false}
+  - {handle: JLew1050,         team: TOR,  tier: beat, verified: false}
+  - {handle: andyblarsen,      team: UTA,  tier: beat, verified: false}
+  - {handle: sarahtodd,        team: UTA,  tier: beat, verified: false}
+  - {handle: JoshuaBRobbins,   team: WAS,  tier: beat, verified: false}
+  - {handle: VarunShankar,     team: WAS,  tier: beat, verified: false}
+  - {handle: ChrisBHaynes,     team: null, tier: insider, verified: false}
+  - {handle: TheSteinLine,     team: null, tier: insider, verified: false}
+  - {handle: WindhorstESPN,    team: null, tier: insider, verified: false}
+  - {handle: sam_amick,        team: null, tier: insider, verified: false}
+  - {handle: RotoWireNBA,      team: null, tier: aggregator, verified: false}
