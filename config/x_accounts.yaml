@@ -15,7 +15,8 @@
 # were discarded. Pass 2 added `outlet`, `seen` (last month the research saw the account active)
 # and `evidence` post links whose ids decode to dates consistent with `seen` (not opened: X needs
 # a login). `seen: 2025-10` means from a 2025 directory, seat not re-confirmed after the 2026
-# offseason.
+# offseason. Pass 3 reported its links as resolving: those entries carry `links_resolved: true`
+# and a day-level `seen`. `verified` still means "confirmed by our own X lookup" (Phase 3).
 #
 # Budget: settings.yaml caps reads at 300/day. Phase 3 reads all accounts through one private
 # X list (one request per poll), counts posts read against the budget, and on game days may watch
@@ -54,26 +55,26 @@ accounts:
   - {handle: Raptors, team: TOR, tier: official, verified: false}
   - {handle: utahjazz, team: UTA, tier: official, verified: false}
   - {handle: WashWizards, team: WAS, tier: official, verified: false}
-  - {handle: ChrisBHaynes, team: null, tier: insider, verified: false, outlet: "NBA on Prime / NBA TV", seen: "2026-10"}
-  - {handle: JakeLFischer, team: null, tier: insider, verified: false, outlet: "Yahoo Sports / The Stein Line", seen: "2026-09"}
+  - {handle: ChrisBHaynes, team: null, tier: insider, verified: false, links_resolved: true, outlet: "NBA on Prime and The Association on NBATV", seen: "2026-10-02", evidence: ["https://x.com/ChrisBHaynes/status/2105847426775130582"]}
+  - {handle: JakeLFischer, team: null, tier: insider, verified: false, links_resolved: true, outlet: "The Stein Line / Bleacher Report notebooks", seen: "2026-10-03", evidence: ["https://x.com/JakeLFischer/status/2106460304632950811"]}
   - {handle: sam_amick, team: null, tier: insider, verified: false}
-  - {handle: ShamsCharania, team: null, tier: insider, verified: false, outlet: "ESPN", seen: "2026-09", evidence: ["https://x.com/ShamsCharania/status/2098441452304920748"]}
-  - {handle: TheSteinLine, team: null, tier: insider, verified: false, outlet: "The Stein Line (Substack)", seen: "2026-09", evidence: ["https://x.com/TheSteinLine/status/2103577691404603666"]}
-  - {handle: WindhorstESPN, team: null, tier: insider, verified: false, outlet: "ESPN", seen: "2026-09"}
+  - {handle: ShamsCharania, team: null, tier: insider, verified: false, links_resolved: true, outlet: "ESPN Senior NBA Insider", seen: "2026-10-03", evidence: ["https://x.com/ShamsCharania/status/2098441452304920748", "https://x.com/ShamsCharania/status/2106193470293475672"]}
+  - {handle: TheSteinLine, team: null, tier: insider, verified: false, links_resolved: true, outlet: "The Stein Line (independent)", seen: "2026-10-03", evidence: ["https://x.com/TheSteinLine/status/2103577691404603666", "https://x.com/TheSteinLine/status/2106501655055212914"]}
+  - {handle: WindhorstESPN, team: null, tier: insider, verified: false, links_resolved: true, outlet: "ESPN", seen: "2026-10-01", evidence: ["https://x.com/WindhorstESPN/status/2105758017845428729"]}
   - {handle: wojespn, team: null, tier: insider, verified: false}
   - {handle: BBMonsterNBA, team: null, tier: aggregator, verified: false}
   - {handle: FantasyLabsNBA, team: null, tier: aggregator, verified: false}
-  - {handle: RotoWireNBA, team: null, tier: aggregator, verified: false, outlet: "RotoWire", seen: "2026-10", evidence: ["https://x.com/RotoWireNBA/status/2106482049481658846"]}
+  - {handle: RotoWireNBA, team: null, tier: aggregator, verified: false, links_resolved: true, outlet: "RotoWire", seen: "2026-10-04", evidence: ["https://x.com/RotoWireNBA/status/2106482049481658846"]}
   - {handle: Rotoworld_BK, team: null, tier: aggregator, verified: false}
   - {handle: Underdog__NBA, team: null, tier: aggregator, verified: false}
-  - {handle: UnderdogNBA, team: null, tier: aggregator, verified: false, outlet: "Underdog (status lists)", seen: "2026-09", evidence: ["https://x.com/UnderdogNBA/status/2019788293487890767", "https://x.com/UnderdogNBA/status/2103543968873210038"]}
+  - {handle: UnderdogNBA, team: null, tier: aggregator, verified: false, links_resolved: true, outlet: "Underdog", seen: "2026-10-04", evidence: ["https://x.com/UnderdogNBA/status/2019788293487890767", "https://x.com/UnderdogNBA/status/2103543968873210038"]}
   - {handle: BRowlandNBA, team: ATL, tier: beat, verified: false}
   - {handle: klchouinard, team: ATL, tier: beat, verified: false, outlet: "Atlanta Hawks team site", seen: "2025-10"}
   - {handle: louwillx3, team: ATL, tier: beat, verified: false}
   - {handle: williamslaurenl, team: ATL, tier: beat, verified: false, outlet: "Atlanta Journal-Constitution", seen: "2026-07"}
   - {handle: ErikSlater_, team: BKN, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
   - {handle: NYPost_Lewis, team: BKN, tier: beat, verified: false, outlet: "New York Post", seen: "2025-10"}
-  - {handle: ByJayKing, team: BOS, tier: beat, verified: false, outlet: "The Athletic", seen: "2025-10"}
+  - {handle: ByJayKing, team: BOS, tier: beat, verified: false, links_resolved: true, outlet: "The Athletic", seen: "2026-09-04", evidence: ["https://x.com/ByJayKing/status/2095663681191248383"]}
   - {handle: JaredWeissNBA, team: BOS, tier: beat, verified: false}
   - {handle: john_karalis, team: BOS, tier: beat, verified: false, outlet: "Boston Sports Journal", seen: "2025-10"}
   - {handle: british_buzz, team: CHA, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
@@ -82,18 +83,18 @@ accounts:
   - {handle: DarnellMayberry, team: CHI, tier: beat, verified: false}
   - {handle: KCJHoop, team: CHI, tier: beat, verified: false, outlet: "Chicago Sports Network", seen: "2025-10"}
   - {handle: AmNotEvan, team: CLE, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
-  - {handle: ChrisFedor, team: CLE, tier: beat, verified: false, outlet: "cleveland.com / The Plain Dealer", seen: "2026-09", evidence: ["https://x.com/ChrisFedor/status/2103543403325899098"]}
+  - {handle: ChrisFedor, team: CLE, tier: beat, verified: false, links_resolved: true, outlet: "cleveland.com / The Plain Dealer", seen: "2026-10-02", evidence: ["https://x.com/ChrisFedor/status/2103543403325899098"]}
   - {handle: espn_macmahon, team: DAL, tier: beat, verified: false}
   - {handle: GrantAfseth, team: DAL, tier: beat, verified: false, outlet: "Dallas Sports Journal", seen: "2026-08", evidence: ["https://x.com/GrantAfseth/status/2084043903481594240"]}
   - {handle: mikeacurtis2, team: DAL, tier: beat, verified: false, outlet: "Dallas Morning News", seen: "2025-10"}
   - {handle: townbrad, team: DAL, tier: beat, verified: false}
-  - {handle: BennettDurando, team: DEN, tier: beat, verified: false, outlet: "The Denver Post", seen: "2026-10", evidence: ["https://x.com/BennettDurando/status/2106119758320157057"]}
+  - {handle: BennettDurando, team: DEN, tier: beat, verified: false, links_resolved: true, outlet: "The Denver Post", seen: "2026-10-02", evidence: ["https://x.com/BennettDurando/status/2106119758320157057"]}
   - {handle: HarrisonWind, team: DEN, tier: beat, verified: false}
   - {handle: msinger, team: DEN, tier: beat, verified: false, outlet: "The Denver Post", seen: "2025-10"}
   - {handle: cotydavis_24, team: DET, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
   - {handle: JLEdwardsIII, team: DET, tier: beat, verified: false}
-  - {handle: omarisankofa, team: DET, tier: beat, verified: false, outlet: "Detroit Free Press", seen: "2025-10"}
-  - {handle: anthonyVslater, team: GSW, tier: beat, verified: false, outlet: "ESPN", seen: "2026-10", evidence: ["https://x.com/anthonyVslater/status/2105806072321864036"]}
+  - {handle: omarisankofa, team: DET, tier: beat, verified: false, links_resolved: true, outlet: "Detroit Free Press", seen: "2026-10-04", evidence: ["https://x.com/omarisankofa/status/2106456756645715986"]}
+  - {handle: anthonyVslater, team: GSW, tier: beat, verified: false, links_resolved: true, outlet: "ESPN", seen: "2026-10-03", evidence: ["https://x.com/anthonyVslater/status/2105806072321864036", "https://x.com/anthonyVslater/status/2106524550305558690"]}
   - {handle: bysamgordon, team: GSW, tier: beat, verified: false, outlet: "San Francisco Chronicle", seen: "2025-10"}
   - {handle: kendra__andrews, team: GSW, tier: beat, verified: false}
   - {handle: binkleyhoops, team: HOU, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
@@ -103,15 +104,15 @@ accounts:
   - {handle: ScottAgness, team: IND, tier: beat, verified: false, outlet: "Fieldhouse Files", seen: "2025-10"}
   - {handle: BA_Turner, team: LAC, tier: beat, verified: false}
   - {handle: joeylinn_, team: LAC, tier: beat, verified: false, outlet: "Sports Illustrated", seen: "2025-10"}
-  - {handle: LawMurrayTheNU, team: LAC, tier: beat, verified: false, outlet: "The Athletic", seen: "2026-09"}
+  - {handle: LawMurrayTheNU, team: LAC, tier: beat, verified: false, links_resolved: true, outlet: "The Athletic", seen: "2026-10-04", evidence: ["https://x.com/LawMurrayTheNU/status/2106587841157587391"]}
   - {handle: jovanbuha, team: LAL, tier: beat, verified: false, outlet: "The Athletic (seat may have moved)", seen: "2025-10"}
-  - {handle: LakersReporter, team: LAL, tier: beat, verified: false, outlet: "Spectrum SportsNet (posts lineups)", seen: "2026-09", evidence: ["https://x.com/LakersReporter/status/2102992878373085520"]}
+  - {handle: LakersReporter, team: LAL, tier: beat, verified: false, links_resolved: true, outlet: "Spectrum SportsNet", seen: "2026-09-30", evidence: ["https://x.com/LakersReporter/status/2105393096817250722"]}
   - {handle: mcten, team: LAL, tier: beat, verified: false}
   - {handle: DamichaelC, team: MEM, tier: beat, verified: false, outlet: "The Athletic", seen: "2025-10"}
   - {handle: DrewHill_DM, team: MEM, tier: beat, verified: false, outlet: "Daily Memphian", seen: "2025-10"}
-  - {handle: Anthony_Chiang, team: MIA, tier: beat, verified: false, outlet: "Miami Herald", seen: "2026-10", evidence: ["https://x.com/Anthony_Chiang/status/2043378387042148588"]}
-  - {handle: eric_nehm, team: MIA, tier: beat, verified: false, outlet: "The Athletic (Heat beat from 2026-09; was Bucks)", seen: "2026-10", note: "team changed MIL -> MIA (pass 2)", evidence: ["https://x.com/eric_nehm/status/2106513478207046106"]}
-  - {handle: IraHeatBeat, team: MIA, tier: beat, verified: false, outlet: "Sun Sentinel", seen: "2025-10"}
+  - {handle: Anthony_Chiang, team: MIA, tier: beat, verified: false, links_resolved: true, outlet: "Miami Herald", seen: "2026-10-04", evidence: ["https://x.com/Anthony_Chiang/status/2043378387042148588"]}
+  - {handle: eric_nehm, team: MIA, tier: beat, verified: false, links_resolved: true, outlet: "The Athletic (Heat since 2026-09-08)", seen: "2026-10-04", note: "team changed MIL -> MIA (pass 2)", evidence: ["https://x.com/eric_nehm/status/2106513478207046106"]}
+  - {handle: IraHeatBeat, team: MIA, tier: beat, verified: false, links_resolved: true, outlet: "Sun Sentinel", seen: "2026-10-04", evidence: ["https://x.com/IraHeatBeat/status/2106777795540226064"]}
   - {handle: JimOwczarski, team: MIL, tier: beat, verified: false}
   - {handle: christopherhine, team: MIN, tier: beat, verified: false, outlet: "Star Tribune", seen: "2025-10"}
   - {handle: DaneMooreNBA, team: MIN, tier: beat, verified: false}
@@ -120,9 +121,9 @@ accounts:
   - {handle: jim_eichenhofer, team: NOP, tier: beat, verified: false, outlet: "Pelicans team site", seen: "2025-10"}
   - {handle: WillGuillory, team: NOP, tier: beat, verified: false, outlet: "The Athletic", seen: "2025-10"}
   - {handle: FredKatz, team: NYK, tier: beat, verified: false}
-  - {handle: IanBegley, team: NYK, tier: beat, verified: false, outlet: "SNY", seen: "2025-10"}
+  - {handle: IanBegley, team: NYK, tier: beat, verified: false, links_resolved: true, outlet: "SNY", seen: "2026-10-03", evidence: ["https://x.com/IanBegley/status/2106452304069116086"]}
   - {handle: stevepopper, team: NYK, tier: beat, verified: false, outlet: "Newsday", seen: "2025-10"}
-  - {handle: brandonrahbar, team: OKC, tier: beat, verified: false, outlet: "Thunder team site", seen: "2025-10"}
+  - {handle: BrandonRahbar, team: OKC, tier: beat, verified: false, links_resolved: true, outlet: "Daily Thunder / FranchiseOK (not the team site)", seen: "2026-10-04", evidence: ["https://x.com/BrandonRahbar/status/2106577885972881682"]}
   - {handle: ClementeAlmanza, team: OKC, tier: beat, verified: false}
   - {handle: joemussatto, team: OKC, tier: beat, verified: false}
   - {handle: rylan_stiles, team: OKC, tier: beat, verified: false, outlet: "Sports Illustrated", seen: "2025-10"}
@@ -131,8 +132,8 @@ accounts:
   - {handle: therealbeede, team: ORL, tier: beat, verified: false, outlet: "Orlando Sentinel", seen: "2025-10"}
   - {handle: DerekBodnerNBA, team: PHI, tier: beat, verified: false}
   - {handle: kyleneubeck, team: PHI, tier: beat, verified: false, outlet: "PHLY / independent", seen: "2025-10"}
-  - {handle: PompeyOnSixers, team: PHI, tier: beat, verified: false, outlet: "The Philadelphia Inquirer", seen: "2025-10"}
-  - {handle: DuaneRankin, team: PHX, tier: beat, verified: false, outlet: "The Arizona Republic", seen: "2025-10"}
+  - {handle: PompeyOnSixers, team: PHI, tier: beat, verified: false, links_resolved: true, outlet: "76ers reporter (Inquirer not on current bio)", seen: "2026-10-02", evidence: ["https://x.com/PompeyOnSixers/status/2106025154845294741"]}
+  - {handle: DuaneRankin, team: PHX, tier: beat, verified: false, links_resolved: true, outlet: "Arizona Republic / azcentral", seen: "2026-10-04", evidence: ["https://x.com/DuaneRankin/status/2106761905297879542"]}
   - {handle: GPHX_Bourguet, team: PHX, tier: beat, verified: false}
   - {handle: KellanOlson, team: PHX, tier: beat, verified: false, outlet: "Arizona Sports", seen: "2025-10"}
   - {handle: AaronJFentress, team: POR, tier: beat, verified: false}
@@ -142,14 +143,14 @@ accounts:
   - {handle: JandersonSacBee, team: SAC, tier: beat, verified: false}
   - {handle: seancunningham, team: SAC, tier: beat, verified: false, outlet: "ABC10", seen: "2025-10"}
   - {handle: jeffgspurszone, team: SAS, tier: beat, verified: false, outlet: "KENS 5", seen: "2025-10"}
-  - {handle: JMcDonald_SAEN, team: SAS, tier: beat, verified: false, outlet: "San Antonio Express-News", seen: "2025-10"}
+  - {handle: JMcDonald_SAEN, team: SAS, tier: beat, verified: false, links_resolved: true, outlet: "San Antonio Express-News", seen: "2026-10-03", evidence: ["https://x.com/JMcDonald_SAEN/status/2106484505976713481"]}
   - {handle: tom_orsborn, team: SAS, tier: beat, verified: false}
   - {handle: ekoreen, team: TOR, tier: beat, verified: false}
-  - {handle: JLew1050, team: TOR, tier: beat, verified: false, outlet: "TSN", seen: "2025-10"}
+  - {handle: JLew1050, team: TOR, tier: beat, verified: false, links_resolved: true, outlet: "TSN", seen: "2026-10-04", evidence: ["https://x.com/JLew1050/status/2106563265450950756"]}
   - {handle: michaelgrange, team: TOR, tier: beat, verified: false, outlet: "Sportsnet", seen: "2025-10"}
   - {handle: andyblarsen, team: UTA, tier: beat, verified: false, outlet: "The Salt Lake Tribune", seen: "2025-10"}
   - {handle: nbasarah, team: UTA, tier: beat, verified: false, outlet: "Deseret News", seen: "2025-10"}
   - {handle: sarahtodd, team: UTA, tier: beat, verified: false}
   - {handle: bijan_todd, team: WAS, tier: beat, verified: false, outlet: "independent", seen: "2025-10"}
-  - {handle: JoshuaBRobbins, team: WAS, tier: beat, verified: false, outlet: "The Athletic", seen: "2026-06", evidence: ["https://x.com/JoshuaBRobbins/status/2072001745320869912"]}
+  - {handle: JoshuaBRobbins, team: WAS, tier: beat, verified: false, links_resolved: true, outlet: "The Athletic", seen: "2026-10-03", evidence: ["https://x.com/JoshuaBRobbins/status/2106466102268277045"]}
   - {handle: VarunShankar, team: WAS, tier: beat, verified: false}
