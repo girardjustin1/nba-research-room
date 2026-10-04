@@ -56,6 +56,8 @@ def test_draft_week_with_everything_confirmed_is_ok(loaded, cfg):
 
 
 def test_gaps_are_warnings_with_actions(loaded, cfg):
+    cfg = _with(cfg, my_slot=None, confirmed=cfg.draft.confirmed.model_copy(
+        update={"rounds": False, "keepers": False, "listener": False}))
     r = readiness.readiness(loaded, cfg, now=pd.Timestamp("2026-10-17T12:00:00Z"), check_api=False)
     checks = by_key(r)
     for key in ("eligibility", "slot", "rounds", "keepers", "listener"):
