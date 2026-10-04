@@ -319,6 +319,8 @@ websockets==17.2
     # via streamlit
 xgboost==3.4.1
     # via research-room
+xlrd==2.0.2
+    # via research-room
 yahoo-fantasy-api==2.12.3
     # via research-room
 yahoo-oauth==2.1.1

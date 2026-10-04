@@ -111,3 +111,23 @@ scores in every 2024-25 and 2025-26 game; 21 earlier team-games are flagged. The
 the 2026-27 schedule matrix from the store. Open for later: verify week 1-19 boundaries against
 Yahoo, Basketball Monster projections CSV (Phase D), keepers (unknown; supported with an empty
 list), draft slot.
+
+## Phase D inputs — 2026-10-04
+
+**Basketball Monster projections (subscription; files live in `reference/`, which is gitignored
+because the data is paid and the repo is public).**
+- Two exports are needed and are joined on BBM's player ID (601/601 match, projected games agree
+  for all): **Export to CSV** = raw season totals with makes and attempts (FGM/FGA, FTM/FTA,
+  3PM/3PA, games, minutes, every counting stat), identical whatever columns are selected;
+  **Export to Excel** = the on-screen table (legacy `.xls`, read with `xlrd`) with Yahoo ADP,
+  Advanced ADP, team, primary position, age, injury risk, role, tiers, NBA ID.
+- `Y!Adp = 0` means **no Yahoo ADP**, not pick 0. 238 players have one, covering picks ~1-136
+  only; the league drafts 196 (14 x 14). Fallback order: Yahoo ADP -> BBM Advanced ADP (201
+  players, to ~156; corr 0.97 with Yahoo, median gap 6.4 picks) -> BBM rank with wide
+  uncertainty and lower confidence.
+- BBM gives one primary position. Yahoo eligibility (often multi-position) should come from a
+  Yahoo `players.csv` snapshot before the draft; until then primary position plus BDL's
+  G/F/C grouping is a lower-confidence stand-in.
+- BBM team codes `NOR`, `PHO`, `FA` differ from BDL (`NOP`, `PHX`, none).
+- Name matching: 516/516 players projected to play match a BDL id (506 exact, 10 via nickname
+  aliases keyed by BDL id). 8 zero-game players stay quarantined.
