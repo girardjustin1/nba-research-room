@@ -8,7 +8,7 @@ page says where each number comes from.
 | Status | Endpoints |
 |---|---|
 | **Implemented** | `GET /season/lineup` (`season_api.py`), `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
-| **Proposed** | everything else on this page, including `GET /season/week/probability` and `POST /season/scenario` (Phase 2) |
+| **Proposed** | everything else on this page, including `GET /season/week/probability`, `GET /season/week/gamecenter` and `POST /season/scenario` (Phase 2) |
 
 All endpoints are served by the local API on 127.0.0.1:8765. The app calls `/api/...` and the
 Vite proxy strips the `/api` prefix. The app reaches the season screens at `#/season/<tab>`,
@@ -77,6 +77,28 @@ labels only; the numbers are in the bottom sheet and the table view.
 | `recommended_move_ids` | `optimizer.py` | the default selection in the Decisions toggles |
 | `current {p_win_week, delta_since_yesterday}` | `simulate.py` | `delta_since_yesterday` vs the last snapshot before today |
 | `cats_as_of` | `ingest/yahoo.py` | when the live category totals were read |
+
+### `GET /season/week/gamecenter` → `GameCenterResponse` (proposed, Phase 2)
+
+The Game Center (the main Matchup screen) reads this endpoint together with
+`/season/week/probability` (chart history and scenarios) and `POST /season/scenario` (the
+"With moves" line).
+
+| Field | Produced by | Notes |
+|---|---|---|
+| `score {me, opp, ties}`, `linescore[].me/opp.total`, `linescore[].leader` | `ingest/yahoo.py` live week-to-date totals | `leader` is computed by the engine (TO: fewer leads) |
+| `linescore[].me/opp.projected` (`Estimate`), `linescore[].p_win` (`ProbBand`) | `projections` + `simulate.py` | shown in the cell's bottom sheet |
+| `swing[]` | `simulate.py` | the 2–3 categories closest to 50/50 |
+| `games_left`, `days[]` (`me_games`, `opp_games`, `me_playable`, `opp_playable`, `playable_edge`, players) | `schedule.py`, `optimizer.py` | `playable_edge` is sent so the UI does not subtract |
+| `since_yesterday {delta_p, label}` | `simulate.py` + the engine's summary | |
+| `moments[]` (`GameCenterMoment`: `kind`, `headline`, `delta_p_win`, `category`, `score_after`, `key`) | `matchup_snapshots`, `x_feed`/`overrides` (injuries), `yahoo` (transactions, locks), `simulate.py` (flips, clinched >95%, out of reach <5%) | drawn as milestone icon dots on the chart; `key` decides Key moments vs All updates |
+| `strength[]` (`StrengthRow`: me, opp, format, higher_is_better) | `schedule.py` + `optimizer.py` (games, playable games by position), `projections` (minutes, end-of-week totals) | mirrored bars; lengths are display geometry from the two values |
+| `injuries[]` (`InjuryRow`: player, side, est_return, `delta_p_win`) | `overrides.py` (status, return), `simulate.py` (effect on my week) | both rosters |
+| `pickups[]` (`WaiverCandidate`), `acquisitions` | `optimizer.py` add/drop search, `ingest/yahoo.py` | same shape as `/season/waivers` |
+| `final` | Yahoo final matchup | set once the week is over |
+
+`WinProbPoint.p_cats` and `ScenarioPoint.p_cats` (P(win) per category, `simulate.py`) feed
+the chart's category dropdown, e.g. "BLK 64% → 78% with moves".
 
 ### `POST /season/scenario` `{move_ids}` → `ScenarioResponse` (proposed, Phase 2)
 

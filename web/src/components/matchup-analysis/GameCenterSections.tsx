@@ -15,7 +15,7 @@ import { PlayerAvatar } from '../foundations/avatars/PlayerAvatar';
 import { DetailSheet, type SheetContent } from '../foundations/DetailSheet';
 import { inkOn } from '../foundations/heatScale';
 import { STATUS_LABEL, catLabel, deadlineLabel, etClock, etDate, formatValue, positionsLabel, ptsDelta, shortDate, statValue, weekdayOf } from '../foundations/seasonFormat';
-import { MILESTONE_GLYPH } from './WinProbabilityChart';
+import { MILESTONE_GLYPH } from './milestones';
 
 const cap = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
@@ -90,20 +90,6 @@ export function Scoreboard({ gc }: { gc: GameCenterResponse }) {
 }
 
 /* --------------------------------------------------------- 4. latest event */
-
-export function momentSheet(m: GameCenterMoment, gc: GameCenterResponse): SheetContent {
-  const cats = gc.week.categories;
-  return {
-    title: `${weekdayOf(etDate(m.ts))} ${etClock(m.ts)} · ${MILESTONE_GLYPH[m.kind].label}`,
-    subtitle: m.headline,
-    effect: m.delta_p_win == null ? null : `${forMeSymbol(m.delta_p_win, 0.002)} P(win week) ${ptsDelta(m.delta_p_win)} · ${forMeWord(m.delta_p_win, 0.002)}`,
-    sections: [
-      ...(m.detail ? [{ heading: 'What happened', lines: [m.detail] }] : []),
-      ...(m.category ? [{ heading: 'Category affected', lines: [catLabel(m.category, cats)] }] : []),
-      { heading: 'Category score after', lines: [`You ${m.score_after.me} – ${m.score_after.opp} ${gc.opponent.name}`] },
-    ],
-  };
-}
 
 export function LatestEvent({ gc, onOpen }: { gc: GameCenterResponse; onOpen: (m: GameCenterMoment) => void }) {
   const m = gc.moments[gc.moments.length - 1];
@@ -388,7 +374,7 @@ export function VolumeMap({ gc, onOpenPlayer }: { gc: GameCenterResponse; onOpen
         Week volume
       </Typography>
       <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
-        Playable games by day · green ▲ you have more, red ▼ they do, gray even
+        Playable games by day · shaded = who has more (green ▲ you, red ▼ them), ● even
       </Typography>
       <Box role="grid" aria-label="Playable games by day" sx={{ display: 'grid', gridTemplateColumns: '40px repeat(7, minmax(0, 1fr))', gap: '3px', mt: 0.75 }}>
         <span />
@@ -408,7 +394,10 @@ export function VolumeMap({ gc, onOpenPlayer }: { gc: GameCenterResponse; onOpen
               {side === 'me' ? 'You' : 'Opp'}
             </Typography>
             {gc.days.map((x, i) => {
-              const bg = color(x.playable_edge);
+              // Only the side with more playable games is shaded: green ▲ on yours, red ▼ on theirs.
+              const mine = side === 'me';
+              const wins = mine ? x.playable_edge > 0 : x.playable_edge < 0;
+              const bg = wins ? color(x.playable_edge) : null;
               return (
                 <ButtonBase
                   key={x.date}
@@ -421,7 +410,7 @@ export function VolumeMap({ gc, onOpenPlayer }: { gc: GameCenterResponse; onOpen
                     bg != null && { bgcolor: bg, borderColor: bg, color: inkOn(bg) },
                   ]}
                 >
-                  {side === 'me' ? forMeSymbol(x.playable_edge) : ''}
+                  {wins ? forMeSymbol(x.playable_edge) : x.playable_edge === 0 && mine ? '●' : ''}
                 </ButtonBase>
               );
             })}
@@ -480,8 +469,8 @@ export function InjuryReport({ gc, onOpenPlayer }: { gc: GameCenterResponse; onO
                   <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
                     {r.player.name}
                   </Typography>
-                  <Typography variant="caption" component="p" noWrap sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Box aria-hidden component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: `${STATUS_TONE[r.player.status.code]}.main`, flexShrink: 0 }} />
+                  <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
+                    <Box aria-hidden component="span" sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: `${STATUS_TONE[r.player.status.code]}.main`, mr: 0.5 }} />
                     {positionsLabel(r.player.eligible)} · {STATUS_LABEL[r.player.status.code]} · back {r.est_return ?? 'unknown'}
                   </Typography>
                 </Box>

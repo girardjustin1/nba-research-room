@@ -148,8 +148,8 @@ const NORMAL_ROWS: H[] = [
   [1, '15:10', 0.51, 'lineup', 'Lineup confirmed: Lindqvist into a C slot for Thu', 4, 5],
   [1, '23:50', 0.44, 'games_final', 'Tue games final: AST gap grew to 14', 3, 6],
   [2, '06:31', 0.49, 'nightly', 'Nightly projections refreshed', 3, 6],
-  [2, '14:14', 0.53, 'news', 'Opponent’s Felix Marlowe day-to-day (back)', 4, 5],
-  [2, '17:40', 0.52, 'nightly', 'Optimizer re-solved Wed–Sun', 4, 5],
+  [2, '14:14', 0.53, 'news', 'Opponent’s Felix Marlowe day-to-day (back)', 3, 6],
+  [2, '17:40', 0.52, 'nightly', 'Optimizer re-solved Wed–Sun', 3, 6],
 ];
 
 const M = movesNormal.moves;

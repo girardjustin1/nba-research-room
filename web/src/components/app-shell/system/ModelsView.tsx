@@ -131,7 +131,7 @@ export function ModelsView({ models: m, loading, error, onRetry, initialModel }:
           ))}
         </Stack>
         <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.75 }}>
-          {win ? `Scored ${win.window_start} to ${win.window_end} · as of ${shortDateTime(m.as_of)}` : `As of ${shortDateTime(m.as_of)}`}
+          {win ? `Scored ${win.window_start.slice(0, 10)} to ${win.window_end.slice(0, 10)} · as of ${shortDateTime(m.as_of)}` : `As of ${shortDateTime(m.as_of)}`}
         </Typography>
         {contenders.length === 0 && (
           <Typography variant="body2" sx={{ mt: 0.5 }}>
@@ -172,7 +172,7 @@ export function ModelsView({ models: m, loading, error, onRetry, initialModel }:
           Per stat
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          The black mark is the 80% target: a calibrated model puts 80% of outcomes inside its band.
+          The tall mark is the 80% target: a calibrated model puts 80% of outcomes inside its band.
         </Typography>
         <Box component="ul" sx={{ m: 0, p: 0, mt: 0.5 }}>
           {rows.map((r) => (

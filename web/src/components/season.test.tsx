@@ -138,3 +138,23 @@ describe('league midnight and scenario plan', () => {
     expect(one.incompatible.map((x) => x.move_id)).toEqual(['m-add-northcott']);
   });
 });
+
+describe('GameCenter', () => {
+  it('renders the scoreboard and opens a linescore sheet on tap', async () => {
+    const { GameCenter } = await import('./matchup-analysis/GameCenter');
+    const { gcMidweekClose } = await import('../mocks/matchup-analysis/gamecenter');
+    const { probNormal } = await import('../mocks/matchup-analysis/probability');
+    renderWithTheme(<GameCenter gc={gcMidweekClose} probability={probNormal} />);
+    expect(screen.getByLabelText(`Category score: you ${gcMidweekClose.score.me}, them ${gcMidweekClose.score.opp}`)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('cell', { name: /^BLK you:/ }));
+    expect(screen.getByText('Projected final')).toBeInTheDocument();
+  });
+  it('key moments hide lineup-only updates until All updates is chosen', async () => {
+    const { MomentsFeed } = await import('./matchup-analysis/GameCenterSections');
+    const { gcMidweekClose } = await import('../mocks/matchup-analysis/gamecenter');
+    renderWithTheme(<MomentsFeed gc={gcMidweekClose} onOpen={() => {}} />);
+    expect(screen.queryByText(/Missed lock/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'All updates' }));
+    expect(screen.getAllByText(/Missed lock/).length).toBeGreaterThan(0);
+  });
+});

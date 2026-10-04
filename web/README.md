@@ -1,10 +1,21 @@
-# Draft room (React, mobile)
+# NBA research room app (React, mobile)
 
-The live draft room for the NBA research room, built for an iPhone 17 in portrait
-(402 x 874 CSS px). The Python engine computes every number; this app only displays them
-and sends your actions to the local draft API (`make draft-api`, 127.0.0.1:8765). The
-Tampermonkey listener posts picks to that API, and the app polls it every 1.5 s, so the
-board updates with no action from you.
+The app for the NBA research room, built for an iPhone 17 in portrait (402 x 874 CSS px).
+The Python engine computes every number; this app only displays them and sends your actions
+to the local API (`make draft-api`, 127.0.0.1:8765).
+
+A left drawer (☰, or swipe from the left edge) separates three experiences:
+
+- **Draft** (`#/draft`): the live draft room. The Tampermonkey listener posts picks to the
+  API, and the app polls it every 1.5 s, so the board updates with no action from you.
+- **League** (`#/league/...`): the season. Bottom tabs are Matchup · Team · Players · Teams ·
+  Results, and the header bell opens Notifications. Screens whose endpoint is not implemented
+  yet show the shared sample data with a persistent **Prototype data** chip; tap it for the
+  endpoints. Invented numbers are never shown as real.
+- **System** (`#/system/health`, `/models`, `/notes`): health checks, model performance, and
+  updates from Claude.
+
+The app remembers the last screen in this browser. Old `#/season/...` links still work.
 
 Local only: both dev servers bind to 127.0.0.1. Nothing is deployed, and telemetry is off
 everywhere (Storybook included).
@@ -39,7 +50,7 @@ pnpm build-storybook  # static Storybook in storybook-static/
 ## Storybook layout
 
 The sidebar reads top-down in a fixed order (set in `.storybook/preview.tsx`):
-Draft, Team & Player Analysis, Team Builder, Matchup Analysis, Results, Results Analysis,
+Prototype, Draft, Team & Player Analysis, Team Builder, Matchup Analysis, Results, Results Analysis,
 Notifications, Player Profiles, Team Profiles, App Shell, Foundations. Inside each category
 stories sort alphabetically. Each category lives in its own folder under `src/components/`
 (`draft/`, `app-shell/`, `foundations/`, ...), and its invented data in `src/mocks/<folder>/`.
@@ -67,8 +78,39 @@ degrade to a clear "needs the updated draft API" message instead of guessed numb
 
 ## App Shell (`src/components/app-shell/`)
 
-`ApiStatus` (the "start the draft API" state), `BottomSheet` (draggable, collapsed / half /
-full), `FullScreenPanel`, `EndpointNotice` (a missing or failed endpoint).
+- `AppFrame`: resolves the route from the manifest. It owns the experience drawer
+  (`nav/ExperienceDrawer`) and hands each screen its shell parts through `AppShellContext`
+  (the ☰, the League bell, and the League bottom tabs). Each screen renders those parts in its
+  own header, so every route shows exactly one ☰ and, in League, one bottom nav.
+- `league/`: thin containers that load each season endpoint and render season-ui's screens
+  (imported from `components/screens.ts`, never edited). When an endpoint 404s, the container
+  falls back to the same mock as that screen's story and shows `PrototypeDataChip`.
+- `system/`: `SystemScreen` (top tabs Health · Models · Updates), `HealthView`, `ModelsView`
+  (MAE by stat as an MUI X bar chart, with the baseline as the reference; calibration as a
+  meter against the 80% target), and `UpdatesView` (cards by kind). `MarkdownText` renders
+  light markdown as React text; HTML is never interpreted.
+- `ApiStatus`, `BottomSheet`, `FullScreenPanel`, `EndpointNotice`.
+
+## Keeping the prototype and Storybook in sync
+
+The rule: every screen in the app exists in Storybook, screen for screen, on the same data.
+
+1. **One route manifest.** `src/app/routes.ts` lists every route: path, experience, title,
+   screen component, and the id of its full-screen story. The app router renders from this
+   list only.
+2. **Screens are built from storied components.** Every manifest screen component has its own
+   `.stories.tsx`. Mocks live in `src/mocks/<category>/` and are shared by the stories and
+   the app's Prototype-data fallback.
+3. **A Prototype section** (top of the sidebar, `src/app/Prototype.stories.tsx`) has one
+   story per route. It renders the real app frame (drawer, headers, bottom tabs) on the
+   sample data at 402x874.
+4. **The sync test** (`src/app/routes.sync.test.ts`, part of `pnpm test`) fails when:
+   - a route has no Prototype story;
+   - a Prototype story points at a route that is not in the manifest;
+   - a route's screen component has no stories file.
+
+When you add a screen: add the route to `routes.ts`, add its story to `Prototype.stories.tsx`,
+and give the screen component its own stories file. `pnpm test` tells you if you missed one.
 
 ## Foundations (`src/components/foundations/`)
 
@@ -102,7 +144,7 @@ every 30 s). The other tabs show a "not live yet" notice until their endpoints e
 |---|---|
 | Team & Player Analysis (`team-player-analysis/`) | Research feed, Schedule volume, Compare |
 | Team Builder (`team-builder/`) | Lineup, Moves planner, Pickups, Playable games strip |
-| Matchup Analysis (`matchup-analysis/`) | This Week |
+| Matchup Analysis (`matchup-analysis/`) | Game Center (main), This Week, Win probability |
 | Results (`results/`) | Season (weeks, category results, standings) |
 | Results Analysis (`results-analysis/`) | Prediction review, Model scoreboard |
 | Notifications (`notifications/`) | Inbox, Alert cards |

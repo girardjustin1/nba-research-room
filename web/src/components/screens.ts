@@ -19,3 +19,4 @@ export { SeasonResults } from './results/SeasonResults';
 export { PredictionReview } from './results-analysis/PredictionReview';
 export { ModelScoreboardView } from './results-analysis/ModelScoreboardView';
 export { NotificationsInbox } from './notifications/NotificationsInbox';
+export { GameCenter } from './matchup-analysis/GameCenter';

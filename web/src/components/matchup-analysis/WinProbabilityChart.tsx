@@ -15,12 +15,13 @@ import Typography from '@mui/material/Typography';
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import { useDrawingArea, useXScale, useYScale } from '@mui/x-charts/hooks';
 import { LineChart, lineClasses } from '@mui/x-charts/LineChart';
-import type { CategoryKey, MilestoneKind, Scenario, SeasonCategory, WinProbPoint, WinProbabilityResponse } from '../../api/season';
+import type { CategoryKey, Scenario, SeasonCategory, WinProbPoint, WinProbabilityResponse } from '../../api/season';
 import { fixed, pct } from '../../lib/format';
 import { FOR_ME, forMeSymbol, forMeWord, useResolvedMode, useVizColors } from '../../theme/viz';
 import { ProvenanceLine } from '../foundations/Confidence';
 import { DetailSheet, type SheetContent } from '../foundations/DetailSheet';
 import { inkOn } from '../foundations/heatScale';
+import { MILESTONE_GLYPH, type Milestone } from './milestones';
 import { EmptyState } from '../foundations/ScreenStates';
 import { addDays, catDeltaLine, catLabel, etClock, etDate, etMidnightMs, pctRange, ptsDelta, weekdayOf } from '../foundations/seasonFormat';
 
@@ -105,28 +106,6 @@ function EventDots({ points }: { points: { ts: string; p: number; color: string 
     </g>
   );
 }
-
-export interface Milestone {
-  id: string;
-  ts: string;
-  kind: MilestoneKind;
-  label: string;
-  delta_p_win: number | null;
-}
-
-/** One glyph per milestone kind; the fill is green / red / gray by its effect on me, so the glyph carries the kind. */
-export const MILESTONE_GLYPH: Record<MilestoneKind, { glyph: string; label: string }> = {
-  my_pickup: { glyph: '+', label: 'Your pickup' },
-  opp_pickup: { glyph: '+', label: 'Their pickup' },
-  injury: { glyph: '!', label: 'Injury news' },
-  lineup_lock: { glyph: 'L', label: 'Lineup lock' },
-  missed_lock: { glyph: '×', label: 'Missed lock' },
-  flip_mine: { glyph: '↑', label: 'Category flipped to you' },
-  flip_theirs: { glyph: '↓', label: 'Category flipped to them' },
-  big_night: { glyph: '★', label: 'Big game night' },
-  clinched: { glyph: '✓', label: 'Clinched (>95%)' },
-  out_of_reach: { glyph: '–', label: 'Out of reach (<5%)' },
-};
 
 function MilestoneDots({ items, onPick }: { items: { m: Milestone; y: number }[]; onPick?: (id: string) => void }) {
   const x = useXScale() as unknown as (v: Date) => number;
@@ -547,7 +526,7 @@ export function WinProbabilityChart(props: WinProbabilityChartProps) {
           </Box>
         </Typography>
       )}
-      {!ended && wm == null && !recomputing && (
+      {!ended && showPlan && wm == null && !recomputing && (
         <Alert severity="info" sx={{ mt: 1 }}>
           No moves selected: the plan line is the same as doing nothing.
         </Alert>

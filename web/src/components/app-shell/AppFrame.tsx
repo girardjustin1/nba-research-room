@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
 import { EXPERIENCE_HOME, LEAGUE_TAB_PATH, lastPath, rememberPath } from '../../app/experiences';
 import { normalizePath } from '../../app/router';
 import { findRoute, routesFor } from '../../app/routes';
 import type { AppApis, Experience } from '../../app/types';
 import type { DataMode } from '../../app/useLiveOrMock';
-import { SAFE_TOP } from '../../lib/layout';
 import { Adopted } from './Adopted';
 import { AppShellContext, ShellAdoptionContext, type AppShellValue, type ShellPart } from './AppShellContext';
 import { ExperienceDrawer, type ApiState } from './nav/ExperienceDrawer';
@@ -48,14 +46,13 @@ function useApiState(mode: DataMode, apis: AppApis): ApiState {
 /**
  * The app frame for all three experiences: resolves the route from the manifest, owns the
  * left experience drawer, and hands each screen its shell parts (☰, header actions, bottom
- * tabs) through AppShellContext. Screens render those parts in their own headers; a safety
- * ☰ floats top-left only if a screen did not render the menu button.
+ * tabs) through AppShellContext. Screens render those parts in their own headers, so each
+ * route shows exactly one ☰ and (in League) one bottom nav.
  */
 export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false }: AppFrameProps) {
   const normalized = normalizePath(path || '');
   const route = findRoute(normalized);
   const [drawer, setDrawer] = useState(initialDrawerOpen);
-  const [adopted, setAdopted] = useState<Record<ShellPart, number>>({ menu: 0, actions: 0, nav: 0 });
   const apiState = useApiState(mode, apis);
 
   // Unknown or empty path: resume the last place, else the draft room.
@@ -66,9 +63,11 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
     if (route && mode === 'live') rememberPath(normalized);
   }, [route, normalized, mode]);
 
+  // Screens register the shell parts they render (season-ui's ScreenFrame does too). Every
+  // route renders its own ☰ now, so nothing needs a fallback; the hook stays for that contract.
   const adopt = useCallback((part: ShellPart) => {
-    setAdopted((a) => ({ ...a, [part]: a[part] + 1 }));
-    return () => setAdopted((a) => ({ ...a, [part]: a[part] - 1 }));
+    void part;
+    return () => {};
   }, []);
 
   const experience: Experience = route?.experience ?? 'draft';
@@ -105,11 +104,6 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         <Box key={route.path} sx={{ position: 'relative', minHeight: '100dvh' }}>
           {route.render({ mode, apis, navigate, query })}
         </Box>
-        {adopted.menu === 0 && (
-          <Paper elevation={3} sx={{ position: 'fixed', top: `calc(${SAFE_TOP} + 6px)`, left: 'max(6px, calc(50% - 314px))', zIndex: 1300, borderRadius: '50%', pl: 1 }}>
-            <MenuButton onClick={openDrawer} />
-          </Paper>
-        )}
         {mode === 'mock' && experience === 'draft' && <PrototypeDataChip endpoints={['Sample draft (Storybook mock API)']} bottomOffset={112} />}
         <ExperienceDrawer
           open={drawer}
