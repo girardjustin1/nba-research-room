@@ -636,6 +636,79 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                     + ["gain", "expected_cats", "p_available_next", "p_available_at_decision", "drafted"])
             return {"players": records(rows, cols)}
 
+    # ---------------------------------------------------------------- schedule (real 2026-27 data)
+    sched_cache: dict = {}
+
+    def schedule_frames():
+        """Team-week matrix and per-team daily games, computed once per API process."""
+        if not sched_cache:
+            cfg = settings()
+            con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+            try:
+                games = schedule.load_games(con, cfg.season.nba_season)
+                abbr = dict(con.execute("SELECT team_id, abbreviation FROM teams").fetchall())
+            finally:
+                con.close()
+            tg = schedule.flag_back_to_backs(schedule.team_games(games))
+            daily = schedule.daily_counts(tg, cfg.season.light_day_max_games).set_index("game_date")
+            opp = pd.concat([
+                games[["game_id", "home_team_id", "visitor_team_id"]].rename(
+                    columns={"home_team_id": "team_id", "visitor_team_id": "opp_id"}).assign(home=True),
+                games[["game_id", "visitor_team_id", "home_team_id"]].rename(
+                    columns={"visitor_team_id": "team_id", "home_team_id": "opp_id"}).assign(home=False)])
+            tg = tg.merge(opp[["game_id", "team_id", "opp_id"]], on=["game_id", "team_id"], how="left")
+            tg["team"] = tg["team_id"].map(abbr)
+            tg["opponent"] = tg["opp_id"].map(abbr)
+            tg["light_day"] = tg["game_date"].map(daily["light_day"])
+            sched_cache.update(cfg=cfg, matrix=schedule.team_week_matrix(games, cfg.season),
+                               weeks=schedule.fantasy_weeks(cfg.season), team_games=tg, abbr=abbr,
+                               daily=daily)
+        return sched_cache
+
+    @app.get("/schedule/team_weeks")
+    def get_team_weeks() -> dict:
+        """Games per team per fantasy week (+ back-to-backs, light-day games), playoff-week totals."""
+        sc = schedule_frames()
+        m, weeks = sc["matrix"].copy(), sc["weeks"]
+        m["team"] = m["team_id"].map(sc["abbr"])
+        teams = []
+        for team, g in m.groupby("team"):
+            g = g.set_index("week")
+            teams.append({
+                "team": team,
+                "games_by_week": {int(k): int(v) for k, v in g["games"].items()},
+                "b2b_by_week": {int(k): int(v) for k, v in g["b2b_games"].items()},
+                "light_day_games_by_week": {int(k): int(v) for k, v in g["light_day_games"].items()},
+                "total": int(g["games"].sum()),
+                "playoff_games": int(g.loc[g["is_playoff"], "games"].sum()),
+            })
+        return {"weeks": [{"week": int(w.week), "start": str(w.start), "end": str(w.end),
+                           "n_days": int(w.n_days), "is_playoff": bool(w.is_playoff)}
+                          for w in weeks.itertuples()],
+                "teams": sorted(teams, key=lambda t: t["team"]),
+                "unscheduled_note": "the NBA schedules 30 more games after the Cup group stage; "
+                                    "December counts will rise",
+                "source": "BallDontLie games (2026-27 schedule)"}
+
+    @app.get("/schedule/team_days")
+    def get_team_days(team: str, start: str | None = None, end: str | None = None) -> dict:
+        """One team's game days (opponent, home/away, back-to-back, light day) in a date range."""
+        sc = schedule_frames()
+        team = team.upper()
+        if team not in set(sc["abbr"].values()):
+            raise HTTPException(404, f"unknown team {team}")
+        tg = sc["team_games"]
+        days = tg[tg["team"] == team]
+        if start:
+            days = days[days["game_date"] >= pd.Timestamp(start).date()]
+        if end:
+            days = days[days["game_date"] <= pd.Timestamp(end).date()]
+        return {"team": team, "days": [
+            {"date": str(r.game_date), "opponent": r.opponent, "home": bool(r.home),
+             "back_to_back": bool(r.b2b), "light_day": bool(r.light_day),
+             "week": schedule.week_of(r.game_date, sc["cfg"].season)}
+            for r in days.itertuples()]}
+
     @app.get("/images/players/{player_id}.png")
     def player_image(player_id: int) -> FileResponse:
         path = images.player_path(player_id, image_root)
