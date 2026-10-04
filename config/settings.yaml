@@ -96,6 +96,28 @@ features:                      # chosen from 2024-26 data: see DECISIONS.md (Pha
   rolling_windows: [3, 5, 10]
   rotation_minutes: 20         # a teammate with EWMA minutes >= this is "rotation" for usage-out
 
+overrides:
+  # P(plays) by injury status. ASSUMED (no injury history yet to calibrate against); revisit once
+  # a few weeks of reports and outcomes are archived. A manual entry or an explicit play_prob wins.
+  status_play_prob:
+    "Out": 0.0
+    "Out For Season": 0.0
+    "Doubtful": 0.25
+    "Questionable": 0.5
+    "Day-To-Day": 0.6
+    "Probable": 0.85
+    "Available": 1.0
+  # With no return date, a status applies for this many days after the report (inclusive).
+  no_return_date_days:
+    "Out": 7
+    "Doubtful": 1
+    "Questionable": 1
+    "Day-To-Day": 2
+    "Probable": 1
+    "Available": 1
+  # Authority, highest first. Manual entries (overrides.yaml) outrank everything.
+  authority: [manual, official, insider, beat, aggregator, bdl]
+
 baseline:
   preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
   min_play_prob: 0.0           # floor on P(plays) from the play-rate EWMA (overrides can set 0)

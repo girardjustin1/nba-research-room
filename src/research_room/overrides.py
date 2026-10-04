@@ -1,0 +1,135 @@
+"""Player availability per date: injuries + X status events + manual overrides -> play_prob and
+minutes_cap, with the source that decided it.
+
+Inputs: `injuries` snapshots (BallDontLie), `status_events` (X feed, Phase 3), config/overrides.yaml,
+settings.overrides (status -> P(plays), how long a status lasts without a return date, authority).
+Outputs: DataFrame [player_id, date, play_prob, minutes_cap, status, authority, source, ts, note],
+one row per player-date that any source speaks to. Players with no row are unaffected (the
+baseline's own play rate applies).
+Tables: reads injuries, status_events, players.
+
+Precedence: the most authoritative source wins (manual > official > insider > beat > aggregator >
+bdl); within one authority, the most recent report wins. Injury snapshots are read as of a time,
+so the backtest can rebuild what was known before any tip (no leakage).
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import duckdb
+import pandas as pd
+import yaml
+
+from research_room import store
+from research_room.config import CONFIG_DIR, Settings, settings
+from research_room.ingest.names import normalize_name
+
+COLUMNS = ["player_id", "date", "play_prob", "minutes_cap", "status", "authority", "source", "ts", "note"]
+
+
+def _dates(start: date, end: date) -> list[date]:
+    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
+
+def _prob(status: str | None, cfg: Settings) -> float | None:
+    if status is None:
+        return None
+    table = {k.lower(): v for k, v in cfg.overrides.status_play_prob.items()}
+    return table.get(str(status).strip().lower())
+
+
+def from_injuries(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime,
+                  cfg: Settings) -> pd.DataFrame:
+    """Latest BallDontLie injury snapshot at or before `as_of`, expanded to the dates it covers."""
+    snap = con.execute("""
+        SELECT player_id, status, description, return_date, fetched_at FROM injuries
+        WHERE fetched_at = (SELECT max(fetched_at) FROM injuries WHERE fetched_at <= ?)
+    """, [as_of]).df()
+    days_for = {k.lower(): v for k, v in cfg.overrides.no_return_date_days.items()}
+    rows = []
+    for r in snap.itertuples(index=False):
+        p = _prob(r.status, cfg)
+        if p is None:
+            continue
+        reported = pd.Timestamp(r.fetched_at).tz_convert("America/New_York").date()
+        status = str(r.status)
+        if status.lower() == "out for season":
+            until = end
+        elif pd.notna(r.return_date) and str(r.return_date).strip():
+            until = pd.Timestamp(r.return_date).date() - timedelta(days=1)   # back on the return date
+        else:
+            until = reported + timedelta(days=days_for.get(status.lower(), 1) - 1)
+        for d in _dates(max(start, reported), min(end, until)):
+            rows.append({"player_id": int(r.player_id), "date": d, "play_prob": p, "minutes_cap": None,
+                         "status": status, "authority": "bdl", "source": "BallDontLie injuries",
+                         "ts": r.fetched_at, "note": (r.description or "")[:200]})
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime,
+                       cfg: Settings) -> pd.DataFrame:
+    """Parsed X posts (Phase 3). Each event speaks to its own game date only."""
+    ev = con.execute("""
+        SELECT player_id, status, minutes_cap, account, ts,
+               CASE authority_rank WHEN 1 THEN 'official' WHEN 2 THEN 'insider' WHEN 3 THEN 'beat'
+                    ELSE 'aggregator' END AS authority
+        FROM status_events WHERE ts <= ? AND player_id IS NOT NULL
+    """, [as_of]).df()
+    rows = []
+    for r in ev.itertuples(index=False):
+        d = pd.Timestamp(r.ts).tz_convert("America/New_York").date()
+        if not start <= d <= end:
+            continue
+        rows.append({"player_id": int(r.player_id), "date": d, "play_prob": _prob(r.status, cfg),
+                     "minutes_cap": r.minutes_cap, "status": r.status, "authority": r.authority,
+                     "source": f"X @{r.account}", "ts": r.ts, "note": None})
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def from_manual(con: duckdb.DuckDBPyConnection, start: date, end: date, cfg: Settings,
+                path: Path | None = None) -> pd.DataFrame:
+    """config/overrides.yaml entries (player_id, or a name resolved exactly against players)."""
+    raw = yaml.safe_load((path or CONFIG_DIR / "overrides.yaml").read_text()) or {}
+    entries = raw.get("overrides") or []
+    if not entries:
+        return pd.DataFrame(columns=COLUMNS)
+    names = con.execute("SELECT player_id, full_name FROM players").df()
+    by_name = names.assign(key=names["full_name"].map(normalize_name)).groupby("key")["player_id"].apply(list)
+    rows = []
+    for e in entries:
+        pid = e.get("player_id")
+        if pid is None:
+            match = by_name.get(normalize_name(e.get("player", "")), [])
+            if len(match) != 1:
+                raise ValueError(f"overrides.yaml: '{e.get('player')}' matches {len(match)} players; "
+                                 "add player_id")
+            pid = match[0]
+        lo = pd.Timestamp(e.get("from") or start).date()
+        hi = pd.Timestamp(e.get("until") or end).date()
+        p = e.get("play_prob", _prob(e.get("status"), cfg))
+        for d in _dates(max(start, lo), min(end, hi)):
+            rows.append({"player_id": int(pid), "date": d, "play_prob": p,
+                         "minutes_cap": e.get("minutes_cap"), "status": e.get("status"),
+                         "authority": "manual", "source": "overrides.yaml", "ts": store.utcnow(),
+                         "note": e.get("note")})
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def resolve(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime | None = None,
+            cfg: Settings | None = None, manual_path: Path | None = None) -> pd.DataFrame:
+    """One row per player-date: the winning source's play_prob and minutes_cap."""
+    cfg = cfg or settings()
+    as_of = as_of or store.utcnow()
+    parts = [f for f in (from_injuries(con, start, end, as_of, cfg),
+                         from_status_events(con, start, end, as_of, cfg),
+                         from_manual(con, start, end, cfg, manual_path)) if not f.empty]
+    if not parts:
+        return pd.DataFrame(columns=COLUMNS)
+    allrows = pd.concat(parts, ignore_index=True)
+    rank = {a: i for i, a in enumerate(cfg.overrides.authority)}
+    allrows["_rank"] = allrows["authority"].map(rank).fillna(len(rank))
+    allrows["_ts"] = pd.to_datetime(allrows["ts"], utc=True)
+    best = allrows.sort_values(["player_id", "date", "_rank", "_ts"], ascending=[True, True, True, False])
+    return best.drop_duplicates(["player_id", "date"]).drop(columns=["_rank", "_ts"]).reset_index(drop=True)

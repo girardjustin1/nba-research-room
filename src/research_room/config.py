@@ -167,6 +167,12 @@ class FeaturesConfig(BaseModel):
     rotation_minutes: float
 
 
+class OverridesConfig(BaseModel):
+    status_play_prob: dict[str, float]
+    no_return_date_days: dict[str, int]
+    authority: list[str]
+
+
 class BaselineConfig(BaseModel):
     preseason_prior_games: float
     min_play_prob: float
@@ -184,6 +190,7 @@ class Settings(BaseModel):
     season: Season
     draft: Draft
     features: FeaturesConfig
+    overrides: OverridesConfig
     baseline: BaselineConfig
     paths: Paths
     bdl: BdlConfig

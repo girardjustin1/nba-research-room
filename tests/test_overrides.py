@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+
+import pandas as pd
+import pytest
+
+from research_room import overrides, store
+from research_room.config import settings
+
+SNAP = datetime(2026, 10, 19, 16, 0, tzinfo=UTC)       # noon ET, Oct 19
+
+
+def injuries(con, rows, fetched_at=SNAP):
+    rows = [{**r, "source": "bdl", "fetched_at": fetched_at} for r in rows]
+    store.upsert(con, "injuries", pd.DataFrame(rows))
+
+
+def players(con):
+    rows = [{"player_id": i, "full_name": n, "source": "t", "fetched_at": SNAP}
+            for i, n in [(1, "Alpha One"), (2, "Beta Two"), (3, "Gamma Three")]]
+    store.upsert(con, "players", pd.DataFrame(rows))
+
+
+def event(eid, pid, status, cap, account, rank, hour):
+    return {"event_id": eid, "player_id": pid, "status": status, "minutes_cap": cap, "account": account,
+            "authority_rank": rank, "ts": datetime(2026, 10, 21, hour, 0, tzinfo=UTC), "source": "x",
+            "fetched_at": SNAP}
+
+
+def by(df):
+    return {(r.player_id, r.date): r for r in df.itertuples()}
+
+
+def test_return_date_window_and_no_date_horizon(con, tmp_path):
+    players(con)
+    injuries(con, [{"player_id": 1, "status": "Out", "return_date": "2026-10-23", "description": "knee"},
+                   {"player_id": 2, "status": "Questionable", "return_date": None, "description": "ankle"},
+                   {"player_id": 3, "status": "Out For Season", "return_date": None, "description": "ACL"}])
+    empty = tmp_path / "o.yaml"
+    empty.write_text("overrides: []\n")
+    ov = by(overrides.resolve(con, date(2026, 10, 19), date(2026, 10, 25), as_of=SNAP, manual_path=empty))
+    assert ov[(1, date(2026, 10, 22))].play_prob == 0.0
+    assert (1, date(2026, 10, 23)) not in ov                       # back on his return date
+    assert ov[(2, date(2026, 10, 19))].play_prob == 0.5
+    assert (2, date(2026, 10, 20)) not in ov                       # questionable lasts 1 day w/o a date
+    assert ov[(3, date(2026, 10, 25))].play_prob == 0.0            # out for season covers everything
+
+
+def test_manual_beats_x_beats_bdl_and_recency_breaks_ties(con, tmp_path):
+    players(con)
+    injuries(con, [{"player_id": 1, "status": "Out", "return_date": "2026-10-30", "description": ""}])
+    store.upsert(con, "status_events", pd.DataFrame([
+        event("a", 1, "Probable", 24.0, "nuggets", 1, 20),
+        event("b", 2, "Questionable", None, "beat", 3, 18),
+        event("c", 2, "Out", None, "beat2", 3, 22),
+    ]))
+    manual = tmp_path / "o.yaml"
+    manual.write_text("overrides:\n  - {player: Alpha One, status: Out, from: 2026-10-24, until: 2026-10-24, "
+                      "note: rest}\n")
+    as_of = datetime(2026, 10, 23, tzinfo=UTC)
+    ov = by(overrides.resolve(con, date(2026, 10, 20), date(2026, 10, 25), as_of=as_of, manual_path=manual))
+    official = ov[(1, date(2026, 10, 21))]
+    assert (official.authority, official.play_prob, official.minutes_cap) == ("official", 0.85, 24.0)
+    assert ov[(1, date(2026, 10, 22))].authority == "bdl"           # the X event only covers its game day
+    assert ov[(1, date(2026, 10, 24))].authority == "manual"
+    assert ov[(2, date(2026, 10, 21))].status == "Out"              # later report from the same tier wins
+
+
+def test_as_of_reads_only_what_was_known(con, tmp_path):
+    players(con)
+    injuries(con, [{"player_id": 1, "status": "Questionable", "return_date": None, "description": ""}])
+    injuries(con, [{"player_id": 1, "status": "Out", "return_date": "2026-10-28", "description": ""}],
+             fetched_at=datetime(2026, 10, 20, 16, 0, tzinfo=UTC))
+    empty = tmp_path / "o.yaml"
+    empty.write_text("overrides: []\n")
+    before = by(overrides.resolve(con, date(2026, 10, 19), date(2026, 10, 19), as_of=SNAP, manual_path=empty))
+    assert before[(1, date(2026, 10, 19))].status == "Questionable"
+    after = by(overrides.resolve(con, date(2026, 10, 20), date(2026, 10, 21),
+                                 as_of=datetime(2026, 10, 21, tzinfo=UTC), manual_path=empty))
+    assert after[(1, date(2026, 10, 21))].status == "Out"
+
+
+def test_ambiguous_manual_name_is_an_error(con, tmp_path):
+    store.upsert(con, "players", pd.DataFrame([{"player_id": i, "full_name": "Same Name", "source": "t",
+                                                "fetched_at": SNAP} for i in (1, 2)]))
+    bad = tmp_path / "o.yaml"
+    bad.write_text("overrides:\n  - {player: Same Name, status: Out}\n")
+    with pytest.raises(ValueError, match="add player_id"):
+        overrides.resolve(con, date(2026, 10, 20), date(2026, 10, 21), manual_path=bad, cfg=settings())
