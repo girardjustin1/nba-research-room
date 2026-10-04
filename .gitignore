@@ -9,3 +9,5 @@ __pycache__/
 *.duckdb
 *.pem
 .DS_Store
+# Paid third-party data (e.g. Basketball Monster exports): never publish
+reference/

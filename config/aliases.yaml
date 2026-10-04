@@ -10,7 +10,18 @@
 #     player_id: null
 #     variants: [Herb Jones]
 
-aliases: []
+aliases:
+  # Nicknames used by Basketball Monster / Yahoo (found 2026-10-04). Keyed by BDL id.
+  - {name: Carlton Carrington, player_id: 1028025235, variants: [Bub Carrington]}
+  - {name: Airious Bailey,     player_id: 1057260888, variants: [Ace Bailey]}
+  - {name: Luguentz Dort,      player_id: 666541,     variants: [Lu Dort]}
+  - {name: Nah'Shon Hyland,    player_id: 17896031,   variants: [Bones Hyland]}
+  - {name: Ronald Holland II,  player_id: 1028026508, variants: [Ron Holland]}
+  - {name: Cameron Johnson,    player_id: 666679,     variants: [Cam Johnson]}
+  - {name: Herbert Jones,      player_id: 17896024,   variants: [Herb Jones]}
+  - {name: Hansen Yang,        player_id: 1057275769, variants: [Yang Hansen]}
+  - {name: David Jones,        player_id: 1028245237, variants: [David Jones Garcia, David Jones-Garcia]}
+  - {name: Elijah Harkless,    player_id: 1028264794, variants: [EJ Harkless]}
 
 # Other sources' team abbreviations -> BallDontLie abbreviations. Used to break ties
 # between players who share a name. Yahoo's short forms are listed; extend as needed.
