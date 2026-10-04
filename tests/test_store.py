@@ -25,7 +25,7 @@ def test_init_schema_is_idempotent(con):
 
 
 def test_every_ingested_table_has_source_and_fetched_at():
-    not_ingested = {"draft_picks", "projections", "model_scores", "decisions_log",
+    not_ingested = {"draft_picks", "draft_teams", "projections", "model_scores", "decisions_log",
                     "player_xref", "unresolved_names", "api_responses", "ingest_runs"}
     for name, table in store.SCHEMA.items():
         if name not in not_ingested:
