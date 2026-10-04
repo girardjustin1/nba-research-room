@@ -1,0 +1,11 @@
+.env
+oauth2.json
+data/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.duckdb
+*.pem
+.DS_Store
