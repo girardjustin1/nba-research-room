@@ -200,3 +200,9 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   flips, clinched/out of reach), a category linescore with swing categories, key moments, mirrored
   strength bars (hatched vs solid), a me-vs-opponent daily volume heat map, both rosters' injury
   reports and ranked pickups. GET /season/week/gamecenter (contract drafted by the web agent).
+- **Season UI decisions (owner, 2026-10-04):** the projected "do nothing" win-probability line
+  stays flat with a widening band (correct: expected future odds equal today's) and gets a one-line
+  caption; compare mode shows up to 3 plans on one chart (a 4th color fails the dark-mode CVD check,
+  so extra plans get small separate charts); in add/drop strips a dropped player's games before the
+  move still count for the week (as in Yahoo) and show gray; invented readable names in fixtures;
+  dashed gridlines kept on the win-probability chart; inside the app shell the shell's nav is used.
