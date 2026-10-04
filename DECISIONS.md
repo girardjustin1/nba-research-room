@@ -162,6 +162,19 @@ prop series exist as `KXNBAPTS`, `KXNBAREB`, `KXNBAAST`, `KXNBASTL`, `KXNBABLK` 
 (`KXNBAPRA`, `KXNBAPR`, `KXNBAPA`, `KXNBARA`, `KXNBASTOCK`). No prop markets were open in
 preseason; Phase 2 checks when they list (likely game day) before relying on them.
 
+**Draft readiness (2026-10-04).**
+- Eligibility: Yahoo's `eligible_positions` from the latest `players.csv` snapshot is the
+  authority. A player missing from it uses his Basketball Monster primary position, and the API
+  marks him `eligibility_source: "bbm"`, so the player sheet says the position is an estimate. An
+  older snapshot is never mixed in: only the latest one counts.
+- Keepers come from `draft.keepers` and are placed when a session starts. Names resolve against
+  the pool. An unmatched or ambiguous name refuses to start the session instead of guessing.
+- League facts I have not checked yet (rounds, keepers, the listener) are explicit
+  `draft.confirmed.*` flags, not comments. `make doctor` (`research_room/readiness.py`, also
+  GET /system/readiness) warns on each one. It fails only when the board would be wrong or would
+  not start: no projections, no schedule, or an unmatched keeper. Runbook: `docs/draft-night.md`.
+- `make nightly --schedule` never worked (make rejects the flag). It is now `make nightly-schedule`.
+
 ## Phase 1 — started 2026-10-04 (in parallel with Phase D UI work, owner's choice)
 
 - **EWMA half-lives chosen from data** (2024-25 and 2025-26, next-game relative MAE, players with

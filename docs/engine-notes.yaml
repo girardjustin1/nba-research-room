@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-04-readiness
+    date: 2026-10-04
+    kind: recommendation
+    title: Run make doctor in draft week
+    body: >
+      The draft board now uses Yahoo's multi-position eligibility once players.csv is in the inbox.
+      Until then each player has only his Basketball Monster position, and the player sheet says
+      so. `make doctor` lists everything still missing before Oct 18 (fresh projections, Yahoo
+      eligibility, slot, rounds, keepers, the listener test), each with its fix. The step-by-step
+      plan for the night is in docs/draft-night.md.
+    refs: [docs/draft-night.md, src/research_room/readiness.py]
+
   - id: 2026-10-04-baseline
     date: 2026-10-04
     kind: update
@@ -31,7 +43,7 @@ notes:
     body: >
       BallDontLie keeps no past odds, despite its docs. Lines are archived from the first nightly run
       onward, so spread and total features are missing (and confidence lower) until history builds.
-      Start `make nightly --schedule` before the season.
+      Start `make nightly-schedule` before the season.
     refs: [DECISIONS.md#phase-0]
 
   - id: 2026-10-04-board-fixes

@@ -123,6 +123,19 @@ class BoardConfig(BaseModel):
     edge_p: float
 
 
+class DraftConfirmed(BaseModel):
+    """League facts I have checked in Yahoo; unconfirmed ones are flagged by make doctor."""
+    rounds: bool = False
+    keepers: bool = False
+    listener: bool = False      # the Tampermonkey listener read a Yahoo mock draft correctly
+
+
+class Readiness(BaseModel):
+    yahoo_eligibility_min_share: float   # of the top pool_size players by value
+    board_refresh_budget_ms: float
+    api_url: str
+
+
 class Draft(BaseModel):
     type: str
     starts_at: datetime
@@ -137,6 +150,8 @@ class Draft(BaseModel):
     sd_prior_games: float
     adp: AdpConfig
     board: BoardConfig
+    confirmed: DraftConfirmed = Field(default_factory=DraftConfirmed)
+    readiness: Readiness
 
 
 class Paths(BaseModel):

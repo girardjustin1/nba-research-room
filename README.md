@@ -23,7 +23,7 @@ Build plan: [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md). Assumptions and devi
 | Phase | What | State |
 |---|---|---|
 | 0 | Store, BallDontLie backfill, name resolution, schedule, Yahoo CSV inbox, Data page | built |
-| D | Draft helper (before Sun Oct 18, 7:00 pm EDT) | next |
+| D | Draft helper (before Sun Oct 18, 7:00 pm EDT) | built; runbook in [`docs/draft-night.md`](docs/draft-night.md), check with `make doctor` |
 | 1–6 | Projections, optimizer, models, playoffs | later |
 
 ## First run
@@ -38,6 +38,7 @@ cp .env.example .env             # then paste your keys into .env
 make backfill                    # 2023-24 .. 2025-26 history + the 2026-27 schedule
 make app                         # http://localhost:8501
 make test && make lint
+make doctor                      # draft-night readiness: what is missing and how to fix it
 ```
 
 `.env`, `oauth2.json` and `data/` are gitignored and must never be committed.
@@ -95,8 +96,8 @@ never guessed. To fix one, add an entry to `config/aliases.yaml`.
 
 ## Scheduling
 
-The nightly job (Phase 1) runs at 6:30 pm local via `apscheduler` inside `jobs/nightly.py`
-while that process is running. As a cron alternative, add this with `crontab -e`:
+`make nightly-schedule` keeps the nightly job (Phase 1) running and does a run at 6:30 pm local
+each day (`apscheduler`). `make nightly` does one run now. As a cron alternative, add this with `crontab -e`:
 
 ```cron
 30 18 * * * cd ~/Documents/trade/nba-research-room && make nightly >> data/nightly.log 2>&1

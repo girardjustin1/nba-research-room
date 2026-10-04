@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import images, schedule, season_api, store, system
+from research_room import images, readiness, schedule, season_api, store, system
 from research_room.config import Settings, settings
 from research_room.draft import eligibility, tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
@@ -698,6 +698,14 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.get("/system/notes")
     def get_system_notes() -> dict:
         return system.notes()
+
+    @app.get("/system/readiness")
+    def get_system_readiness() -> dict:
+        con = read_con()
+        try:
+            return readiness.readiness(con, check_api=False)  # answering this request means it's up
+        finally:
+            con.close()
 
     # ---------------------------------------------------------------- season (Phase 1+)
     @app.get("/season/lineup")

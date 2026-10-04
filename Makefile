@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: setup backfill inbox projections nightly pregame draft-api app web storybook mock-draft images test lint
+.PHONY: doctor setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -17,8 +17,11 @@ inbox:  ## load Yahoo CSVs from data/inbox (moving newer copies in from ~/Downlo
 projections:  ## load the newest Basketball Monster exports from reference/
 	$(PY) jobs/ingest_projections.py
 
-nightly:  ## ingest -> features -> projections -> lineup (once; --schedule keeps it running daily)
+nightly:  ## ingest -> features -> projections -> lineup, once now
 	$(PY) jobs/nightly.py
+
+nightly-schedule:  ## stay running and do the nightly run every day at 18:30 local
+	$(PY) jobs/nightly.py --schedule
 
 pregame:  ## pre-tip injuries / status refresh (Phase 3)
 	@echo "pregame job arrives in Phase 3" && exit 1
@@ -40,6 +43,9 @@ images:  ## cache headshots + team logos from the NBA CDN into data/images (pers
 
 mock-draft:  ## timed end-to-end mock draft (12 teams by default)
 	$(PY) jobs/mock_draft.py --teams $${TEAMS:-12} --slot $${SLOT:-5}
+
+doctor:  ## draft-night readiness: projections, Yahoo eligibility, slot, keepers, board speed
+	$(PY) jobs/doctor.py
 
 test:
 	$(PY) -m pytest -q
