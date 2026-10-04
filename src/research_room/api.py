@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import images, schedule, season_api, store
+from research_room import images, schedule, season_api, store, system
 from research_room.config import Settings, settings
 from research_room.draft import tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
@@ -648,6 +648,30 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                     + [f"z_{c.key}" for c in s.cfg.categories]
                     + ["gain", "expected_cats", "p_available_next", "p_available_at_decision", "drafted"])
             return {"players": records(rows, cols)}
+
+    # ---------------------------------------------------------------- system diagnostics
+    def read_con():
+        return store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+
+    @app.get("/system/health")
+    def get_system_health() -> dict:
+        con = read_con()
+        try:
+            return system.health(con, db_path=db_path)
+        finally:
+            con.close()
+
+    @app.get("/system/models")
+    def get_system_models() -> dict:
+        con = read_con()
+        try:
+            return system.models(con)
+        finally:
+            con.close()
+
+    @app.get("/system/notes")
+    def get_system_notes() -> dict:
+        return system.notes()
 
     # ---------------------------------------------------------------- season (Phase 1+)
     @app.get("/season/lineup")

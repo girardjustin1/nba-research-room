@@ -1,0 +1,64 @@
+# Updates from Claude, shown on the app's System → Updates screen (newest first there).
+# kind: update | finding | recommendation | warning. Plain text or light markdown; no raw HTML.
+# Public repo: never put Basketball Monster numbers, secrets or personal data here.
+
+notes:
+  - id: 2026-10-04-baseline
+    date: 2026-10-04
+    kind: update
+    title: Baseline projections are live and calibrated
+    body: >
+      Projections now come from recent per-minute production x expected minutes x chance of playing.
+      Scored on all of 2025-26 out of sample, they are unbiased (points off by +0.04 on average) and
+      their ranges are honest: 70% of point totals land inside the projected ±1 sd band, against 68%
+      expected. Every future model has to beat this on the Models tab before it is used.
+    refs: [DECISIONS.md#phase-1, src/research_room/projections/baseline.py]
+
+  - id: 2026-10-04-carryover
+    date: 2026-10-04
+    kind: finding
+    title: Last season's rest days were leaking into October
+    body: >
+      Teams rested starters in April, so some stars entered this season looking unlikely to play
+      (Jokic projected low). Early in the season, the chance of playing now leans on the preseason
+      games estimate and shifts to this season's own record as games are played.
+    refs: [src/research_room/projections/baseline.py]
+
+  - id: 2026-10-04-odds
+    date: 2026-10-04
+    kind: warning
+    title: No betting-line history exists yet
+    body: >
+      BallDontLie keeps no past odds, despite its docs. Lines are archived from the first nightly run
+      onward, so spread and total features are missing (and confidence lower) until history builds.
+      Start `make nightly --schedule` before the season.
+    refs: [DECISIONS.md#phase-0]
+
+  - id: 2026-10-04-board-fixes
+    date: 2026-10-04
+    kind: finding
+    title: The draft board stacked centers; fixed
+    body: >
+      A timed mock draft showed the board taking five centers and raising false punt warnings. Players
+      without an open starting slot now count as bench players (they play only when a starter rests),
+      and punt warnings use the full projected roster. Re-run mocks now draft balanced rosters.
+    refs: [src/research_room/draft/board.py, jobs/mock_draft.py]
+
+  - id: 2026-10-04-listener
+    date: 2026-10-04
+    kind: recommendation
+    title: Test the Yahoo pick listener in a mock draft before Oct 18
+    body: >
+      The Tampermonkey listener has only been tested against a local imitation of the draft room.
+      Join a Yahoo mock draft, start a throwaway draft id (for example `yahoo-mock-1`), and check the
+      badge reads every pick. Manual entry always works if it doesn't.
+    refs: [scripts/draft_listener.user.js, README.md]
+
+  - id: 2026-10-04-assumptions
+    date: 2026-10-04
+    kind: recommendation
+    title: Three league facts still need confirming
+    body: >
+      Draft rounds (assumed 13), fantasy week boundaries for weeks 1-19 (assumed: week 1 and the
+      All-Star week are double weeks), and keepers. Each is a setting in config/settings.yaml.
+    refs: [config/settings.yaml]

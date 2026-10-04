@@ -178,6 +178,11 @@ class BaselineConfig(BaseModel):
     min_play_prob: float
 
 
+class SystemConfig(BaseModel):
+    freshness_hours: dict[str, float]
+    failed_job_lookback_days: int
+
+
 class XFeedConfig(BaseModel):
     daily_read_budget: int
 
@@ -195,6 +200,7 @@ class Settings(BaseModel):
     paths: Paths
     bdl: BdlConfig
     x_feed: XFeedConfig
+    system: SystemConfig
 
     @model_validator(mode="after")
     def _anchor_paths(self) -> Settings:

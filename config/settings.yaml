@@ -122,6 +122,16 @@ baseline:
   preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
   min_play_prob: 0.0           # floor on P(plays) from the play-rate EWMA (overrides can set 0)
 
+system:                        # health-check freshness budgets, in hours
+  freshness_hours:
+    bdl_sync: 30               # nightly at 18:30 -> a missed night turns this yellow
+    injuries: 30
+    odds: 30
+    projections: 30
+    yahoo_roster: 48           # only checked once a roster snapshot is expected (after the draft)
+    preseason_projections: 168 # refresh Basketball Monster exports within a week of the draft
+  failed_job_lookback_days: 7
+
 paths:
   db: data/research_room.duckdb
   parquet_dir: data/parquet

@@ -186,3 +186,11 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   projected low). P(plays) now blends toward the preseason games projection (games / 82) with the
   same n / (n + 10) weight as the stat line; overrides win outright. Only current players (played
   last season or this one, or in the preseason pool) are projected.
+- **Planned (Phase 2): week win-probability history.** The weekly simulator stores a
+  `matchup_snapshots` row (as_of, week, P(win week) + band, expected categories, category lead,
+  the event that triggered it) after each nightly run, game-day refresh and material news event.
+  GET /season/week/probability serves them for the Matchup chart (You vs opponent, green above
+  50% / red below), together with projected paths from now to Sunday: "do nothing" vs the
+  recommended plan (and up to 3 named alternatives). POST /season/scenario {move_ids} re-simulates
+  any set of moves on demand (target < 1 s) and reports feasibility (e.g. acquisitions over 4);
+  the browser never computes probabilities. Contract drafted in web/src/api/season.ts.
