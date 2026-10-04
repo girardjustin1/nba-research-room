@@ -24,7 +24,7 @@ import pandas as pd
 
 from research_room import quality, store
 from research_room.config import REPO_ROOT, Settings, settings
-from research_room.ingest.names import resolve_and_record
+from research_room.ingest.names import load_team_aliases, resolve_and_record
 
 SOURCE = "bbm"
 REFERENCE_DIR = REPO_ROOT / "reference"
@@ -39,6 +39,7 @@ _RAW = {
 _TABLE = {"ID": "ext_id", "NBA ID": "nba_id", "Name": "name", "Team": "team_abbr",
           "Pos": "position", "Age": "age", "Y!Adp": "yahoo_adp", "Adv ADP": "adv_adp",
           "Rank": "ext_rank", "Inj Risk": "injury_risk", "Role": "role"}
+_TEAM_MAP = load_team_aliases()
 _OPTIONAL = {"NBA ID"}              # used for headshots only; older exports may lack it
 _TEAM_NONE = {"FA", ""}
 
@@ -93,7 +94,8 @@ def combine(raw: pd.DataFrame, table: pd.DataFrame, csv_name: str = "csv",
         raise ProjectionFileError(f"{unjoined} players in the CSV are not in the .xls; export both "
                                   "from the same page at the same time")
     games = df["games"].astype(float)
-    team = df["team_abbr"].astype(str)
+    team = df["team_abbr"].astype(str).str.upper()
+    team = team.map(lambda a: _TEAM_MAP.get(a, a))           # NOR -> NOP, PHO -> PHX (aliases.yaml)
     out = pd.DataFrame({
         "ext_id": df["ext_id"].astype(str),
         "name": (df["first_name"].fillna("") + " " + df["last_name"].fillna("")).str.strip(),

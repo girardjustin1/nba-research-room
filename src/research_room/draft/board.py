@@ -57,18 +57,25 @@ class BoardResult:
     scores: pd.DataFrame | None = None        # every available player, ranked (for compare)
 
 
-def split_starters(eligible: list[list[str]], slots: list[str]) -> tuple[list[bool], list[str]]:
+def slot_assignment(eligible: list[list[str]], slots: list[str]) -> tuple[list[str | None], list[str]]:
     """Greedy fill of starting `slots` by eligibility, least-flexible players and most specific
-    slots first. Returns (is_starter per player, slots still open)."""
+    slots first. Returns (slot per player or None for bench, slots still open)."""
     open_slots = list(slots)
     specificity = {s: sum(s in e for e in eligible) for s in set(slots)}
-    starter = [False] * len(eligible)
+    given: list[str | None] = [None] * len(eligible)
     for i in sorted(range(len(eligible)), key=lambda i: len(eligible[i])):
         choices = [s for s in open_slots if s in eligible[i]]
         if choices:
-            open_slots.remove(min(choices, key=lambda s: specificity.get(s, 0)))
-            starter[i] = True
-    return starter, open_slots
+            pick = min(choices, key=lambda s: specificity.get(s, 0))
+            open_slots.remove(pick)
+            given[i] = pick
+    return given, open_slots
+
+
+def split_starters(eligible: list[list[str]], slots: list[str]) -> tuple[list[bool], list[str]]:
+    """(is_starter per player, slots still open) from `slot_assignment`."""
+    given, open_slots = slot_assignment(eligible, slots)
+    return [g is not None for g in given], open_slots
 
 
 def assign_slots(eligible: list[list[str]], slots: list[str]) -> list[str]:

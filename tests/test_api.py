@@ -176,3 +176,14 @@ def test_pick_insights_describe_each_drafting_team(client):
     assert 0 <= first["vs_me"]["p_win_week"] <= 1 and first["notes"][0].startswith("Needs")
     mine = next(i for i in d["insights"] if i["team_id"] == 2)
     assert mine["vs_me"] is None                    # no head-to-head against myself
+
+
+def test_pick_owners_my_slots_and_compare_percentages(client):
+    s = client.post("/draft/session", json={"draft_id": "league", "my_slot": 2}).json()
+    assert s["pick_owners"][:8] == [1, 2, 3, 4, 4, 3, 2, 1] and len(s["pick_owners"]) == 20
+    client.post("/draft/pick", json={"player_id": 1})
+    client.post("/draft/pick", json={"player_id": 2})
+    team = client.get("/draft/board").json()["my_team"]
+    assert len(team["slots"]) == 10 and sum(x["player_id"] == 2 for x in team["slots"]) == 1
+    cmp = client.get("/draft/compare", params={"ids": "3"}).json()["players"][0]
+    assert cmp["fg_pct_mean"] == pytest.approx(cmp["fgm_mean"] / cmp["fga_mean"])

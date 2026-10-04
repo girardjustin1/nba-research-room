@@ -31,8 +31,8 @@ from pydantic import BaseModel, Field
 from research_room import images, schedule, season_api, store
 from research_room.config import Settings, settings
 from research_room.draft import tracker
-from research_room.draft.availability import expected_pick, picks_for_slot
-from research_room.draft.board import DraftBoard, split_starters
+from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
+from research_room.draft.board import DraftBoard, slot_assignment, split_starters
 from research_room.draft.bots import BOT_POSITION_CAP, bot_choice
 from research_room.draft.value import category_balance, compute_values
 from research_room.ingest.external_proj import blend_preseason
@@ -290,6 +290,8 @@ def session_json(s: Session) -> dict:
             "pick_clock_seconds": s.cfg.draft.pick_clock_seconds,
             "categories": [{"key": c.key, "label": c.label} for c in s.cfg.categories],
             "mode": s.mode, "team_names": s.team_names(),
+            # Owner of every pick 1..total (snake order; keepers sit at their own team's pick).
+            "pick_owners": [slot_of(p, st.teams) for p in range(1, st.total_picks + 1)],
             "mock": ({"speed_s": s.mock.speed_s, "paused": s.mock.paused, "finished": s.mock.finished}
                      if s.mock else None),
             "picks": records(st.picks)}
@@ -377,11 +379,19 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                                   "p_available_at_decision", "p_available_next", "reasons"]
             mine = s.state.roster(s.state.my_slot)
             roster = s.valued[s.valued["player_id"].isin(mine["player_id"])]
+            given, _ = slot_assignment(list(roster["eligible"]), s.board.starting_slots)
+            by_slot = [{"slot": slot, "player_id": None} for slot in s.board.starting_slots]
+            for pid, slot in zip(roster["player_id"], given, strict=True):
+                if slot is not None:
+                    free = next(x for x in by_slot if x["slot"] == slot and x["player_id"] is None)
+                    free["player_id"] = int(pid)
+            bench_ids = [int(p) for p, g in zip(roster["player_id"], given, strict=True) if g is None]
             return {
                 "complete": False, "decision_pick": res.decision_pick, "following_pick": res.following_pick,
                 "on_the_clock": s.state.on_the_clock, "recommendations": records(res.table, cols),
                 "my_team": {"p_cat": res.my_p_cat, "expected_cats": res.my_expected_cats,
                             "p_win_week": res.my_p_win_week, "open_slots": res.open_slots,
+                            "slots": by_slot, "bench": bench_ids,
                             "z_balance": _clean_dict(category_balance(roster, s.cfg).to_dict()),
                             "roster": records(roster, PLAYER_COLS)},
                 "drift": res.drift, "timings_ms": res.timings_ms,
@@ -631,7 +641,10 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
             rows = rows.join(scored, how="left") if scored is not None else rows
             rows = rows.reindex(wanted).reset_index()
             rows["drafted"] = rows["player_id"].isin(s.state.drafted)
-            cols = (PLAYER_COLS + [f"{k}_mean" for k in COMPARE_STATS]
+            for pct, made, att in (("fg_pct", "fgm", "fga"), ("ft_pct", "ftm", "fta")):
+                attempts = rows[f"{att}_mean"]
+                rows[f"{pct}_mean"] = rows[f"{made}_mean"] / attempts.where(attempts > 0)
+            cols = (PLAYER_COLS + [f"{k}_mean" for k in COMPARE_STATS] + ["fg_pct_mean", "ft_pct_mean"]
                     + [f"z_{c.key}" for c in s.cfg.categories]
                     + ["gain", "expected_cats", "p_available_next", "p_available_at_decision", "drafted"])
             return {"players": records(rows, cols)}
