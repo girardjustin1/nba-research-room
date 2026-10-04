@@ -99,10 +99,62 @@ refresh after the job finishes.
 
 ## Live draft listener (Tampermonkey)
 
-Arrives in Phase D: a userscript in `scripts/draft_listener.user.js` that watches the Yahoo draft
-room's pick list and posts each new pick to the local draft API on port 8765. It never clicks
-anything, and manual pick entry stays available as a fallback. Install steps will be added here
-with the script.
+`scripts/draft_listener.user.js` watches the Yahoo draft room's pick list and posts each new pick
+(`player_name`, NBA `team_abbr`, `pick_no`, `source: "listener"`) to the local draft API. The API
+resolves the name and works out the drafting team from the snake order. The script **only reads
+the page**. It never clicks, types or submits anything on Yahoo, and its status badge ignores the
+mouse (`pointer-events: none`), so clicks go straight through to Yahoo's controls. Manual entry on
+the Draft page is always the fallback.
+
+> **The selectors have not been checked against the live Yahoo room.** They are educated guesses
+> with fallbacks, tested only against `scripts/mock_draft_room.html`. Check them in a Yahoo mock
+> draft before the real draft (Sun Oct 18, 7:00 pm EDT), as described below.
+
+**Install (Chrome)**
+1. Install the Tampermonkey extension from the Chrome Web Store. In `chrome://extensions`, open
+   Tampermonkey's details and turn on **Allow user scripts** (recent Chrome needs this). Turn on
+   **Allow access to file URLs** too if you want to try the local mock room.
+2. Tampermonkey icon → **Create a new script**, delete the template, paste the whole contents of
+   `scripts/draft_listener.user.js`, then **File → Save** (Cmd+S).
+3. Start the API: `make draft-api` (127.0.0.1:8765). Start or resume a session on the Draft page
+   (`make app` → Draft) or in the React app, and set your draft slot.
+4. Open the Yahoo draft room. A small dark badge appears in the bottom-left corner. The first time
+   the script calls 127.0.0.1, Tampermonkey asks for permission: choose **Always allow domain**.
+
+**Reading the badge**
+- `draft <id>` is the API session that picks go to. Check it before the draft starts.
+- `pick list found (row:li) · seen N` means the script found the pick list and how it reads rows.
+  `pick list not found` means no selector matched: enter picks manually and fix the selectors.
+- `sent · dup · queued` are counts. Duplicates (picks already logged, for example ones you entered
+  by hand) are ignored without fuss. If the API is down, picks stay queued and are retried with
+  backoff (2 s up to 15 s) until it is back.
+- `UNMATCHED: <name>` means the API could not match a name. Enter that pick manually on the Draft
+  page. `CONFLICT` means a pick number changed player (a misread or a commissioner edit). It is
+  never sent, so check it by hand.
+
+**Verify in a Yahoo mock draft (do this before Oct 18)**
+1. On the Draft page, start a session with a throwaway draft id (for example `yahoo-mock-1`) and
+   any slot, so mock picks never reach the real draft log.
+2. Join a Yahoo mock draft. Once picks start, the badge should say `pick list found` and `sent`
+   should rise with every pick. The Draft page (it polls every 2 s) should show the same picks in
+   *Recent picks*.
+3. Compare a few rounds against Yahoo's draft results: pick numbers, names and teams.
+4. Afterwards, start or resume the real draft id on the Draft page.
+
+**Updating the selectors.** Every DOM assumption is in the `CONFIG.selectors` block at the top of
+the script. In the Yahoo room, right-click a pick in the pick list → **Inspect** and find (a) an
+element that wraps only the made picks (not the available-players list) and (b) the repeated
+element for one pick. Put a selector for (a) first in `container` and one for (b) first in `row`.
+`pickNo`, `playerName` and `teamPos` are optional: when they are missing, the row's text is parsed
+(`12. Name (DEN - C)`, `Rd 2, Pick 3: Name (BOS - SF)`, `2.03 Name BOS - SF`). Save, reload the
+room, and check the badge. To try the script without sending anything, add `?rr_dry_run=1` to the
+URL or set `dryRun: true`. `window.__rrDraftListener` in DevTools shows its state. If Yahoo's team
+codes differ from BallDontLie's, add them to `CONFIG.teamAliases`.
+
+**Local mock room.** `scripts/mock_draft_room.html?listener=dry&interval=1000` loads the script
+in dry-run mode and adds a synthetic pick every second (`layout=text|table`, `order=newest` and
+`picks=N` change the markup). `pytest tests/test_listener.py` runs the node unit tests
+(`tests/test_listener.mjs`) and drives the mock room in headless Chrome.
 
 ## Layout
 

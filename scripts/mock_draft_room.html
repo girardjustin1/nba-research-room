@@ -1,0 +1,157 @@
+<!doctype html>
+<!--
+  Local test fixture for scripts/draft_listener.user.js. NOT Yahoo, and not a copy of Yahoo's
+  markup (which has not been inspected yet): it imitates the *shape* of a draft room, a pick
+  list that grows on a timer next to an available-players list written in the same
+  "1. Name (TEAM - POS)" format, so the listener's container scoping is exercised.
+  All players are synthetic.
+
+  Query parameters:
+    layout=spans|text|table   pick-row markup (default spans: structured fields)
+    interval=MS               ms between new picks (default 3000)
+    picks=N                   stop after N picks in total (default 12)
+    order=newest              insert new picks at the top instead of the bottom
+    listener=dry              load ./draft_listener.user.js as a page script in dry-run mode
+                              (records picks in its badge, POSTs nothing)
+    listener=page             load it as a page script that POSTs through GM_xmlhttpRequest if
+                              the page defines one (tests inject a fake), else fetch()
+
+  Open directly (file://) or serve: `cd scripts && python -m http.server 8000`.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Draft Room (local fixture)</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; background: #f4f5f7; color: #1d2330; }
+  header { padding: 10px 16px; background: #3b1c6e; color: #fff; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+  section { background: #fff; border-radius: 8px; padding: 12px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li, [role="row"], tr { padding: 4px 0; border-bottom: 1px solid #eee; }
+  .empty { color: #aaa; }
+  .controls { display: flex; gap: 8px; margin-bottom: 8px; }
+</style>
+</head>
+<body data-interactions="0">
+<header>Mock Draft Room · local fixture, not Yahoo · <span id="status">pick 4 of 12</span></header>
+<main>
+  <section id="players-list" class="PlayerList">
+    <h2>Available players</h2>
+    <div class="controls">
+      <input id="player-search" type="search" placeholder="Search players">
+      <button id="draft-button" type="button">Draft player</button>
+    </div>
+    <ul id="available">
+      <li>4. Quinn Hartley (BOS - SF)</li>
+      <li>5. Zoë Marić (GS - PG,SG)</li>
+      <li>6. Kai Brooks-Ward (MIA - SG)</li>
+    </ul>
+  </section>
+  <section class="DraftResults" data-testid="draft-results">
+    <h2>Draft results</h2>
+    <ul id="picks">
+      <li class="pick-row" data-pick-no="1"><span class="pick-num">1.</span> <span class="player-name">Avery Stone</span> <span class="team-pos">(DEN - C)</span> <span class="drafter">Team 1</span></li>
+      <li class="pick-row" data-pick-no="2"><span class="pick-num">2.</span> <span class="player-name">Rowan Okafor-Diaz</span> <span class="team-pos">(OKC - PG)</span> <span class="drafter">Team 2</span></li>
+      <li class="pick-row" data-pick-no="3"><span class="pick-num">3.</span> <span class="player-name">D'Andre Vale</span> <span class="team-pos">(SA - PF,C)</span> <span class="drafter">Team 3</span></li>
+      <li class="pick-row empty"><span class="pick-num">4.</span> <span class="player-name"></span> <span class="drafter">Team 4</span></li>
+      <li class="pick-row empty"><span class="pick-num">5.</span> <span class="player-name"></span> <span class="drafter">Team 5</span></li>
+    </ul>
+  </section>
+</main>
+<script>
+(function () {
+  'use strict';
+  const TEAMS = 14;
+  const POOL = [
+    ['Avery Stone', 'DEN', 'C'], ['Rowan Okafor-Diaz', 'OKC', 'PG'], ["D'Andre Vale", 'SA', 'PF,C'],
+    ['Quinn Hartley', 'BOS', 'SF'], ['Zoë Marić', 'GS', 'PG,SG'], ['Kai Brooks-Ward', 'MIA', 'SG'],
+    ['Marcus Lee Jr.', 'NY', 'SF/PF'], ['Théo Lindqvist', 'MIN', 'C'], ['Jalen Q. Price', 'PHO', 'PG'],
+    ['Emeka Stroud', 'NO', 'PF'], ['Luis Ferrán', 'UTAH', 'SG'], ['Tobias Wren', 'CHI', 'SF'],
+    ['Omari Castellanos', 'LAL', 'C'], ['Benji Ashworth', 'MIL', 'PG,SG'], ['Silas Nwosu', 'ATL', 'SF,PF'],
+    ['Ezra Kaminski', 'WSH', 'SG'], ['Dorian Mbeki', 'HOU', 'PF'], ['Nils Halvorsen', 'IND', 'C'],
+  ];
+  const params = new URLSearchParams(location.search);
+  const layout = params.get('layout') || 'spans';
+  const interval = parseInt(params.get('interval') || '3000', 10);
+  const total = Math.min(parseInt(params.get('picks') || '12', 10), POOL.length);
+  const newestFirst = params.get('order') === 'newest';
+  const made = POOL.slice(0, 3);                    // the three picks already in the markup
+
+  const slotOf = (n) => { const r = Math.ceil(n / TEAMS); const i = (n - 1) % TEAMS; return r % 2 ? i + 1 : TEAMS - i; };
+
+  function row(n, p) {
+    const [name, team, pos] = p;
+    const rnd = Math.ceil(n / TEAMS), inRound = ((n - 1) % TEAMS) + 1;
+    if (layout === 'text') {
+      const el = document.createElement('div');
+      el.setAttribute('role', 'row');
+      el.textContent = `Rd ${rnd}, Pick ${inRound}: ${name} (${team} - ${pos}) Team ${slotOf(n)}`;
+      return el;
+    }
+    if (layout === 'table') {
+      const tr = document.createElement('tr');
+      for (const v of [`${rnd}.${String(inRound).padStart(2, '0')}`, name, `${team} - ${pos}`, `Team ${slotOf(n)}`]) {
+        const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+      }
+      return tr;
+    }
+    const li = document.createElement('li');
+    li.className = 'pick-row';
+    li.setAttribute('data-pick-no', String(n));
+    const parts = [['pick-num', `${n}.`], ['player-name', name], ['team-pos', `(${team} - ${pos})`], ['drafter', `Team ${slotOf(n)}`]];
+    parts.forEach(([cls, text], i) => {
+      const s = document.createElement('span'); s.className = cls; s.textContent = text; li.appendChild(s);
+      if (i < parts.length - 1) li.appendChild(document.createTextNode(' '));
+    });
+    return li;
+  }
+
+  let list = document.getElementById('picks');
+  if (layout !== 'spans') {                         // rebuild the list in the requested markup
+    const section = list.parentElement;
+    section.removeAttribute('data-testid');
+    section.className = '';
+    const box = document.createElement(layout === 'table' ? 'table' : 'div');
+    if (layout === 'table') { box.className = 'draft-results'; box.appendChild(document.createElement('tbody')); }
+    else box.id = 'pick-history';
+    list.replaceWith(box);
+    list = layout === 'table' ? box.tBodies[0] : box;
+    made.forEach((p, i) => list.appendChild(row(i + 1, p)));
+  }
+
+  function addPick() {
+    if (made.length >= total) { clearInterval(timer); document.getElementById('status').textContent = 'draft complete'; return; }
+    const p = POOL[made.length];
+    made.push(p);
+    const el = row(made.length, p);
+    const firstEmpty = list.querySelector('.empty');
+    if (newestFirst) list.insertBefore(el, list.firstChild);
+    else if (firstEmpty) { list.insertBefore(el, firstEmpty); firstEmpty.remove(); }
+    else list.appendChild(el);
+    const avail = document.getElementById('available').firstElementChild;
+    if (avail) avail.remove();
+    document.getElementById('status').textContent = `pick ${made.length + 1} of ${total}`;
+  }
+  const timer = setInterval(addPick, interval);
+
+  // Any click / typing / submit on this page bumps a counter. Nothing in a test run touches the
+  // page, so a non-zero count would mean the listener interacted with "Yahoo's" controls.
+  let interactions = 0;
+  for (const type of ['click', 'mousedown', 'input', 'change', 'keydown', 'submit', 'focusin']) {
+    document.addEventListener(type, () => { interactions += 1; document.body.setAttribute('data-interactions', String(interactions)); }, true);
+  }
+
+  const mode = params.get('listener');
+  if (mode === 'dry' || mode === 'page') {
+    if (mode === 'dry') window.RR_LISTENER_DRY_RUN = true;
+    const s = document.createElement('script');
+    s.src = 'draft_listener.user.js';
+    document.head.appendChild(s);
+  }
+})();
+</script>
+</body>
+</html>
