@@ -161,3 +161,19 @@ prop series exist as `KXNBAPTS`, `KXNBAREB`, `KXNBAAST`, `KXNBASTL`, `KXNBABLK` 
 **`KXNBA3PT`** (the build prompt's `KXNBA3PM` does not exist), plus `KXNBAFTM` and combos
 (`KXNBAPRA`, `KXNBAPR`, `KXNBAPA`, `KXNBARA`, `KXNBASTOCK`). No prop markets were open in
 preseason; Phase 2 checks when they list (likely game day) before relying on them.
+
+## Phase 1 — started 2026-10-04 (in parallel with Phase D UI work, owner's choice)
+
+- **EWMA half-lives chosen from data** (2024-25 and 2025-26, next-game relative MAE, players with
+  >= 10 minutes): minutes are best with a short memory (half-life 3 games: 0.184 vs 0.198 at 20);
+  per-minute rates want a long one (half-life 12-20 plateau; 15 chosen). Settings: `features.*`.
+- `features.py` builds one row per player-game (DNPs included) in ~3 s for three seasons. Rates
+  are ratios of EWMA sums (stable for steals/blocks). Fewer than 5 prior games -> rate and minutes
+  features are missing, not guessed. `features` is a derived DuckDB table, replaced on each build.
+- **Leakage**: features are computed as the state after each game and shifted one game per player
+  (per team for opponent context). `tests/test_leakage.py` truncates the data at three cutoffs and
+  requires identical earlier features, and tampers with a future game; a deliberately planted leak
+  (no shift) is caught. Teammates-out usage uses who actually sat; pre-tip that is known from injury
+  reports, so it stands in for the report until overrides.py supplies it.
+- Vegas and prop-line features are absent from history (no odds archive) and come in as the nightly
+  archive grows.

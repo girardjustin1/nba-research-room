@@ -89,6 +89,13 @@ draft:
     edge_p: 0.55               # pick insights: a category is "your edge" at >= this P(win), and
                                # "their edge" at <= 1 - this
 
+features:                      # chosen from 2024-26 data: see DECISIONS.md (Phase 1)
+  ewma_halflife_minutes: 3     # minutes react fast (relative MAE 0.184 at 3 vs 0.198 at 20)
+  ewma_halflife_rates: 15      # per-minute rates want a long memory (plateau 12-20)
+  ewma_min_periods: 5          # fewer prior games than this -> feature is missing, not guessed
+  rolling_windows: [3, 5, 10]
+  rotation_minutes: 20         # a teammate with EWMA minutes >= this is "rotation" for usage-out
+
 paths:
   db: data/research_room.duckdb
   parquet_dir: data/parquet

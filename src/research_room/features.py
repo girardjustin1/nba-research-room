@@ -1,0 +1,160 @@
+"""Feature table: per player per game, using only information available before that game's tip.
+
+Inputs: game_logs, games (tip_utc), advanced_stats, settings.features.
+Outputs: a DataFrame (and the derived DuckDB table `features`, rebuilt each run) with one row
+per player-game: rolling and EWMA minutes, play rate, EWMA per-minute rates for every stat,
+usage and FGA trends, days of rest, back-to-back, home/away, opponent pace and defensive rating,
+teammates-out usage share, and how many prior games the numbers rest on.
+Tables: reads game_logs, games, advanced_stats; writes features (derived, replace-on-build).
+
+No leakage, by construction: every player-level number is first computed as the state *after*
+each game, then shifted one game later per player, so a game only sees games that tipped off
+before it. Team context (pace, defense) is shifted the same way per team. tests/test_leakage.py
+checks this by truncating the data and confirming earlier features do not change.
+
+Not yet in history: Vegas lines and prop lines (BallDontLie keeps no odds history; they are
+archived nightly from now on), and injury-based play probability (overrides.py, Phase 1).
+Those columns are absent, never filled with neutral defaults.
+"""
+
+from __future__ import annotations
+
+import duckdb
+import numpy as np
+import pandas as pd
+
+from research_room import quality
+from research_room.config import Settings, settings
+
+RATE_STATS = ("pts", "reb", "ast", "stl", "blk", "fg3m", "tov", "fgm", "fga", "ftm", "fta")
+
+
+def load_logs(con: duckdb.DuckDBPyConnection, seasons: list[int]) -> pd.DataFrame:
+    """Regular-season player-game rows (DNPs included), incomplete box-score sides dropped."""
+    seasons_sql = ",".join(str(int(s)) for s in seasons)
+    logs = con.execute(f"""
+        SELECT l.player_id, l.team_id, l.game_id, l.season, g.game_date, g.tip_utc,
+               g.home_team_id, g.visitor_team_id, l.minutes, l.did_play,
+               {", ".join(f"l.{s}" for s in RATE_STATS)}, a.usage_pct
+        FROM game_logs l
+        JOIN games g USING (game_id)
+        LEFT JOIN advanced_stats a ON a.game_id = l.game_id AND a.player_id = l.player_id
+        WHERE l.season IN ({seasons_sql}) AND NOT g.postseason AND g.tip_utc IS NOT NULL
+    """).df()
+    bad = quality.incomplete_team_games(con).assign(_bad=True)
+    logs = logs.merge(bad, on=["game_id", "team_id"], how="left")
+    return logs[logs["_bad"].isna()].drop(columns="_bad").reset_index(drop=True)
+
+
+def team_context(con: duckdb.DuckDBPyConnection, seasons: list[int]) -> pd.DataFrame:
+    """Per team-game pace and defensive rating (minutes-weighted over its players)."""
+    seasons_sql = ",".join(str(int(s)) for s in seasons)
+    return con.execute(f"""
+        SELECT a.game_id, a.team_id, g.tip_utc,
+               median(a.pace) AS pace,
+               sum(a.def_rating * l.minutes) / nullif(sum(l.minutes), 0) AS def_rating
+        FROM advanced_stats a
+        JOIN game_logs l ON l.game_id = a.game_id AND l.player_id = a.player_id
+        JOIN games g ON g.game_id = a.game_id
+        WHERE a.season IN ({seasons_sql}) AND NOT g.postseason AND l.did_play
+        GROUP BY a.game_id, a.team_id, g.tip_utc
+    """).df()
+
+
+def _prior(df: pd.DataFrame, after: pd.Series, by: str = "player_id") -> pd.Series:
+    """State after each game -> value known before the *next* game, per `by`, forward-filled
+    across games where the state did not update (e.g. DNPs for played-only states)."""
+    return after.groupby(df[by]).transform(lambda s: s.ffill().shift(1))
+
+
+def build(logs: pd.DataFrame, team_ctx: pd.DataFrame, cfg: Settings | None = None) -> pd.DataFrame:
+    """Compute the feature table. Pure: no database access."""
+    cfg = cfg or settings()
+    f = cfg.features
+    df = logs.sort_values(["player_id", "tip_utc"], kind="mergesort").reset_index(drop=True)
+    by = df.groupby("player_id")
+    played = df["did_play"].astype(bool)
+    out = df[["player_id", "team_id", "game_id", "season", "game_date", "tip_utc"]].copy()
+    out["home"] = df["team_id"] == df["home_team_id"]
+    out["opp_team_id"] = np.where(out["home"], df["visitor_team_id"], df["home_team_id"])
+
+    # Availability and minutes (all team games, DNPs as 0) ...
+    for w in f.rolling_windows:
+        out[f"min_r{w}"] = by["minutes"].transform(lambda s, w=w: s.shift(1).rolling(w, min_periods=w).mean())
+    out["play_rate_ewma"] = by["did_play"].transform(
+        lambda s: s.astype(float).shift(1).ewm(halflife=f.ewma_halflife_minutes,
+                                               min_periods=f.ewma_min_periods).mean())
+    # ... and minutes when playing (played games only, state after each played game).
+    pm = df["minutes"].where(played)
+    after_min = pm.groupby(df["player_id"]).transform(
+        lambda s: s.dropna().ewm(halflife=f.ewma_halflife_minutes).mean().reindex(s.index))
+    out["min_played_ewma"] = _prior(df, after_min)
+
+    # Per-minute rates: ratio of EWMA sums (stable for low-volume stats), played games only.
+    after_n = played.astype(float).groupby(df["player_id"]).cumsum()
+    out["games_prior"] = after_n.groupby(df["player_id"]).shift(1).fillna(0).astype(int)
+    ew_min = pm.groupby(df["player_id"]).transform(
+        lambda s: s.dropna().ewm(halflife=f.ewma_halflife_rates).mean().reindex(s.index))
+    for stat in RATE_STATS:
+        x = df[stat].where(played)
+        ew_x = x.groupby(df["player_id"]).transform(
+            lambda s: s.dropna().ewm(halflife=f.ewma_halflife_rates).mean().reindex(s.index))
+        out[f"{stat}_pm_ewma"] = _prior(df, ew_x / ew_min)
+    enough = out["games_prior"] >= f.ewma_min_periods
+    rate_cols = [c for c in out if c.endswith("_pm_ewma")] + ["min_played_ewma"]
+    out.loc[~enough, rate_cols] = np.nan                     # too little history: missing, not guessed
+
+    # Usage and shot volume trends (last 5 played games).
+    for col, src in (("usage_r5", df["usage_pct"]), ("fga_r5", df["fga"])):
+        after = src.where(played).groupby(df["player_id"]).transform(
+            lambda s: s.dropna().rolling(5, min_periods=3).mean().reindex(s.index))
+        out[col] = _prior(df, after)
+
+    # Rest and schedule.
+    prev_tip = by["tip_utc"].shift(1)
+    out["days_rest"] = (pd.to_datetime(df["game_date"]) - pd.to_datetime(
+        prev_tip.dt.tz_convert("America/New_York").dt.date)).dt.days
+    out["back_to_back"] = out["days_rest"] == 1
+
+    # Opponent context: the opponent's average pace / defense over its previous 10 games.
+    tc = team_ctx.sort_values(["team_id", "tip_utc"]).copy()
+    for col in ("pace", "def_rating"):
+        tc[f"{col}_r10"] = tc.groupby("team_id")[col].transform(
+            lambda s: s.shift(1).rolling(10, min_periods=3).mean())
+    opp = tc[["game_id", "team_id", "pace_r10", "def_rating_r10"]].rename(
+        columns={"team_id": "opp_team_id", "pace_r10": "opp_pace_r10", "def_rating_r10": "opp_drtg_r10"})
+    out = out.merge(opp, on=["game_id", "opp_team_id"], how="left")
+
+    # Teammates out: usage share of rotation teammates (by pre-game minutes EWMA) who sat out.
+    rot = (out["min_played_ewma"] >= f.rotation_minutes) & ~played.to_numpy()
+    out["_out_usage"] = np.where(rot, out["usage_r5"].fillna(0), 0.0)
+    team_out = out.groupby(["game_id", "team_id"])["_out_usage"].transform("sum")
+    out["teammates_out_usage"] = team_out - out["_out_usage"]
+    out = out.drop(columns="_out_usage")
+
+    # Targets (what happened), kept separate from features by name: `y_` prefix.
+    out["y_minutes"] = df["minutes"].to_numpy()
+    out["y_did_play"] = played.to_numpy()
+    for stat in RATE_STATS:
+        out[f"y_{stat}"] = df[stat].to_numpy()
+    return out
+
+
+def feature_columns(df: pd.DataFrame) -> list[str]:
+    """Inputs a model may use (everything except identifiers and `y_` targets)."""
+    ids = {"player_id", "team_id", "game_id", "season", "game_date", "tip_utc", "opp_team_id"}
+    return [c for c in df.columns if c not in ids and not c.startswith("y_")]
+
+
+def build_and_store(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
+                    seasons: list[int] | None = None) -> pd.DataFrame:
+    """Rebuild the `features` table from the store."""
+    cfg = cfg or settings()
+    seasons = seasons or sorted({*cfg.bdl.backfill_seasons, cfg.season.nba_season})
+    feats = build(load_logs(con, seasons), team_context(con, seasons), cfg)
+    con.register("_features", feats)
+    try:
+        con.execute("CREATE OR REPLACE TABLE features AS SELECT * FROM _features")
+    finally:
+        con.unregister("_features")
+    return feats

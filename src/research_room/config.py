@@ -159,6 +159,14 @@ class BdlConfig(BaseModel):
     max_retries: int = 5
 
 
+class FeaturesConfig(BaseModel):
+    ewma_halflife_minutes: float
+    ewma_halflife_rates: float
+    ewma_min_periods: int
+    rolling_windows: list[int]
+    rotation_minutes: float
+
+
 class XFeedConfig(BaseModel):
     daily_read_budget: int
 
@@ -170,6 +178,7 @@ class Settings(BaseModel):
     transactions: Transactions
     season: Season
     draft: Draft
+    features: FeaturesConfig
     paths: Paths
     bdl: BdlConfig
     x_feed: XFeedConfig
