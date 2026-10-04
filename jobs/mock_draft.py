@@ -44,12 +44,12 @@ from research_room.config import Settings, settings
 from research_room.draft import tracker
 from research_room.draft.availability import expected_pick, round_of, slot_of
 from research_room.draft.board import DraftBoard
+from research_room.draft.bots import BOT_POSITION_CAP, bot_choice
 from research_room.draft.value import NBA_REGULAR_SEASON_GAMES, compute_values
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_TEAMS = 12              # Phase D exit criterion: "a mock 12-team draft"
-BOT_POSITION_CAP = 4            # bots hold at most this many players of one primary position
 REFRESH_LIMIT_S = 1.0           # build prompt: board refresh under 1 second per pick
 RECOMMEND_LIMIT_S = 3.0         # build prompt: recommendations under 3 seconds
 SYNTHETIC_PLAYERS = 520         # about the size of the real pool (516)
@@ -104,20 +104,9 @@ def synthetic_pool(seed: int, n: int = SYNTHETIC_PLAYERS) -> tuple[pd.DataFrame,
 
 
 # ------------------------------------------------------------------ bots
-def bot_choice(avail: pd.DataFrame, held_positions: list[str], rng: np.random.Generator,
-               cap: int = BOT_POSITION_CAP) -> int:
-    """Noisy-ADP pick: lowest sampled draft position, skipping positions already at `cap`."""
-    sampled = rng.normal(avail["expected_pick"].to_numpy(float), avail["adp_sd"].to_numpy(float))
-    counts = pd.Series(held_positions, dtype=object).value_counts()
-    full = set(counts[counts >= cap].index)
-    allowed = ~avail["position"].isin(full).to_numpy()
-    if not allowed.any():
-        allowed[:] = True
-    sampled = np.where(allowed, sampled, np.inf)
-    return int(avail.index[int(np.argmin(sampled))])
+# bot_choice lives in research_room.draft.bots (shared with the API's mock mode).
 
 
-# ------------------------------------------------------------------ evaluation
 def team_weeks(valued: pd.DataFrame, rosters: dict[int, list[int]], cfg: Settings,
                team_games_per_week: float) -> dict[int, simulate.TeamWeek]:
     """One TeamWeek per team from its final roster, with the board's week_games formula."""

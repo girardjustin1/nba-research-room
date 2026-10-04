@@ -16,14 +16,17 @@ def client(tmp_path, monkeypatch):
                                "draft": s.draft.model_copy(update={"rounds": 5, "pool_size": 60})})
     db = str(tmp_path / "api.duckdb")
 
-    def fake_start(draft_id, my_slot, punts, cfg_=None, db_path=None):
-        sess = api.Session(draft_id, cfg, make_pool(), 3.1, set(punts),
-                           tracker.new_state(draft_id, cfg, my_slot))
+    def fake_start(draft_id, my_slot, punts, cfg=None, db_path=None, mock=None):
+        use = cfg or base_cfg
+        use = use.model_copy(update={"draft": base_cfg.draft})
+        sess = api.Session(draft_id, use, make_pool(), 3.1, set(punts),
+                           tracker.new_state(draft_id, use, my_slot), mock=mock)
         sess.rebuild()
         return sess
 
+    base_cfg = cfg
     monkeypatch.setattr(api, "start_session", fake_start)
-    return TestClient(api.create_app(db_path=db))
+    return TestClient(api.create_app(db_path=db, run_mock_thread=False))
 
 
 def test_board_needs_a_session_and_a_slot(client):
@@ -99,3 +102,60 @@ def test_board_returns_per_category_change(client):
     rec = client.get("/draft/board").json()["recommendations"][0]
     keys = [f"dp_{k}" for k in ("fg_pct", "ft_pct", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov")]
     assert all(isinstance(rec[k], float) for k in keys)
+
+
+def test_team_names_teams_view_and_removing_a_pick(client):
+    client.post("/draft/session", json={"draft_id": "league", "my_slot": 2})
+    s = client.put("/draft/teams/names", json={"names": {"1": "Splash Bros", "3": "Glass Cleaners"}}).json()
+    assert s["team_names"]["1"] == "Splash Bros" and s["team_names"]["2"] == "You"
+    assert client.put("/draft/teams/names", json={"names": {"9": "x"}}).status_code == 400
+    for pid in (1, 2, 3):
+        client.post("/draft/pick", json={"player_id": pid})
+    teams = client.get("/draft/teams").json()
+    t1 = teams["teams"][0]
+    assert t1["name"] == "Splash Bros" and [p["player_id"] for p in t1["roster"]] == [1]
+    assert sum(t1["position_counts"].values()) == 1 and t1["next_pick"] == 8
+    assert teams["teams"][1]["is_me"]
+    # Correct pick 2 (not the last one): remove it, the hole becomes the current pick.
+    s = client.delete("/draft/pick/2").json()
+    assert s["current_pick"] == 2 and [p["pick_no"] for p in s["picks"]] == [1, 3]
+    assert client.delete("/draft/pick/2").status_code == 409
+    s = client.post("/draft/pick", json={"player_id": 9, "pick_no": 2, "team_id": 2}).json()
+    assert [p["player_id"] for p in s["picks"]] == [1, 9, 3]
+
+
+def test_positional_value_compare_and_player_ranks(client):
+    client.post("/draft/session", json={"draft_id": "league", "my_slot": 1})
+    pv = client.get("/draft/positional_value").json()
+    assert [r["pos"] for r in pv["positions"]] == ["PG", "SG", "SF", "PF", "C"]
+    assert max(r["scale_0_1"] for r in pv["positions"]) == 1.0
+    assert all(r["best_available"]["value"] >= 0 for r in pv["positions"])
+    players = client.get("/draft/players").json()["players"]
+    assert {"pos_rank", "adp_rank", "adp_pos_rank"} <= set(players[0])
+    first_pg = min((p for p in players if p["position"] == "PG"), key=lambda p: p["pos_rank"])
+    assert first_pg["pos_rank"] == 1
+    cmp = client.get("/draft/compare", params={"ids": "1,2"}).json()["players"]
+    assert [p["player_id"] for p in cmp] == [1, 2]
+    assert {"pts_mean", "fga_mean", "z_fg_pct", "gain", "p_available_next"} <= set(cmp[0])
+    assert client.get("/draft/compare", params={"ids": "1,99999"}).status_code == 404
+
+
+def test_mock_mode_uses_bots_and_never_the_real_store(client, tmp_path):
+    s = client.post("/draft/mock", json={"teams": 4, "my_slot": 2, "speed_s": 0.1, "seed": 3}).json()
+    assert s["mode"] == "mock" and s["teams"] == 4 and s["team_names"]["1"] == "Bot 1"
+    app = client.app
+    import time as _t
+    _t.sleep(0.15)
+    assert app.state.tick() is True                       # bot in slot 1 picks
+    assert app.state.tick() is False                      # my turn: bots wait for me
+    assert client.post("/draft/mock/pause").json()["mock"]["paused"]
+    s = client.post("/draft/mock/pick-now").json()        # I take the board's #1
+    assert s["current_pick"] == 3
+    s = client.post("/draft/mock/finish").json()
+    assert s["current_pick"] is None and s["mock"]["finished"] and len(s["picks"]) == 20
+    assert len({p["player_id"] for p in s["picks"]}) == 20
+    # Nothing reached the on-disk store.
+    from research_room import store
+    con = store.connect(str(tmp_path / "api.duckdb"))
+    assert con.execute("SELECT count(*) FROM draft_picks").fetchone()[0] == 0
+    assert client.post("/draft/mock/speed", json={"speed_s": 999}).status_code == 400

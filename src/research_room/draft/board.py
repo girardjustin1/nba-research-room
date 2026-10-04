@@ -54,6 +54,7 @@ class BoardResult:
     open_slots: list[str]
     drift: list[str]
     timings_ms: dict[str, float] = field(default_factory=dict)
+    scores: pd.DataFrame | None = None        # every available player, ranked (for compare)
 
 
 def split_starters(eligible: list[list[str]], slots: list[str]) -> tuple[list[bool], list[str]]:
@@ -239,6 +240,7 @@ class DraftBoard:
         top.insert(0, "rec", np.arange(1, len(top) + 1))
         t_end = time.perf_counter()
         return BoardResult(
+            scores=ranked.reset_index(drop=True),
             table=top.reset_index(drop=True), decision_pick=decision, following_pick=following,
             my_p_cat=my_p, my_expected_cats=float(np.asarray(my_now.expected_cats).ravel()[0]),
             my_p_win_week=float(np.asarray(my_now.p_win_week).ravel()[0]), open_slots=open_slots,

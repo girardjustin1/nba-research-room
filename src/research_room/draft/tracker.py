@@ -107,6 +107,32 @@ def undo_last(con: duckdb.DuckDBPyConnection, state: DraftState) -> DraftState:
     return _reload(con, state)
 
 
+def remove_pick(con: duckdb.DuckDBPyConnection, state: DraftState, pick_no: int) -> DraftState:
+    """Remove one recorded pick (to correct it). Flags it `undone`, like undo."""
+    if pick_no not in set(state.picks["pick_no"].astype(int)):
+        raise PickError(f"pick {pick_no} is not recorded")
+    con.execute("UPDATE draft_picks SET undone = true WHERE draft_id = ? AND pick_no = ? AND NOT undone",
+                [state.draft_id, pick_no])
+    return _reload(con, state)
+
+
+def team_names(con: duckdb.DuckDBPyConnection, state: DraftState) -> dict[int, str]:
+    """Saved names for this draft's teams; unnamed slots read "Team N" ("You" for my slot)."""
+    saved = dict(con.execute("SELECT team_id, name FROM draft_teams WHERE draft_id = ?",
+                             [state.draft_id]).fetchall())
+    return {t: saved.get(t) or ("You" if t == state.my_slot else f"Team {t}")
+            for t in range(1, state.teams + 1)}
+
+
+def save_team_names(con: duckdb.DuckDBPyConnection, state: DraftState, names: dict[int, str]) -> None:
+    bad = [t for t in names if not 1 <= int(t) <= state.teams]
+    if bad:
+        raise PickError(f"team ids out of range 1..{state.teams}: {bad}")
+    rows = [{"draft_id": state.draft_id, "team_id": int(t), "name": str(n).strip()[:40],
+             "updated_at": store.utcnow()} for t, n in names.items() if str(n).strip()]
+    store.upsert(con, "draft_teams", pd.DataFrame(rows))
+
+
 def apply_keepers(con: duckdb.DuckDBPyConnection, state: DraftState, keepers: list[dict],
                   names: dict[int, str]) -> DraftState:
     """Place keepers ({team_id, player_id, round}) at their team's pick in that round."""
