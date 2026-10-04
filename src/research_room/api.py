@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import images, schedule, store
+from research_room import images, schedule, season_api, store
 from research_room.config import Settings, settings
 from research_room.draft import tracker
 from research_room.draft.availability import expected_pick, picks_for_slot
@@ -635,6 +635,20 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                     + [f"z_{c.key}" for c in s.cfg.categories]
                     + ["gain", "expected_cats", "p_available_next", "p_available_at_decision", "drafted"])
             return {"players": records(rows, cols)}
+
+    # ---------------------------------------------------------------- season (Phase 1+)
+    @app.get("/season/lineup")
+    def get_season_lineup(now: str | None = None) -> dict:
+        """LineupResponse (web/src/api/season.ts): today's and the rest of the week's lineups.
+        `now` (ISO time) is for testing and replay only."""
+        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return season_api.lineup_response(con, now=when)
+        except season_api.NotReady as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
 
     # ---------------------------------------------------------------- schedule (real 2026-27 data)
     sched_cache: dict = {}
