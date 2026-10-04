@@ -24,7 +24,7 @@ draft-api:  ## FastAPI endpoint the Tampermonkey listener posts picks to (Phase 
 	@echo "draft API arrives in Phase D" && exit 1
 
 app:  ## run the Streamlit app (reads the store only)
-	$(PY) -m streamlit run app/Home.py
+	$(PY) -m streamlit run app/Home.py --server.address 127.0.0.1 --server.port 8501 --browser.gatherUsageStats false
 
 test:
 	$(PY) -m pytest -q
