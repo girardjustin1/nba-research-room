@@ -131,3 +131,26 @@ because the data is paid and the repo is public).**
 - BBM team codes `NOR`, `PHO`, `FA` differ from BDL (`NOP`, `PHX`, none).
 - Name matching: 516/516 players projected to play match a BDL id (506 exact, 10 via nickname
   aliases keyed by BDL id). 8 zero-game players stay quarantined.
+
+## Phase D build — 2026-10-04
+
+**Front end (decided with the owner).** The Python engine computes everything; front ends only
+display it. A local FastAPI app (`research_room/api.py`, `make draft-api`, 127.0.0.1:8765) is the
+single source of truth for the draft: the React draft room, the Streamlit Draft page (kept as
+a draft-night fallback) and the Tampermonkey listener all read and write the same session.
+- React: Vite + TypeScript + **MUI** (Material UI v9, MUI X Charts and the free Data Grid) in
+  `web/`, dev server on 127.0.0.1:5173 proxying `/api` to the draft API.
+- **Storybook runs locally only** (127.0.0.1:6006). Stories use invented players; Basketball
+  Monster data never goes into fixtures (paid data, public repo).
+- The API opens the store per write and closes it, so the Data page is never locked out.
+- Every local server binds to 127.0.0.1, not all interfaces.
+
+**Board model choices (measured on the real pool).**
+- Per-game sd prior: variance proportional to the mean (`phi` per stat from 2025-26), not a
+  constant CV; the CV prior overstated stars' spread (Jokic 11.3 vs actual 8.9 pts sd).
+- Tiers: natural breaks (1-D optimal clustering, 16 tiers over the top 200). A global gap
+  threshold put 194 players in one tier.
+- Games per team per week, 3.12 regular season / 3.58 playoff weeks, come from the 2026-27
+  schedule, not a constant.
+- Incomplete box scores are excluded per team side, not per game.
+- Rounds assumed 13 (one per non-IL slot) = 182 picks; confirm in Yahoo's draft settings.
