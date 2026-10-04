@@ -4,7 +4,7 @@ import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
 import type { AppApis } from '../app/types';
-import { healthWarn, modelsNormal, notesNormal } from '../mocks/app-shell/system';
+import { healthWarn, modelsNormal, notesNormal, readinessWarn } from '../mocks/app-shell/system';
 import { CATEGORIES, makeBoard, makeCompare, makeInsights, makePool, makePositional, makeTeams } from '../mocks/draft/fixtures';
 import { demoSession, DemoPickError, initialDemoDraft, recordDemoPick, removeDemoPick, undoDemoPick, type DemoDraft } from '../mocks/draft/demoState';
 import { SAMPLE_PLAYERS } from '../mocks/draft/players';
@@ -117,7 +117,7 @@ function routes(): [string, RegExp, Handler][] {
       undoDemoPick(draft);
       return demoSession(draft);
     }],
-    ['POST', /^\/draft\/export$/, () => ({ path: 'demo: nothing is written' })],
+    ['POST', /^\/draft\/export$/, () => ({ path: 'nowhere (demo mode writes nothing)' })],
     // ---- schedule (one answer for draft and season screens)
     ['GET', /^\/schedule\/team_weeks$/, () => teamWeeks],
     ['GET', /^\/schedule\/team_days$/, ({ query }) => {
@@ -143,6 +143,7 @@ function routes(): [string, RegExp, Handler][] {
     ['GET', /^\/season\/nba_teams\/([A-Za-z]+)$/, () => nbaTeamNOP],
     // ---- system
     ['GET', /^\/system\/health$/, () => healthWarn],
+    ['GET', /^\/system\/readiness$/, () => readinessWarn],
     ['GET', /^\/system\/models$/, () => modelsNormal],
     ['GET', /^\/system\/notes$/, () => notesNormal],
   ];

@@ -65,6 +65,7 @@ export const ROUTES: AppRoute[] = [
   route({ path: '#/league/results/review', experience: 'league', title: 'Results · Prediction review', component: LeagueReviewScreen, storyId: 'prototype--league-results-review', leagueTab: 'results' }),
   route({ path: '#/league/notifications', experience: 'league', title: 'Notifications', component: LeagueNotificationsScreen, storyId: 'prototype--league-notifications', leagueTab: null }),
   sys('health', '#/system/health', 'Health checks', 'prototype--system-health'),
+  sys('draft', '#/system/draft', 'Draft readiness', 'prototype--system-draft-readiness'),
   sys('models', '#/system/models', 'Model performance', 'prototype--system-models'),
   sys('notes', '#/system/notes', 'Updates from Claude', 'prototype--system-updates'),
 ];

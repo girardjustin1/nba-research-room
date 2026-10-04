@@ -58,8 +58,28 @@ export interface NotesResponse {
   notes: SystemNote[];
 }
 
+/** GET /system/readiness (also `make doctor`): what the draft board needs before draft night. */
+export interface ReadinessCheck {
+  key: string;
+  label: string;
+  status: CheckStatus;
+  detail: string;
+  /** What fixes it; null when the check passes. */
+  action: string | null;
+}
+
+export interface ReadinessResponse {
+  as_of: string;
+  draft_starts_at: string;
+  /** Negative once the draft has started. */
+  hours_to_draft: number;
+  overall: CheckStatus;
+  checks: ReadinessCheck[];
+}
+
 export interface SystemApi {
   health(): Promise<HealthResponse>;
+  readiness(): Promise<ReadinessResponse>;
   models(): Promise<ModelsResponse>;
   notes(): Promise<NotesResponse>;
 }
@@ -67,6 +87,7 @@ export interface SystemApi {
 export function createSystemApi(base = '/api', fetchImpl?: FetchLike): SystemApi {
   return {
     health: () => seasonGet(base, '/system/health', fetchImpl),
+    readiness: () => seasonGet(base, '/system/readiness', fetchImpl),
     models: () => seasonGet(base, '/system/models', fetchImpl),
     notes: () => seasonGet(base, '/system/notes', fetchImpl),
   };

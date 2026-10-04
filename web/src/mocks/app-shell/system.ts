@@ -1,4 +1,4 @@
-import type { HealthResponse, ModelsResponse, NotesResponse } from '../../api/system';
+import type { HealthResponse, ModelsResponse, NotesResponse, ReadinessResponse } from '../../api/system';
 
 /** Invented System data for stories and the app's "Prototype data" fallback. */
 const AS_OF = '2026-11-18T18:42:00-05:00';
@@ -130,3 +130,44 @@ export const notesNormal: NotesResponse = {
 };
 
 export const notesEmpty: NotesResponse = { notes: [] };
+
+/** Draft readiness two days out: the usual gaps, each with its fix (invented, no league data). */
+const DRAFT_AT = '2026-10-18T19:00:00-04:00';
+export const readinessWarn: ReadinessResponse = {
+  as_of: '2026-10-16T20:15:00-04:00',
+  draft_starts_at: DRAFT_AT,
+  hours_to_draft: 46.8,
+  overall: 'warn',
+  checks: [
+    { key: 'projections', label: 'Basketball Monster projections', status: 'ok', detail: 'snapshot 2026-10-15, 3 days before the draft', action: null },
+    { key: 'eligibility', label: 'Yahoo position eligibility', status: 'warn', detail: "62% of the top 200 have Yahoo eligibility; the rest use Basketball Monster's primary position", action: 'save players.csv (all players, with eligible_positions) to data/inbox, run make inbox' },
+    { key: 'names', label: 'Yahoo names', status: 'ok', detail: 'all matched', action: null },
+    { key: 'slot', label: 'My draft slot', status: 'ok', detail: 'slot 6 of 14', action: null },
+    { key: 'rounds', label: 'Draft rounds', status: 'ok', detail: '13 rounds', action: null },
+    { key: 'keepers', label: 'Keepers', status: 'ok', detail: '0 configured', action: null },
+    { key: 'weeks', label: 'Fantasy week boundaries', status: 'warn', detail: 'weeks 1-19 assumed (affects games-per-week on the board)', action: 'compare with the Yahoo league schedule, then set season.week_boundaries_verified' },
+    { key: 'listener', label: 'Pick listener', status: 'warn', detail: 'only tested against the local mock room', action: 'run a Yahoo mock draft with a throwaway draft id (README), then set draft.confirmed.listener: true; manual entry always works' },
+    { key: 'schedule', label: 'NBA schedule', status: 'ok', detail: '1200 games for 2026-27', action: null },
+    { key: 'board', label: 'Board refresh', status: 'ok', detail: '74 ms for 516 players (budget 500)', action: null },
+    { key: 'images', label: 'Headshots', status: 'ok', detail: '489 cached', action: null },
+  ],
+};
+
+export const readinessReady: ReadinessResponse = {
+  ...readinessWarn,
+  as_of: '2026-10-18T18:20:00-04:00',
+  hours_to_draft: 0.7,
+  overall: 'ok',
+  checks: readinessWarn.checks.map((c) =>
+    c.status === 'ok' ? c : { ...c, status: 'ok', action: null, detail: c.key === 'eligibility' ? '99% of the top 200 have Yahoo eligibility' : c.key === 'weeks' ? 'verified' : 'checked in a Yahoo mock draft' },
+  ),
+};
+
+export const readinessError: ReadinessResponse = {
+  ...readinessWarn,
+  overall: 'error',
+  checks: [
+    { key: 'keepers', label: 'Keepers', status: 'error', detail: "keeper 'Sample Player' not matched (ambiguous); add player_id", action: 'fix draft.keepers in config/settings.yaml' },
+    ...readinessWarn.checks.filter((c) => c.key !== 'keepers'),
+  ],
+};

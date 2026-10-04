@@ -46,6 +46,10 @@ export function mockActions(failWith?: ApiError): DraftRoomActions {
     changePick: act('changePick'),
     undo: act('undo'),
     setTeamNames: act('setTeamNames'),
+    exportResults: async () => {
+      await act('exportResults')();
+      return 'data/inbox/draft_results.csv';
+    },
     refresh: () => console.info('[mock] refresh'),
   };
 }

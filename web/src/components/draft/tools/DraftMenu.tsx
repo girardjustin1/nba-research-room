@@ -6,6 +6,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DriveFileRenameOutlineOutlinedIcon from '@mui/icons-material/DriveFileRenameOutlineOutlined';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
@@ -21,6 +22,8 @@ export interface DraftMenuProps {
   open: boolean;
   onClose: () => void;
   onOpenPanel: (panel: MenuPanel) => void;
+  /** Save the draft results for the inbox (and to compare with Yahoo's). */
+  onExport?: () => void;
 }
 
 const ITEMS: { panel: MenuPanel; label: string; detail: string; icon: React.ReactNode }[] = [
@@ -32,7 +35,7 @@ const ITEMS: { panel: MenuPanel; label: string; detail: string; icon: React.Reac
 ];
 
 /** Side menu for the less frequent draft tools. */
-export function DraftMenu({ open, onClose, onOpenPanel }: DraftMenuProps) {
+export function DraftMenu({ open, onClose, onOpenPanel, onExport }: DraftMenuProps) {
   const { setMode } = useColorScheme();
   const mode = useResolvedMode();
   const next = mode === 'dark' ? 'light' : 'dark';
@@ -55,6 +58,20 @@ export function DraftMenu({ open, onClose, onOpenPanel }: DraftMenuProps) {
             <ListItemText primary={it.label} secondary={it.detail} />
           </ListItemButton>
         ))}
+        {onExport && (
+          <ListItemButton
+            onClick={() => {
+              onClose();
+              onExport();
+            }}
+            sx={{ minHeight: 56 }}
+          >
+            <ListItemIcon>
+              <FileDownloadOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary="Export results" secondary="Saves draft_results.csv to the inbox" />
+          </ListItemButton>
+        )}
         <ListItemButton onClick={() => setMode(next)} sx={{ minHeight: 56 }}>
           <ListItemIcon>{mode === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}</ListItemIcon>
           <ListItemText primary={`Switch to ${next} mode`} />

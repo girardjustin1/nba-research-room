@@ -403,7 +403,17 @@ export function DraftRoomView({
         </Box>
       </FullScreenPanel>
 
-      <DraftMenu open={menuOpen} onClose={() => setMenuOpen(false)} onOpenPanel={setPanel} />
+      <DraftMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenPanel={setPanel}
+        onExport={() =>
+          actions
+            .exportResults()
+            .then((path) => setNotice({ text: `Exported to ${path}` }))
+            .catch((err: unknown) => setNotice({ text: errorMessage(err), error: true }))
+        }
+      />
 
       <Snackbar
         open={notice != null}

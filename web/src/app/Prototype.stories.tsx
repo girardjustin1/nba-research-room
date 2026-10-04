@@ -32,5 +32,6 @@ export const LeagueResults = at('#/league/results');
 export const LeagueResultsReview = at('#/league/results/review');
 export const LeagueNotifications = at('#/league/notifications');
 export const SystemHealth = at('#/system/health');
+export const SystemDraftReadiness = at('#/system/draft');
 export const SystemModels = at('#/system/models');
 export const SystemUpdates = at('#/system/notes');

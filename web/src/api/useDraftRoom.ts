@@ -52,6 +52,8 @@ export interface DraftRoomActions {
   changePick(pickNo: number, teamId: number, playerId: number): Promise<void>;
   undo(): Promise<void>;
   setTeamNames(names: Record<string, string>): Promise<void>;
+  /** POST /draft/export: writes data/inbox/draft_results.csv; resolves to the path written. */
+  exportResults(): Promise<string>;
   refresh(): void;
 }
 
@@ -246,6 +248,7 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
         loadedKey.current = null;
         wake.current();
       },
+      exportResults: async () => (await api.exportResults()).path,
       refresh: () => {
         loadedKey.current = null;
         wake.current();
