@@ -10,6 +10,7 @@ global environment variable, and `Secrets.__repr__` never shows values.
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -139,6 +140,9 @@ class Settings(BaseModel):
     @model_validator(mode="after")
     def _anchor_paths(self) -> Settings:
         self.paths = self.paths.resolved()
+        override = os.environ.get("RESEARCH_ROOM_DB")      # tests and scratch runs only
+        if override:
+            self.paths.db = Path(override)
         return self
 
 
