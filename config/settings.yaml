@@ -62,6 +62,13 @@ draft:
   keepers: []                  # [{team_id, player_id, round}] once declared
   rounds: 13                   # ASSUMED: one per non-IL roster slot; confirm in Yahoo draft settings
   pool_size: 200               # z-scores are computed over the top N by value
+  tiers: 16                    # natural-break tiers across the top pool (1-D optimal clustering)
+  position_eligibility:        # Basketball Monster primary position -> Yahoo slots it can fill,
+    PG: [PG, G, Util]          # used until a Yahoo players.csv supplies real eligibility
+    SG: [SG, G, Util]
+    SF: [SF, F, Util]
+    PF: [PF, F, Util]
+    C:  [C, Util]
   projection_blend:            # per-game rates; weights must sum to 1.0
     external: 0.75             # Basketball Monster preseason projection
     last_season: 0.25          # player's own 2025-26 per-game rates

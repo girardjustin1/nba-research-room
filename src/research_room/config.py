@@ -121,6 +121,8 @@ class Draft(BaseModel):
     keepers: list[dict] = Field(default_factory=list)
     rounds: int
     pool_size: int
+    tiers: int
+    position_eligibility: dict[str, list[str]]
     projection_blend: ProjectionBlend
     sd_prior_games: float
     adp: AdpConfig
