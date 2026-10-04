@@ -11,3 +11,13 @@
 #     variants: [Herb Jones]
 
 aliases: []
+
+# Other sources' team abbreviations -> BallDontLie abbreviations. Used to break ties
+# between players who share a name. Yahoo's short forms are listed; extend as needed.
+team_aliases:            # keys quoted: YAML would read a bare NO as boolean false
+  "GS": GSW
+  "NO": NOP
+  "NY": NYK
+  "SA": SAS
+  "PHO": PHX
+  "UTAH": UTA
