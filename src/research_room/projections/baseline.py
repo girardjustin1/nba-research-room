@@ -71,22 +71,24 @@ class BaselineModel:
         prior_p = df.get("prior_games", pd.Series(np.nan, index=df.index)) / NBA_REGULAR_SEASON_GAMES
         blended = np.where(has_prior & recent.notna(), w * recent.fillna(0) + (1 - w) * prior_p,
                            np.where(has_prior, prior_p, recent))
-        ov = df.get("play_prob_override", pd.Series(np.nan, index=df.index))
+        ov = pd.to_numeric(df.get("play_prob_override", pd.Series(np.nan, index=df.index)),
+                           errors="coerce")
         p = pd.Series(np.where(ov.notna(), ov, blended), index=df.index)
         p = p.clip(lower=b.min_play_prob, upper=1.0).fillna(0.0)
         m = np.where(has_ewma, df["min_played_ewma"], 0.0) * w + np.where(
             has_prior, df.get("prior_minutes", 0.0), 0.0) * (1 - w)
+        m = np.asarray(m, dtype=float)
         cap = df.get("minutes_cap")
         scale = np.ones(len(df))
         if cap is not None:
-            capped = np.minimum(m, cap.fillna(np.inf))
+            capped = np.minimum(m, pd.to_numeric(cap, errors="coerce").fillna(np.inf).to_numpy(float))
             scale = np.where(m > 0, capped / np.where(m > 0, m, 1), 1.0)
             m = capped
         source = np.where(has_ewma & has_prior, "ewma+preseason", np.where(has_ewma, "ewma", "preseason"))
         rows = []
         usable = (has_ewma | has_prior).to_numpy()
         base = df.loc[usable, ["player_id", "game_id", "date"]].reset_index(drop=True)
-        pu, mu_min = p[usable].to_numpy(), m[usable]
+        pu, mu_min = p[usable].to_numpy(float), m[usable]
         for s in (*STATS, "minutes"):
             if s == "minutes":
                 cond = mu_min
@@ -152,6 +154,7 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
         train = features.build(features.load_logs(con, seasons), features.team_context(con, seasons), cfg)
         model = BaselineModel(cfg).fit(train)
     games = upcoming_rows(con, start, end, cfg)
+    games["date"] = pd.to_datetime(games["date"]).dt.date          # one date type for every join
     state = current_states(con, cfg)
     keep = ["player_id", "min_played_ewma", "play_rate_ewma", "season_games",
             *[f"{s}_pm_ewma" for s in STATS]]
@@ -169,6 +172,7 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
     if overrides is not None and not overrides.empty:
         ov = overrides[["player_id", "date", "play_prob", "minutes_cap"]].rename(
             columns={"play_prob": "play_prob_override"})
+        ov = ov.assign(date=pd.to_datetime(ov["date"]).dt.date)
         df = df.merge(ov, on=["player_id", "date"], how="left")
     return model.predict(df)
 

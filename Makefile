@@ -17,8 +17,8 @@ inbox:  ## load Yahoo CSVs from data/inbox (moving newer copies in from ~/Downlo
 projections:  ## load the newest Basketball Monster exports from reference/
 	$(PY) jobs/ingest_projections.py
 
-nightly:  ## ingest -> features -> projections -> optimize (Phase 1+)
-	@echo "nightly job arrives in Phase 1" && exit 1
+nightly:  ## ingest -> features -> projections -> lineup (once; --schedule keeps it running daily)
+	$(PY) jobs/nightly.py
 
 pregame:  ## pre-tip injuries / status refresh (Phase 3)
 	@echo "pregame job arrives in Phase 3" && exit 1

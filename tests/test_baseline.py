@@ -81,3 +81,12 @@ def test_fit_recovers_poisson_dispersion():
 def test_predict_requires_fit():
     with pytest.raises(RuntimeError, match="fit"):
         BaselineModel(settings()).predict(pd.DataFrame([row()]))
+
+
+def test_object_typed_override_columns_from_a_merge_still_work():
+    df = pd.DataFrame([row(), row(player_id=2)])
+    df["minutes_cap"] = pd.Series([None, 20.0], dtype=object)
+    df["play_prob_override"] = pd.Series([None, 0.5], dtype=object)
+    pred = fitted().predict(df)
+    p2 = pred[(pred["player_id"] == 2) & (pred["stat"] == "pts")].iloc[0]
+    assert p2["p_play"] == pytest.approx(0.5) and p2["mean"] == pytest.approx(0.5 * 0.5 * 20)
