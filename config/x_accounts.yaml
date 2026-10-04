@@ -1,5 +1,58 @@
-# Curated X accounts for the injury/status feed (Phase 3).
-# tier: official (team accounts, outrank everything) | insider | beat | aggregator
-# Keep ~40 accounts; the daily read budget is in settings.yaml (x_feed.daily_read_budget).
+# Curated X accounts for the injury / status / starting-lineup feed (Phase 3).
+#
+# tier (authority, highest first):
+#   official   - team accounts: injury reports, starting lineups. Outrank everything.
+#   insider    - national reporters who break injury and rotation news first.
+#   aggregator - injury/lineup aggregators; fast, but secondhand.
+#
+# DRAFT for review (2026-10-04). Every handle is `verified: false` until Phase 3 confirms it
+# with one X users-by-username lookup (100 handles per request). Beat writers are left out on
+# purpose: they change outlets and handles often; add any you trust with tier: beat.
+#
+# Budget note: settings.yaml caps reads at 300/day. Polling 40 accounts separately every
+# 15 minutes for 3 hours would be 480 requests, so Phase 3 should read them through one private
+# X list (one request per poll) and count posts read against the budget.
 
-accounts: []
+accounts:
+  # --- official team accounts (30) ---
+  - {handle: ATLHawks,         team: ATL, tier: official, verified: false}
+  - {handle: celtics,          team: BOS, tier: official, verified: false}
+  - {handle: BrooklynNets,     team: BKN, tier: official, verified: false}
+  - {handle: hornets,          team: CHA, tier: official, verified: false}
+  - {handle: chicagobulls,     team: CHI, tier: official, verified: false}
+  - {handle: cavs,             team: CLE, tier: official, verified: false}
+  - {handle: dallasmavs,       team: DAL, tier: official, verified: false}
+  - {handle: nuggets,          team: DEN, tier: official, verified: false}
+  - {handle: DetroitPistons,   team: DET, tier: official, verified: false}
+  - {handle: warriors,         team: GSW, tier: official, verified: false}
+  - {handle: HoustonRockets,   team: HOU, tier: official, verified: false}
+  - {handle: Pacers,           team: IND, tier: official, verified: false}
+  - {handle: LAClippers,       team: LAC, tier: official, verified: false}
+  - {handle: Lakers,           team: LAL, tier: official, verified: false}
+  - {handle: memgrizz,         team: MEM, tier: official, verified: false}
+  - {handle: MiamiHEAT,        team: MIA, tier: official, verified: false}
+  - {handle: Bucks,            team: MIL, tier: official, verified: false}
+  - {handle: Timberwolves,     team: MIN, tier: official, verified: false}
+  - {handle: PelicansNBA,      team: NOP, tier: official, verified: false}
+  - {handle: nyknicks,         team: NYK, tier: official, verified: false}
+  - {handle: okcthunder,       team: OKC, tier: official, verified: false}
+  - {handle: OrlandoMagic,     team: ORL, tier: official, verified: false}
+  - {handle: sixers,           team: PHI, tier: official, verified: false}
+  - {handle: Suns,             team: PHX, tier: official, verified: false}
+  - {handle: trailblazers,     team: POR, tier: official, verified: false}
+  - {handle: SacramentoKings,  team: SAC, tier: official, verified: false}
+  - {handle: spurs,            team: SAS, tier: official, verified: false}
+  - {handle: Raptors,          team: TOR, tier: official, verified: false}
+  - {handle: utahjazz,         team: UTA, tier: official, verified: false}
+  - {handle: WashWizards,      team: WAS, tier: official, verified: false}
+  # --- league ---
+  - {handle: NBA,              team: null, tier: official, verified: false}
+  - {handle: NBAPR,            team: null, tier: official, verified: false}   # league communications
+  # --- national insiders ---
+  - {handle: ShamsCharania,    team: null, tier: insider, verified: false}
+  - {handle: wojespn,          team: null, tier: insider, verified: false}   # retired from reporting in 2024; probably remove
+  # --- injury / lineup aggregators ---
+  - {handle: Underdog__NBA,    team: null, tier: aggregator, verified: false}
+  - {handle: FantasyLabsNBA,   team: null, tier: aggregator, verified: false}
+  - {handle: Rotoworld_BK,     team: null, tier: aggregator, verified: false}
+  - {handle: BBMonsterNBA,     team: null, tier: aggregator, verified: false}  # Basketball Monster, if it posts news
