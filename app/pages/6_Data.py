@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from research_room import schedule, store
+from research_room import quality, schedule, store
 from research_room.config import settings
 from research_room.ingest.yahoo import SCHEMAS, CsvBackend
 from research_room.ui import q, store_ready
@@ -34,7 +34,7 @@ runs = q("""
 if runs.empty:
     st.write("No jobs have run yet.")
 else:
-    st.dataframe(runs, hide_index=True, use_container_width=True)
+    st.dataframe(runs, hide_index=True, width="stretch")
     failed = runs[runs["status"] == "error"]
     for r in failed.itertuples():
         st.error(f"{r.source} {r.job} failed: {r.detail}")
@@ -53,6 +53,14 @@ coverage = q("""
     GROUP BY g.season ORDER BY g.season
 """)
 st.dataframe(coverage, hide_index=True)
+_con = store.connect(read_only=True)
+qs = quality.summary(_con)
+_con.close()
+bad = int(qs["incomplete"].sum()) if not qs.empty else 0
+if bad:
+    st.caption(f"Box-score check: {bad} team-game(s) don't add up to the final score (missing player "
+               "rows at the source). They are excluded from features.")
+    st.dataframe(qs, hide_index=True)
 with st.expander("Row counts per table"):
     counts = pd.concat([q(f"SELECT '{t}' AS table, count(*) AS rows FROM {t}") for t in store.SCHEMA])
     st.dataframe(counts, hide_index=True)
@@ -76,7 +84,7 @@ for name, schema in SCHEMAS.items():
         "last ingested snapshot": ingested if pd.notna(ingested) else None,
         "columns (required*)": ", ".join(c.name + ("*" if c.required else "") for c in schema),
     })
-st.dataframe(pd.DataFrame(inbox_rows), hide_index=True, use_container_width=True)
+st.dataframe(pd.DataFrame(inbox_rows), hide_index=True, width="stretch")
 st.caption(f"Inbox folder: `{cfg.paths.inbox_dir}`")
 
 # ------------------------------------------------------------------ quarantine
@@ -90,7 +98,7 @@ if quarantine.empty:
 else:
     st.warning(f"{len(quarantine)} name(s) did not match a BallDontLie player. Add each to "
                "`config/aliases.yaml`; they are never merged automatically.")
-    st.dataframe(quarantine, hide_index=True, use_container_width=True)
+    st.dataframe(quarantine, hide_index=True, width="stretch")
 
 # ------------------------------------------------------------------ schedule
 season = cfg.season
@@ -112,7 +120,7 @@ else:
     wide["playoffs"] = wide[playoff_cols].sum(axis=1)
     wide["total"] = wide.drop(columns=["playoffs"]).sum(axis=1)
     wide = wide.sort_values(["playoffs", "total"], ascending=False)
-    st.dataframe(wide.style.background_gradient(cmap="Greens", axis=None), use_container_width=True)
+    st.dataframe(wide.style.background_gradient(cmap="Greens", axis=None), width="stretch")
 
     weeks = schedule.fantasy_weeks(season)
     scheduled = int(games["status_state"].eq("scheduled").sum())

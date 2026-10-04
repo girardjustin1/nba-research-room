@@ -30,3 +30,84 @@ prompt at the start of every session.
 - **Git identity.** This repo's local git config commits as `girardjustin1`; pushes authenticate
   as the `girardjustin1` GitHub account per command, leaving the machine's active `gh` account
   unchanged.
+
+## Phase 0 — 2026-10-04
+
+**Decided with the owner**
+- Backfill seasons are `[2023, 2024, 2025]` (2023-24, 2024-25, 2025-26). The prompt's
+  `[2024, 2025, 2026]` uses BallDontLie's start-year numbering, where 2026 is the unplayed
+  2026-27 season. This also closes the open item about including 2023-24. The 2026-27
+  schedule is pulled as well.
+- BallDontLie is on the paid GOAT plan (600 req/min). The client uses 540/min for headroom.
+
+**BallDontLie (checked against the live API and the OpenAPI spec, which beats the docs page)**
+- Plain `requests` client, not the `balldontlie` SDK: the SDK's pydantic models drop
+  `games.datetime` (tip time, needed for leakage checks) and the v2 advanced fields.
+- Paths: `/v1/teams`, `/v1/players/active`, `/v1/games`, `/v1/stats`, `/v1/player_injuries`,
+  `/nba/v2/stats/advanced` (with `period=0` = full game), `/nba/v2/odds`, `/nba/v2/odds/opening`.
+  The docs page shows `/v2/player_props`; the real path is `/nba/v2/odds/player_props` and it
+  takes one `game_id` per call.
+- **Odds history is not retained.** Every past date returns zero rows even though the docs say
+  "2025 season onwards"; upcoming games return lines from ~11 books (including Kalshi
+  moneylines). So odds are archived nightly from now on, and spread/total features are
+  missing (lower confidence) for all history.
+- Player props return nothing yet (preseason). Their parser waits until real rows exist rather
+  than being written against a guessed format.
+- `min` is a whole-minute string; `"00"`/`"0"`/`""` means did not play. ~35 rows per game,
+  ~15 of them DNP. DNP rows are kept (`did_play = false`): they matter for the minutes model.
+- `turnover` is stored as `tov`. Odds `prob` is de-vigged within each two-way market pair.
+- The 2026-27 schedule has 1,200 games, not 1,230: the NBA sets the last 30 after the Cup group
+  stage. December team-week counts will rise when those are published.
+- **Incomplete box scores.** 21 team-games (19 games, Feb-Mar 2024) are missing player rows at
+  the source: summed points miss the final score or minutes fall under 235. 2024-25 and 2025-26
+  reconcile exactly (5,286 team-games). `quality.py` flags them; features exclude them.
+- BDL leaves `season_type` empty and tags NBA Cup stages only from 2025-26; play-in games come
+  back as non-postseason. Fantasy weeks end Apr 4, so neither touches the season tool.
+- `/v1/teams` returns 89 rows including defunct franchises; the 30 current teams have a division.
+- `players.team_id` is the player's current team (from `/players/active`);
+  `game_logs.team_id` is the team at game time.
+
+**Schema additions beyond the prompt**
+- `player_xref` (resolved cross-source ids) and `unresolved_names` (the quarantine).
+- `api_responses`: raw page cache keyed on (source, endpoint, params hash). It makes backfills
+  resumable and re-parsable. X posts will be excluded so raw text is never stored.
+- `ingest_runs`: per-job status, row counts and errors for the Data page.
+- `injuries` keyed on (player_id, fetched_at): snapshots, never overwritten, so features can be
+  rebuilt as of any past tip time.
+- `projections.run_at`, so the backtest knows which projection existed when. `mean` and `sd`
+  are NOT NULL in the schema.
+- `odds` has `side` and `is_opening`; `props_ladder` has `side`, `vendor`, `price`.
+
+**Layout additions**
+- `src/research_room/config.py` (typed settings + secrets) and `src/research_room/ui.py`
+  (read-only store helpers for the pages; inside the package so pages import it whether
+  Streamlit is launched from `Home.py` or a page directly).
+- `jobs/ingest_inbox.py` / `make inbox`: loads the Yahoo CSVs, first moving newer copies in from
+  `~/Downloads` (Chrome cannot save straight into the repo).
+- Later-phase modules are created in their phase, not stubbed now.
+- `RESEARCH_ROOM_DB` env var overrides the store path (tests only).
+
+**Assumptions to confirm**
+- **Fantasy week boundaries (weeks 1-19).** Playoff weeks 20-22 (Mar 15 - Apr 4) follow from
+  the league settings, which forces two extended weeks before them. Assumed: week 1 runs two
+  calendar weeks (Oct 19 - Nov 1) and week 17 is the merged All-Star week (Feb 15 - 28).
+  `season.week_boundaries_verified: false` until checked against the Yahoo league schedule;
+  the Data page says so.
+- All-Star break dates (Feb 12-17, 2027) are assumed.
+
+**Operational notes**
+- DuckDB allows one writer. The app opens the store read-only and says so if a job is writing.
+- The raw response cache makes the store ~1 GB after the backfill. Parquet exports skip it.
+  Follow-up if size matters: compress cached bodies, or prune pages for completed seasons.
+- A local `.git/hooks/pre-commit` blocks any commit containing a value from `.env` or
+  `oauth2.json`, or any file under `data/`. It is not versioned, so a fresh clone lacks it.
+- `tests/test_leakage.py` arrives with `features.py` in Phase 1; Phase 0 builds no features.
+- Ruff line length is 110.
+
+**Phase 0 result.** The backfill pulled 2023-24 through 2025-26 plus the 2026-27 schedule in
+632 s and 2,497 requests: 5,162 games, 138,296 game-log rows (85,000 player-games played), 104,756
+advanced-stat rows (100% coverage of played games), 937 players. Box scores reconcile with final
+scores in every 2024-25 and 2025-26 game; 21 earlier team-games are flagged. The Data page renders
+the 2026-27 schedule matrix from the store. Open for later: verify week 1-19 boundaries against
+Yahoo, Basketball Monster projections CSV (Phase D), keepers (unknown; supported with an empty
+list), draft slot.
