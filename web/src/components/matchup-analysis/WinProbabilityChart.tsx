@@ -466,6 +466,11 @@ export function WinProbabilityChart(props: WinProbabilityChartProps) {
               <Chip size="small" variant="outlined" label={`${forMeSymbol(wm.delta_vs_do_nothing, 0.002)} ${ptsDelta(wm.delta_vs_do_nothing)}`} sx={{ fontWeight: 700 }} />
             )}
           </Box>
+          {!ended && dn && (
+            <Typography variant="body2" component="p" sx={{ mt: 0.75 }}>
+              If nothing changes, your odds stay near today&rsquo;s; the band shows how far the week could swing.
+            </Typography>
+          )}
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.5 }}>
             {ended ? 'The week is over.' : 'Projected lines show P(win week) if the moves due by each day are made. Shaded = 80% band.'} Dots = news, games final, lineup or transactions. Tap
             the chart for the nearest point.

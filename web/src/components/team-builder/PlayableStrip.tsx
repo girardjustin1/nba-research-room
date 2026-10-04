@@ -55,7 +55,11 @@ export function PlayableStrip({ playable, addName, dropName, acquisitions, initi
               lines: !selDay.has_game
                 ? ['No game this day: nothing changes.']
                 : selDay.is_past
-                  ? ['This game is before the move takes effect, so it does not count.']
+                  ? [
+                      sel.row === 'drop'
+                        ? 'Already counted: he played this game before the drop, and Yahoo keeps those stats for your week.'
+                        : 'Before you can add him, so this game does not count for you.',
+                    ]
                   : [
                       `Your open slots he is eligible for: ${selDay.open_slots}.`,
                       selDay.playable
@@ -93,7 +97,7 @@ export function PlayableStrip({ playable, addName, dropName, acquisitions, initi
             {r.days.map((d, i) => {
               const e = effectOf(d, r.row);
               const fill = e > 0 ? fm.goodRamp[1] : e < 0 ? fm.badRamp[1] : null;
-              const label = !d.has_game ? '–' : d.playable && !d.is_past ? `${forMeSymbol(e)}${d.opp_abbr}` : d.is_past ? d.opp_abbr : 'full';
+              const label = !d.has_game ? '–' : d.is_past ? (r.row === 'drop' ? 'counted' : d.opp_abbr) : d.playable ? `${forMeSymbol(e)}${d.opp_abbr}` : 'full';
               return (
                 <ButtonBase
                   key={d.date}
@@ -101,9 +105,9 @@ export function PlayableStrip({ playable, addName, dropName, acquisitions, initi
                   onClick={() => setSel({ row: r.row, i })}
                   aria-haspopup="dialog"
                   aria-pressed={sel?.row === r.row && sel.i === i}
-                  aria-label={`${r.label} ${d.weekday}: ${!d.has_game ? 'no game' : d.playable ? `playable, ${forMeWord(e)}` : d.is_past ? 'already played' : 'slots full'}`}
+                  aria-label={`${r.label} ${d.weekday}: ${!d.has_game ? 'no game' : d.playable ? `playable, ${forMeWord(e)}` : d.is_past ? (r.row === 'drop' ? 'already counted' : 'before the add') : 'slots full'}`}
                   sx={[
-                    { height: 44, borderRadius: 1, fontSize: 11, fontWeight: 700, minWidth: 0, px: 0.25, border: `1px solid ${viz.grid}`, color: 'text.disabled' },
+                    { height: 44, borderRadius: 1, fontSize: label === 'counted' ? 9.5 : 11, fontWeight: 700, minWidth: 0, px: 0.25, overflow: 'hidden', border: `1px solid ${viz.grid}`, color: 'text.disabled' },
                     fill != null && { bgcolor: fill, color: inkOn(fill), borderColor: fill },
                     d.has_game && !d.playable && !d.is_past && { color: 'text.secondary', borderStyle: 'dashed', borderColor: viz.axis },
                     d.is_past && { opacity: 0.45 },
@@ -124,7 +128,7 @@ export function PlayableStrip({ playable, addName, dropName, acquisitions, initi
         </Box>
       </Typography>
       <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
-        Green ▲ = playable game gained, red ▼ = playable game given up, dashed “full” = he plays but your slots are full. Tap a day for details.
+        Add row: green ▲ = a playable game added, from the move day on. Drop row: red ▼ = a playable game given up; gray “counted” = played before the drop, so it already counts for you. Dashed “full” = he plays but your slots are full. Tap a day for details.
       </Typography>
       <DetailSheet open={sheet != null} onClose={() => setSel(null)} content={sheet} />
     </Box>

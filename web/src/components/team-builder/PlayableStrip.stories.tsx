@@ -29,4 +29,6 @@ export const WaiverClaim: Story = { args: { playable: MOVE_ADD_NORTHCOTT.playabl
 export const LastDayNoDrop: Story = { args: { playable: waiversLastDay.candidates[0]!.playable, addName: 'Ravi Hargreave', dropName: null } };
 export const SheetOpen: Story = { args: { initialOpen: { row: 'add', i: 3 } } };
 export const DropSheetOpen: Story = { args: { initialOpen: { row: 'drop', i: 6 } } };
+/** The drop’s Wednesday game was played before the drop: gray “counted”, it stays on your week. */
+export const DropAlreadyCountedSheet: Story = { args: { initialOpen: { row: 'drop', i: 2 } } };
 export const OneAcquisitionLeft: Story = { args: { acquisitions: { ...ACQ_NORMAL, used: 3 } } };
