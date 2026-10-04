@@ -248,6 +248,7 @@ scipy==1.18.1
     # via
     #   catboost
     #   lightgbm
+    #   research-room
     #   scikit-learn
     #   shap
     #   xgboost
