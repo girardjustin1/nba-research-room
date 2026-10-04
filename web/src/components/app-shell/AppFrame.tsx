@@ -10,6 +10,7 @@ import { AppShellContext, ShellAdoptionContext, type AppShellValue, type ShellPa
 import { ExperienceDrawer, type ApiState } from './nav/ExperienceDrawer';
 import { LeagueBottomNav } from './nav/LeagueBottomNav';
 import { BellButton, MenuButton } from './nav/ShellButtons';
+import { DemoBadge } from './DemoBadge';
 import { PrototypeDataChip } from './PrototypeDataChip';
 
 export interface AppFrameProps {
@@ -20,6 +21,8 @@ export interface AppFrameProps {
   apis: AppApis;
   /** Storybook: open the drawer on first render. */
   initialDrawerOpen?: boolean;
+  /** Demo build: shows the "Demo · sample data" badge and a Reset demo action. */
+  demo?: { reset: () => void };
 }
 
 /** Poll the API health in live mode so the drawer can say whether the engine is up. */
@@ -49,11 +52,12 @@ function useApiState(mode: DataMode, apis: AppApis): ApiState {
  * tabs) through AppShellContext. Screens render those parts in their own headers, so each
  * route shows exactly one ☰ and (in League) one bottom nav.
  */
-export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false }: AppFrameProps) {
+export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false, demo }: AppFrameProps) {
   const normalized = normalizePath(path || '');
   const route = findRoute(normalized);
   const [drawer, setDrawer] = useState(initialDrawerOpen);
-  const apiState = useApiState(mode, apis);
+  const polled = useApiState(mode, apis);
+  const apiState: ApiState = demo ? 'demo' : polled;
 
   // Unknown or empty path: resume the last place, else the draft room.
   useEffect(() => {
@@ -80,11 +84,14 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         <MenuButton onClick={openDrawer} />
       </Adopted>
     );
-    if (experience !== 'league') return { menuButton, headerActions: null, bottomNav: null };
+    const demoBadge = demo ? <DemoBadge compact onReset={demo.reset} /> : null;
+    if (experience !== 'league') return { menuButton, headerActions: demoBadge, bottomNav: null, demoBadge: demo ? <DemoBadge onReset={demo.reset} /> : null };
     return {
       menuButton,
+      demoBadge,
       headerActions: (
         <Adopted part="actions">
+          {demoBadge}
           <BellButton onClick={() => navigate('#/league/notifications')} />
         </Adopted>
       ),
@@ -94,7 +101,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         </Adopted>
       ),
     };
-  }, [experience, openDrawer, navigate, route?.leagueTab]);
+  }, [experience, openDrawer, navigate, route?.leagueTab, demo]);
 
   if (!route) return null;
 
@@ -115,6 +122,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
           navigate={navigate}
           apiState={apiState}
           resumePath={(e) => (mode === 'live' ? lastPath(e) : null)}
+          onResetDemo={demo?.reset}
         />
       </AppShellContext.Provider>
     </ShellAdoptionContext.Provider>

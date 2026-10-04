@@ -12,6 +12,8 @@ export interface AppShellValue {
   menuButton: ReactNode;
   headerActions: ReactNode;
   bottomNav: ReactNode;
+  /** The demo build's badge (null outside the demo); headers that skip headerActions can place it. */
+  demoBadge?: ReactNode;
 }
 
 export const AppShellContext = createContext<AppShellValue | null>(null);

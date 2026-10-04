@@ -16,7 +16,8 @@ const ELIGIBLE: Record<string, string[]> = {
   C: ['C', 'Util'],
 };
 const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'] as const;
-const TEAMS = ['NTH', 'STH', 'EST', 'WST', 'MID', 'CST'];
+// Real NBA codes (so demo schedules join), invented players and numbers.
+const TEAMS = ['DEN', 'NOP', 'PHX', 'BOS', 'MIA', 'SAC'];
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** Small deterministic PRNG (mulberry32) so stories render identically every time. */

@@ -37,6 +37,8 @@ export interface StatusBarProps {
   onMenu: () => void;
   /** The app's left ☰ (experience drawer), from the app shell; absent in plain stories. */
   leading?: React.ReactNode;
+  /** Demo build: shown in place of the Yahoo listener status. */
+  demoBadge?: React.ReactNode;
   now?: () => number;
 }
 
@@ -45,7 +47,7 @@ export interface StatusBarProps {
  * a local 60 s pick clock (Yahoo's is authoritative), and the listener status: picks arrive
  * from the Tampermonkey listener in the Yahoo draft room; manual entry is the fallback.
  */
-export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, now }: StatusBarProps) {
+export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, demoBadge, now }: StatusBarProps) {
   const mode = useResolvedMode();
   const left = usePickClock(session.pick_clock_seconds, session.current_pick, now);
   const t = useNow(1000, now);
@@ -105,12 +107,14 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
         </IconButton>
       </Stack>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 0.5 }}>
-        {connection === 'down' ? (
+        {demoBadge ? (
+          <Box sx={{ flex: 1, minWidth: 0 }}>{demoBadge}</Box>
+        ) : connection === 'down' ? (
           <CloudOffOutlinedIcon fontSize="small" aria-hidden />
         ) : (
           <SensorsOutlinedIcon fontSize="small" aria-hidden sx={{ opacity: 0.85 }} />
         )}
-        <Typography variant="caption" component="p" sx={{ flex: 1, minWidth: 0, opacity: 0.92 }} noWrap>
+        <Typography variant="caption" component="p" sx={{ flex: 1, minWidth: 0, opacity: 0.92, display: demoBadge ? 'none' : undefined }} noWrap>
           {connection === 'down'
             ? 'Draft API unreachable: run make draft-api'
             : lastPickSeenAt == null

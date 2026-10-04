@@ -91,6 +91,36 @@ degrade to a clear "needs the updated draft API" message instead of guessed numb
   light markdown as React text; HTML is never interpreted.
 - `ApiStatus`, `BottomSheet`, `FullScreenPanel`, `EndpointNotice`.
 
+## Prototype / Demo app
+
+`pnpm build:demo` builds the whole app (all routes, the ☰ drawer, Draft / League / System)
+as a standalone page that needs no server. It is meant for GitHub Pages at `/app/`, with
+Storybook at the site root.
+
+- It runs `vite build --mode demo` with `VITE_DEMO=1` and a relative `base` (the app uses
+  hash routes), and writes to `web/dist-demo/`, which git ignores.
+- **The demo never touches the network.** `src/api/demoTransport.ts` replaces `fetch` for
+  every endpoint the app calls: draft, season, schedule and system. It answers from the
+  same mocks the stories use (`src/mocks/<category>/`). An endpoint it doesn't know is
+  recorded and answered with a 404, and the demo test fails on it.
+- **Draft writes stay in this tab.** Recording, changing, removing and undoing picks and
+  renaming teams update an in-memory sample draft. The grid, log, Teams tab and latest-pick
+  card follow. Recommendations, win chances and other engine numbers stay the sample values:
+  the browser never computes them. **Reset demo** (in the drawer, or the badge's sheet)
+  restores the starting draft.
+- **Every app bar carries a "Demo · sample data" badge.** It's shortened to "Demo" in the
+  crowded League headers. Tap it for what demo mode is and a link to the local setup below.
+  The "Prototype data" chips and the API-down states don't appear: everything is sample data.
+- **No real data.** Players are invented with no headshots or logos. Nothing from
+  `reference/` or `data/` and no league ids are in the bundle.
+- **Tests.** `src/app/demo.test.tsx` (in `pnpm test`) loads every manifest route on the demo
+  transport with the real `fetch` stubbed out. It fails if any request reaches the network or
+  any endpoint goes unanswered. It also checks the in-memory pick, remove, undo, rename and
+  reset flow.
+
+To preview it locally, serve `web/dist-demo/` from any static server under a subpath, for
+example `http://127.0.0.1:4174/app/`.
+
 ## Keeping the prototype and Storybook in sync
 
 The rule: every screen in the app exists in Storybook, screen for screen, on the same data.

@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "storybook": "storybook dev --port 6006 --host 127.0.0.1 --no-open --disable-telemetry",
-    "build-storybook": "storybook build --disable-telemetry"
+    "build-storybook": "storybook build --disable-telemetry",
+    "build:demo": "VITE_DEMO=1 tsc -b && VITE_DEMO=1 vite build --mode demo"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

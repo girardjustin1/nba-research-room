@@ -9,6 +9,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
 import { SAFE_BOTTOM } from '../../lib/layout';
+import { useAppShell } from './AppShellContext';
 
 export interface PrototypeDataChipProps {
   /** Endpoints answered by invented data, e.g. ["GET /season/week"]. Renders nothing when empty. */
@@ -23,7 +24,9 @@ export interface PrototypeDataChipProps {
  */
 export function PrototypeDataChip({ endpoints, bottomOffset = 0 }: PrototypeDataChipProps) {
   const [open, setOpen] = useState(false);
-  if (endpoints.length === 0) return null;
+  // In the demo build everything is sample data and the app bar's demo badge already says so.
+  const shell = useAppShell();
+  if (endpoints.length === 0 || shell?.demoBadge) return null;
   return (
     <>
       <Box

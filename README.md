@@ -2,10 +2,11 @@
 
 A personal, single-user Python application I am building to analyze my own Fantasy Basketball league.
 
-### ▶ [Open the prototype](https://girardjustin1.github.io/nba-research-room/?path=/story/prototype--draft)
+### ▶ [Open the prototype app](https://girardjustin1.github.io/nba-research-room/app/)
 
-Every app screen at phone size, with sample data: open the link, then use **☰** inside the screen
-to switch between Draft, League and System. All screens and components:
+The real app in demo mode, on its own page: sample data, no engine needed, works on a phone. Use
+**☰** to switch between Draft, League and System; draft picks you enter update the board in the
+page (Reset demo restores it). Components and every screen state:
 [Storybook](https://girardjustin1.github.io/nba-research-room/).
 
 NBA Research Room is a local app for one Yahoo head-to-head league (React front end on a Python
@@ -163,12 +164,15 @@ in dry-run mode and adds a synthetic pick every second (`layout=text|table`, `or
 `picks=N` change the markup). `pytest tests/test_listener.py` runs the node unit tests
 (`tests/test_listener.mjs`) and drives the mock room in headless Chrome.
 
-## Public Storybook
+## Published prototype and Storybook
 
-Storybook (sample data only) is published to GitHub Pages on every push that changes `web/`:
-**https://girardjustin1.github.io/nba-research-room/**. Open the **Prototype** section for every
-app screen at phone size. It is public: stories use invented players, and no projections, keys or
-league data are in the build. The live app (real data) only runs on your Mac (`make web`).
+Every push that changes `web/` publishes two things to GitHub Pages (public, sample data only):
+- **Prototype app** (demo mode): **https://girardjustin1.github.io/nba-research-room/app/**
+- **Storybook**: **https://girardjustin1.github.io/nba-research-room/** (the Prototype section
+  mirrors every app screen).
+
+Both use invented players; no projections, keys or league data are in either build (scanned before
+publishing). The live app with real data only runs on your Mac (`make web`).
 
 ## Layout
 

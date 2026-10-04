@@ -65,7 +65,8 @@ export function mockMyPicks(slot: number): number[] {
   return Array.from({ length: ROUNDS }, (_, r) => mockPickNumber(r + 1, slot));
 }
 
-function teamForPick(pick: number): number {
+/** Snake owner of an overall pick in the 14-team mock league (mock engine only; the real API owns this). */
+export function teamForPick(pick: number): number {
   const round = Math.ceil(pick / TEAMS);
   const idx = pick - (round - 1) * TEAMS;
   return round % 2 === 1 ? idx : TEAMS + 1 - idx;

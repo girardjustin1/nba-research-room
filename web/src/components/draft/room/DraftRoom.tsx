@@ -205,6 +205,7 @@ export function DraftRoomView({
           onEnterPick={enterCurrentPick}
           onMenu={() => setMenuOpen(true)}
           leading={shell?.menuButton}
+          demoBadge={shell?.demoBadge}
           now={now}
         />
       </Box>

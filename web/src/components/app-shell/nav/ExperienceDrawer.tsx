@@ -12,6 +12,7 @@ import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
 import SportsBasketballOutlinedIcon from '@mui/icons-material/SportsBasketballOutlined';
 import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
@@ -21,7 +22,7 @@ import type { Experience } from '../../../app/types';
 import { SAFE_BOTTOM, SAFE_TOP } from '../../../lib/layout';
 import { useResolvedMode } from '../../../theme/viz';
 
-export type ApiState = 'up' | 'down' | 'checking' | 'mock';
+export type ApiState = 'up' | 'down' | 'checking' | 'mock' | 'demo';
 
 export interface DrawerDestination {
   path: string;
@@ -40,6 +41,8 @@ export interface ExperienceDrawerProps {
   apiState: ApiState;
   /** Remembered last path per experience, so switching back resumes where you were. */
   resumePath?: (e: Experience) => string | null;
+  /** Demo build: restores the starting sample draft. */
+  onResetDemo?: () => void;
 }
 
 const ICON: Record<Experience, React.ReactNode> = {
@@ -53,6 +56,7 @@ const API_TEXT: Record<ApiState, { text: string; Icon: typeof CloudDoneOutlinedI
   down: { text: 'Draft API unreachable: run make draft-api', Icon: CloudOffOutlinedIcon },
   checking: { text: 'Checking the draft API…', Icon: SyncOutlinedIcon },
   mock: { text: 'Storybook: sample data, no API', Icon: ScienceOutlinedIcon },
+  demo: { text: 'Demo: sample data, no server', Icon: ScienceOutlinedIcon },
 };
 
 const iOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -62,7 +66,7 @@ const iOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigato
  * The current experience is highlighted and lists its own screens; the light/dark switch
  * and the API status sit at the bottom.
  */
-export function ExperienceDrawer({ open, onOpen, onClose, current, path, destinations, navigate, apiState, resumePath }: ExperienceDrawerProps) {
+export function ExperienceDrawer({ open, onOpen, onClose, current, path, destinations, navigate, apiState, resumePath, onResetDemo }: ExperienceDrawerProps) {
   const { setMode } = useColorScheme();
   const mode = useResolvedMode();
   const next = mode === 'dark' ? 'light' : 'dark';
@@ -124,6 +128,20 @@ export function ExperienceDrawer({ open, onOpen, onClose, current, path, destina
       </Box>
       <Divider />
       <List dense>
+        {onResetDemo && (
+          <ListItemButton
+            onClick={() => {
+              onClose();
+              onResetDemo();
+            }}
+            sx={{ minHeight: 48 }}
+          >
+            <ListItemIcon>
+              <RestartAltOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary="Reset demo" secondary="Restore the starting sample draft" />
+          </ListItemButton>
+        )}
         <ListItemButton onClick={() => setMode(next)} sx={{ minHeight: 48 }}>
           <ListItemIcon>{mode === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}</ListItemIcon>
           <ListItemText primary={`Switch to ${next} mode`} />
