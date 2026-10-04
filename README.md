@@ -156,6 +156,13 @@ in dry-run mode and adds a synthetic pick every second (`layout=text|table`, `or
 `picks=N` change the markup). `pytest tests/test_listener.py` runs the node unit tests
 (`tests/test_listener.mjs`) and drives the mock room in headless Chrome.
 
+## Public Storybook
+
+Storybook (sample data only) is published to GitHub Pages on every push that changes `web/`:
+**https://girardjustin1.github.io/nba-research-room/**. Open the **Prototype** section for every
+app screen at phone size. It is public: stories use invented players, and no projections, keys or
+league data are in the build. The live app (real data) only runs on your Mac (`make web`).
+
 ## Layout
 
 ```
