@@ -297,8 +297,9 @@ class DraftBoard:
             "vs_me": None, "notes": [],
         }
         primary_open = [s for s in open_slots if s in _PRIMARY]
-        notes = [f"Needs {', '.join(primary_open)}" if primary_open
-                 else "Starting slots filled at every position"]
+        need = [f"{primary_open.count(s)} {s}" if primary_open.count(s) > 1 else s
+                for s in dict.fromkeys(primary_open)]
+        notes = [f"Needs {', '.join(need)}" if need else "Starting slots filled at every position"]
         notes.append("Strong in " + ", ".join(f"{labels[k]} ({p_avg[k]:.0%})" for k in strong)
                      + "; weak in " + ", ".join(f"{labels[k]} ({p_avg[k]:.0%})" for k in weak))
         if state.my_slot and team_id != state.my_slot:
