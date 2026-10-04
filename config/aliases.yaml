@@ -1,0 +1,13 @@
+# Cross-source player name mapping. One entry per real player whose name differs
+# between sources. `player_id` is the BallDontLie id (preferred: it is unambiguous);
+# `name` is the canonical BDL full name. Matching is accent-, case-, punctuation- and
+# suffix-insensitive already, so only list genuine differences (nicknames, transliterations,
+# a source dropping a middle name). Ambiguous matches are never merged: they go to the
+# quarantine table (`unresolved_names`) and show on the Data page; add an entry here to fix one.
+#
+# Example:
+#   - name: Herbert Jones
+#     player_id: null
+#     variants: [Herb Jones]
+
+aliases: []

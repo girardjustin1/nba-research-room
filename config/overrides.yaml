@@ -1,0 +1,14 @@
+# Manual role / minutes / status adjustments (read by overrides.py from Phase 1).
+# The most recent and most authoritative source wins; an entry here outranks BDL injuries
+# and X events until `until`.
+#
+# Example:
+#   - player: Example Player
+#     player_id: null
+#     status: out              # active | questionable | doubtful | out
+#     minutes_cap: null
+#     note: "rest through back-to-back"
+#     from: 2026-11-01
+#     until: 2026-11-03
+
+overrides: []

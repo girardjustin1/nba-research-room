@@ -1,0 +1,5 @@
+# Curated X accounts for the injury/status feed (Phase 3).
+# tier: official (team accounts, outrank everything) | insider | beat | aggregator
+# Keep ~40 accounts; the daily read budget is in settings.yaml (x_feed.daily_read_budget).
+
+accounts: []

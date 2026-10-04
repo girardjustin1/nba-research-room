@@ -1,0 +1,78 @@
+# League and app settings. Secrets live in .env, never here.
+
+league:
+  name: Hoop Dreams
+  platform: yahoo
+  league_id: 79805
+  my_team_id: 11
+  teams: 14
+  public: false
+  format: h2h_one_win          # one W or L per week: majority of the 9 categories
+
+categories:                    # higher_is_better: false means fewer wins the category
+  - {key: fg_pct, label: FG%,  kind: pct,   made: fgm,  attempts: fga, higher_is_better: true}
+  - {key: ft_pct, label: FT%,  kind: pct,   made: ftm,  attempts: fta, higher_is_better: true}
+  - {key: fg3m,   label: 3PTM, kind: count, higher_is_better: true}
+  - {key: pts,    label: PTS,  kind: count, higher_is_better: true}
+  - {key: reb,    label: REB,  kind: count, higher_is_better: true}
+  - {key: ast,    label: AST,  kind: count, higher_is_better: true}
+  - {key: stl,    label: ST,   kind: count, higher_is_better: true}
+  - {key: blk,    label: BLK,  kind: count, higher_is_better: true}
+  - {key: tov,    label: TO,   kind: count, higher_is_better: false}
+
+roster:
+  slots: [PG, SG, G, SF, PF, F, C, C, Util, Util, BN, BN, BN, IL]
+  active_per_day: 10
+  bench: 3
+  il: 1
+  il_direct_add: true          # injured free agents may go straight to IL
+  lock: daily_at_game_time     # bench players are not locked
+
+transactions:
+  max_acquisitions_per_week: 4
+  season_max_acquisitions: null
+  waiver_days: 2
+  waiver_type: continual_rolling
+  trade_deadline: 2027-03-04
+
+season:
+  nba_season: 2026             # BallDontLie numbering: start year (2026 = 2026-27)
+  first_game_date: 2026-10-20
+  playoff_teams: 6
+  playoff_weeks: [20, 21, 22]
+  playoffs_end: 2027-04-04
+  eliminated_teams_lock: true
+  # Fantasy weeks run Monday-Sunday. Playoff weeks 20-22 (Mar 15 - Apr 4) follow from the
+  # league settings. Weeks 1-19 must cover Oct 20 - Mar 14 (21 calendar weeks), so two of
+  # them are extended. That is ASSUMED below (week 1 runs two weeks; the All-Star week is
+  # merged) until confirmed from the Yahoo league schedule. See DECISIONS.md.
+  week_boundaries_verified: false
+  extended_weeks:              # week number -> number of calendar weeks it spans
+    1: 2
+    17: 2
+  nba_cup_knockout: {start: 2026-12-04, end: 2026-12-11}
+  all_star_break: {start: 2027-02-12, end: 2027-02-17}   # ASSUMED; verify when NBA confirms
+  light_day_max_games: 5       # a day with <= this many NBA games is a "light day"
+
+draft:
+  type: live_standard_snake
+  starts_at: "2026-10-18T19:00:00-04:00"
+  pick_clock_seconds: 60
+  my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order
+  keepers: []
+
+paths:
+  db: data/research_room.duckdb
+  parquet_dir: data/parquet
+  inbox_dir: data/inbox
+
+bdl:
+  base_url: https://api.balldontlie.io
+  requests_per_minute: 540     # GOAT plan allows 600; keep 10% headroom
+  per_page: 100
+  backfill_seasons: [2023, 2024, 2025]
+  timeout_seconds: 30
+  max_retries: 5
+
+x_feed:
+  daily_read_budget: 300
