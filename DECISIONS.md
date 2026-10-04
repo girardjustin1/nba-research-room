@@ -154,3 +154,10 @@ a draft-night fallback) and the Tampermonkey listener all read and write the sam
   schedule, not a constant.
 - Incomplete box scores are excluded per team side, not per game.
 - Rounds assumed 13 (one per non-IL slot) = 182 picks; confirm in Yahoo's draft settings.
+
+**Kalshi (checked 2026-10-04, public API, no key).** `https://api.elections.kalshi.com/trade-api/v2`
+answers without auth; 70 NBA game markets (`KXNBAGAME`) were open, including preseason. Player
+prop series exist as `KXNBAPTS`, `KXNBAREB`, `KXNBAAST`, `KXNBASTL`, `KXNBABLK` and
+**`KXNBA3PT`** (the build prompt's `KXNBA3PM` does not exist), plus `KXNBAFTM` and combos
+(`KXNBAPRA`, `KXNBAPR`, `KXNBAPA`, `KXNBARA`, `KXNBASTOCK`). No prop markets were open in
+preseason; Phase 2 checks when they list (likely game day) before relying on them.
