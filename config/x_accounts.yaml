@@ -5,7 +5,7 @@
 #   insider    - national reporters who break injury and rotation news first.
 #   aggregator - injury/lineup aggregators; fast, but secondhand.
 #
-# DRAFT for review (2026-10-04). Every handle is `verified: false` until Phase 3 confirms it
+# Approved by the owner 2026-10-04: keep every account below. Every handle is `verified: false` until Phase 3 confirms it
 # with one X users-by-username lookup (100 handles per request). Beat writers are left out on
 # purpose: they change outlets and handles often; add any you trust with tier: beat.
 #
@@ -50,7 +50,7 @@ accounts:
   - {handle: NBAPR,            team: null, tier: official, verified: false}   # league communications
   # --- national insiders ---
   - {handle: ShamsCharania,    team: null, tier: insider, verified: false}
-  - {handle: wojespn,          team: null, tier: insider, verified: false}   # retired from reporting in 2024; probably remove
+  - {handle: wojespn,          team: null, tier: insider, verified: false}   # kept by owner's choice; stopped reporting in 2024
   # --- injury / lineup aggregators ---
   - {handle: Underdog__NBA,    team: null, tier: aggregator, verified: false}
   - {handle: FantasyLabsNBA,   team: null, tier: aggregator, verified: false}
