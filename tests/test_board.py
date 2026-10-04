@@ -9,7 +9,7 @@ import pytest
 from research_room.config import settings
 from research_room.draft import tracker
 from research_room.draft.availability import expected_pick
-from research_room.draft.board import DraftBoard, assign_slots
+from research_room.draft.board import DraftBoard, assign_slots, split_starters
 from research_room.draft.value import compute_values
 
 STATS = ("fgm", "fga", "ftm", "fta", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov")
@@ -96,3 +96,43 @@ def test_recommend_is_fast_on_a_full_pool(con):
     t0 = time.perf_counter()
     b.recommend(state)
     assert time.perf_counter() - t0 < 1.0                             # build prompt: < 1 s per pick
+
+
+def test_split_starters_marks_bench_players():
+    starts, open_ = split_starters(
+        [["C", "Util"], ["C", "Util"], ["C", "Util"], ["C", "Util"], ["C", "Util"]],
+        ["PG", "C", "C", "Util", "Util"])
+    assert starts == [True, True, True, True, False] and open_ == ["PG"]
+
+
+def test_a_player_without_a_starting_slot_counts_as_bench(con, cfg, board):
+    # Fill my C/C/Util/Util-capable slots with centers, then compare two equal centers' gain:
+    # the value of a center must drop once no slot can start him.
+    centers = [pid for pid in board.pool.index if board.pool.at[pid, "eligible"] == ["C", "Util"]]
+    assert board.bench_utilization == pytest.approx(1 - 3.1 / 7)
+    state = tracker.new_state("t", cfg, my_slot=1)
+    res_empty = board.recommend(state)
+    for i, pick in enumerate([1, 8, 9, 16]):                        # my four picks in a 4-team snake
+        while state.current_pick < pick:
+            other = next(p for p in board.pool.index if p not in state.drafted and p not in centers)
+            state = tracker.record_pick(con, state, int(other), "x")
+        state = tracker.record_pick(con, state, int(centers[i]), "c")
+    res = board.recommend(state)
+    assert not res.table.empty
+    bench = board.pool.loc[centers[4:]]
+    assert "C" not in res.open_slots and "Util" not in res.open_slots
+    t = res.table.set_index("player_id")
+    for pid in set(t.index) & set(bench.index):
+        assert not t.at[pid, "starts"]
+        assert "bench" in t.at[pid, "reasons"]
+    assert res_empty.table["starts"].all()
+
+
+def test_projected_team_is_full_so_drift_is_not_spurious(con, cfg, board):
+    state = tracker.new_state("t", cfg, my_slot=1)
+    for _ in range(1, 9):                                          # through my second pick (8)
+        avail = [pid for pid in board.pool.index if pid not in state.drafted]
+        state = tracker.record_pick(con, state, int(avail[0]), "x")
+    res = board.recommend(state)
+    # Same strength as a league-average team with good early picks: no category is a lost cause.
+    assert res.my_expected_cats > 4.5 and res.drift == []
