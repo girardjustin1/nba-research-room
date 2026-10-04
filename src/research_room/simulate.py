@@ -103,8 +103,9 @@ def _edge(me: TeamWeek, opp: TeamWeek, cat: Category) -> tuple[np.ndarray, np.nd
     """(mean difference, sd of difference) for one category, me minus opponent."""
     if cat.kind == "pct":
         k = cat.key
-        p_me, p_op = me.made[k] / me.att[k], opp.made[k] / opp.att[k]
-        var = me.bin_var[k] / me.att[k] ** 2 + opp.bin_var[k] / opp.att[k] ** 2
+        p_me, v_me = _pct(me.made[k], me.att[k], me.bin_var[k])
+        p_op, v_op = _pct(opp.made[k], opp.att[k], opp.bin_var[k])
+        var = v_me + v_op
         diff = p_me - p_op
     else:
         diff = me.mean[cat.key] - opp.mean[cat.key]
@@ -112,6 +113,13 @@ def _edge(me: TeamWeek, opp: TeamWeek, cat: Category) -> tuple[np.ndarray, np.nd
     if not cat.higher_is_better:
         diff = -diff
     return np.asarray(diff, dtype=float), np.sqrt(np.asarray(var, dtype=float))
+
+
+def _pct(made, att, bin_var) -> tuple[np.ndarray, np.ndarray]:
+    """Team percentage and its variance; a team with no attempts shoots 0% with no spread."""
+    made, att, bin_var = (np.asarray(x, dtype=float) for x in (made, att, bin_var))
+    safe = np.where(att > 0, att, 1.0)
+    return np.where(att > 0, made / safe, 0.0), np.where(att > 0, bin_var / safe ** 2, 0.0)
 
 
 def poisson_binomial_at_least(p: np.ndarray, k: int) -> np.ndarray:

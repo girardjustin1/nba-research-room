@@ -78,6 +78,14 @@ draft:
     sd_base_picks: 4.0         # ADP uncertainty in round 1, in picks
     sd_per_round: 1.5          # added uncertainty per round
     fallback_sd_multiplier: 2.0  # for players ranked without any ADP
+  board:
+    recommendations: 10        # rows in the top list
+    monte_carlo_top: 5         # re-check the top N by simulation
+    monte_carlo_draws: 5000
+    need_shift_picks: 3.0      # a player whose position every team picking before you still needs
+                               # is expected this many picks earlier than his ADP (scaled by share)
+    punt_drift_after_round: 3
+    punt_drift_p: 0.30         # flag an un-punted category your build wins less often than this
 
 paths:
   db: data/research_room.duckdb

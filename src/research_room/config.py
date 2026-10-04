@@ -113,6 +113,15 @@ class AdpConfig(BaseModel):
     fallback_sd_multiplier: float
 
 
+class BoardConfig(BaseModel):
+    recommendations: int
+    monte_carlo_top: int
+    monte_carlo_draws: int
+    need_shift_picks: float
+    punt_drift_after_round: int
+    punt_drift_p: float
+
+
 class Draft(BaseModel):
     type: str
     starts_at: datetime
@@ -126,6 +135,7 @@ class Draft(BaseModel):
     projection_blend: ProjectionBlend
     sd_prior_games: float
     adp: AdpConfig
+    board: BoardConfig
 
 
 class Paths(BaseModel):
