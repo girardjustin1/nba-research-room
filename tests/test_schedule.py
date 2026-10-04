@@ -84,3 +84,13 @@ def test_schedule_matrix_from_store(con, season):
     store.upsert(con, "games", g)
     wide = schedule.schedule_matrix(con, season)
     assert wide.loc["DEN", "W20"] == 1 and wide.loc["DEN", "playoffs"] == 1 and wide.loc["BOS", "total"] == 2
+
+
+def test_games_per_week_counts_calendar_weeks(season):
+    # Team 1 plays 3 games in (two-calendar-week) week 1 and 4 in playoff week 20.
+    games = _games([(date(2026, 10, 20), 1, 2, {}), (date(2026, 10, 22), 1, 2, {}),
+                    (date(2026, 10, 30), 1, 2, {})] +
+                   [(date(2027, 3, 15) + timedelta(days=d), 1, 2, {}) for d in range(4)])
+    reg = schedule.games_per_week(games, season)
+    assert reg == pytest.approx(3 * 2 / (2 * 21))          # 2 teams; 21 calendar weeks of weeks 1-19
+    assert schedule.games_per_week(games, season, playoffs=True) == pytest.approx(4 * 2 / (2 * 3))

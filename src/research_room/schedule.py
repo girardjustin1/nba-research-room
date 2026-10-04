@@ -139,3 +139,12 @@ def week_of(day: date, season: Season) -> int | None:
     weeks = fantasy_weeks(season)
     hit = weeks[(weeks["start"] <= day) & (weeks["end"] >= day)]
     return int(hit.iloc[0]["week"]) if not hit.empty else None
+
+
+def games_per_week(games: pd.DataFrame, season: Season, playoffs: bool = False) -> float:
+    """Average games per NBA team per calendar week, in regular-season or playoff fantasy weeks."""
+    m = team_week_matrix(games, season)
+    weeks = fantasy_weeks(season).set_index("week")
+    m = m[m["is_playoff"] == playoffs]
+    calendar_weeks = m["week"].map(weeks["n_days"] / 7)
+    return float(m["games"].sum() / calendar_weeks.sum())
