@@ -36,37 +36,100 @@ pnpm build            # production bundle in dist/
 pnpm build-storybook  # static Storybook in storybook-static/
 ```
 
-## Components (`src/components`, each with a `.stories.tsx`)
+## Storybook layout
 
-| Component | What it shows |
+The sidebar reads top-down in a fixed order (set in `.storybook/preview.tsx`):
+Draft, Team & Player Analysis, Team Builder, Matchup Analysis, Results, Results Analysis,
+Notifications, Player Profiles, Team Profiles, App Shell, Foundations. Inside each category
+stories sort alphabetically. Each category lives in its own folder under `src/components/`
+(`draft/`, `app-shell/`, `foundations/`, ...), and its invented data in `src/mocks/<folder>/`.
+
+## Draft (`src/components/draft/`)
+
+The live room for the league's real 14-team Yahoo draft. It records who took whom and
+where, so the board can plan around it. The Tampermonkey listener posts picks; any grid
+cell can be tapped to record or fix one by hand.
+
+| Folder | Components |
 |---|---|
-| `DraftRoom` | Puts the screen together: a sticky header, one section at a time, bottom navigation (Board, Pick, My team, Tiers, Log), and a thumb-reach "Draft" bar when you are on the clock. `DraftRoomView` is the presentational part that stories use. |
-| `SessionSetup` | Draft slot (1–14) and punt chips. Starts a session, or sets the slot on a session that has none. |
-| `DraftHeader` | Round and pick, the team on the clock, a 60 s local pick clock that restarts when the current pick changes, picks until your turn, and your next two picks. When you are on the clock the bar turns solid and shows the words "You're on the clock". |
-| `RecommendationsList` | The top 10 as cards: player, positions, team, tier, gain, P(win week), and availability at your pick and at your next pick. Each card has expandable reasons, lower-confidence chips, and a Draft button (or "Taken by team N" while you wait). |
-| `PickEntry` | Manual entry: search the available players, pick a team (defaults to the team on the clock), and submit. Undo asks before it runs. API errors such as 409 show in a snackbar. |
-| `MyTeamPanel` | Expected categories won, P(win week), category odds chart, open starting slots, roster, and punt toggles. |
-| `DriftAlert` | Punt-drift warning: warning color, an icon, and text. |
-| `TierBoard` | Available players grouped by tier, with a position filter. Drafted players are removed. |
-| `DraftLog` | Recent picks, newest first. Your picks are tinted and carry a "You" chip. |
-| `ApiStatus` | The "Start the draft API: `make draft-api`" state, shown when the API cannot be reached. |
-| `PlayerAvatar` / `TeamBadge` | Player headshot (initials when there is none or it fails to load) and a small team logo beside the abbreviation. |
-| `charts/CategoryOddsChart` | P(win) per category against a league-average team, drawn as horizontal diverging bars from a 50% midline. Bars are labelled with their values. Tapping a bar gives a readout, and a table view is available. |
-| `charts/Meter`, `charts/GainBar` | Thin availability meters and the inline signed gain bar. |
+| `room/` | `DraftRoom`: the screen, top to bottom. `DraftRoomView` is the presentational part stories use. |
+| `status/` | `StatusBar`: red "On the clock" or blue "Up in N picks", with round.pick ("3.02 (30th)"), the local pick clock, listener status, and an "Enter pick" fallback. `LatestPickCard`: the engine's read after each new pick; tap it to open that team. |
+| `panels/` | `PositionalValuePanel` (value over replacement by position, with an info and table dialog), `SuggestedPicks` (the board's top two; Draft only works on the clock), `DriftAlert`. |
+| `grid/` | `DraftBoardGrid`: teams as columns, 13 rounds, snake arrows, made picks colored by position group. Column headers show each team's needs and weakest category. A target button jumps to the current pick. `AssignPickSheet`: tap a cell to assign, change or remove a pick, in any order. |
+| `sheet/` | The draggable bottom sheet's tabs. `AvailableList` (position chips, search, ADP / Our Rank / Playoff games sort, the PROJ. PICK divider, favorites, Compare checkboxes). `MyTeamPanel` (TEAM tab). `TeamsTab` (strategize: the teams picking before you first, their needs, strengths, weaknesses, and a head-to-head against you). |
+| `compare/` | `CompareView`: 2–3 players side by side, with per-game lines, category z-scores, gain, availability, ADP, tier, risk and schedule volume. `PlayerDetailSheet`: one player's numbers, team schedule and per-category effect. |
+| `tools/` | Menu items: `RecommendationsList` (top 10 with reasons), `PickEntry` (manual entry and Undo), `DraftLog`, `TierBoard`, `TeamNamesEditor`, `DraftMenu`, `SessionSetup`. |
+| `charts/` | `DpChart`: change in my win chance per category (`dp_<category>`). |
 
-Supporting code: `src/api` (typed client mirroring `src/research_room/api.py`, plus the
-`useDraftRoom` polling hook), `src/lib` (display formatting, the pick clock, layout and
-asset helpers), `src/theme` (MUI v9 theme with `colorSchemes` and CSS variables, light and
-dark, following `prefers-color-scheme` with a toggle in the header, plus chart color tokens
-checked with the dataviz palette validator).
+Endpoints the running API may not have yet (`/draft/teams`, `/draft/positional_value`,
+`/draft/compare`, `/draft/insights`, `DELETE /draft/pick/{n}`, `PUT /draft/teams/names`)
+degrade to a clear "needs the updated draft API" message instead of guessed numbers.
+
+## App Shell (`src/components/app-shell/`)
+
+`ApiStatus` (the "start the draft API" state), `BottomSheet` (draggable, collapsed / half /
+full), `FullScreenPanel`, `EndpointNotice` (a missing or failed endpoint).
+
+## Foundations (`src/components/foundations/`)
+
+`avatars/PlayerAvatar` and `TeamBadge`, `badges/PositionBadge`. Charts: `CategoryOddsChart`
+(P(win) around 50%, also reused for head-to-head), `Meter`, `TeamVolumeStrip` (games per
+fantasy week, playoff weeks 20–22 highlighted, plus month totals). `color/` documents the
+palettes:
+- "For me" green / red / gray, with its ramps: green helps me, red hurts me, gray is no
+  effect.
+- The status colors, kept apart from "for me" (error is ΔE ≥ 15 from bad).
+- The position-group colors.
+- The chart tokens.
+
+All charts are MUI X Charts (the free MIT `@mui/x-charts`). Palettes are checked with the
+dataviz validator; the values and results are in `src/theme/viz.ts`.
+
+Supporting code:
+- `src/api`: the typed client for `src/research_room/api.py`, and the `useDraftRoom` polling hook.
+- `src/lib`: display formatting, pick labels and grid layout, schedule joins, favorites.
+- `src/theme`: the MUI v9 theme (`colorSchemes` and CSS variables, light and dark) and the color tokens.
+
+## In-season screens (categories 2–9)
+
+The phone app's in-season screens are designed in Storybook with invented data. Their
+contract is `src/api/season.ts`, and `docs/season-api.md` lists the endpoints and says which
+engine module produces every number. In the app they live under `#/season/<tab>`.
+**Live today:** Team → Lineup (`#/season/builder/lineup`, `GET /season/lineup`, polled
+every 30 s). The other tabs show a "not live yet" notice until their endpoints exist.
+
+| Category (folder) | Screens |
+|---|---|
+| Team & Player Analysis (`team-player-analysis/`) | Research feed, Schedule volume, Compare |
+| Team Builder (`team-builder/`) | Lineup, Moves planner, Pickups, Playable games strip |
+| Matchup Analysis (`matchup-analysis/`) | This Week |
+| Results (`results/`) | Season (weeks, category results, standings) |
+| Results Analysis (`results-analysis/`) | Prediction review, Model scoreboard |
+| Notifications (`notifications/`) | Inbox, Alert cards |
+| Player Profiles (`player-profiles/`) | Deep dive, Heat Calendar, Month ahead |
+| Team Profiles (`team-profiles/`) | League team, NBA team |
+
+The shared season primitives are in `foundations/`: `ScreenFrame`, `ScreenStates`,
+`Confidence`, `PlayerLine`, `SignedBarChart`, `HeatCalendar` + `heatScale`, `DetailSheet`,
+`AcquisitionsMeter` and `seasonFormat`. Fixtures are in `src/mocks/<category>/`.
+
+Conventions:
+- "Good / bad for me" colors come from `theme/viz.ts` `FOR_ME`: green helps me, red hurts
+  me, gray means no effect. Every colored mark also carries ▲, ▼ or ●, and the sheet or
+  readout says the effect in words.
+- Heatmap-like grids (heat calendar, add/drop strips, schedule volume, lineup grid) are built
+  from MUI layout, because MUI X's heatmap is Pro. Their cells show labels only; tapping a
+  cell opens a bottom sheet with the numbers, and a table view lists them too.
 
 ## Rule: stories and tests use invented data only
 
-Everything in `src/mocks/` is made up. The names are fictional ("Sample Guard A") and every
+Everything in `src/mocks/` is made up. The names are fictional ("Sample Guard A", team names
+such as "Fictional Five"), and every
 number comes from a seeded generator. Never copy player data from the running API or from
 `reference/` into this folder or any story or test: the Basketball Monster projections are
 paid and this repo is public. Invented players have `headshot_url: null` and
 `team_logo_url: null`, so stories show initials and abbreviations, never real headshots.
+The schedule mock uses real NBA team codes with invented game counts.
 
 ## Mobile notes
 

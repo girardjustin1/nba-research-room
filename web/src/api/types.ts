@@ -35,6 +35,8 @@ export interface Session {
   pick_clock_seconds: number;
   categories: Category[];
   picks: PickRecord[];
+  /** Saved team names keyed by draft slot ("1".."14"); default "Team N", "You" for my slot. Newer API only. */
+  team_names?: Record<string, string>;
 }
 
 export type AdpSource = 'yahoo' | 'bbm_adp' | 'bbm_rank';
@@ -62,6 +64,14 @@ export interface Player {
   headshot_url?: string | null;
   /** Relative path served by the API (e.g. /images/teams/DEN.svg), or null. */
   team_logo_url?: string | null;
+  /** Our rank within the primary position (newer API). */
+  pos_rank?: number | null;
+  /** Overall ADP rank and ADP rank within the primary position (newer API). */
+  adp_rank?: number | null;
+  adp_pos_rank?: number | null;
+  rookie?: boolean | null;
+  /** Games in fantasy playoff weeks 20-22: the NBA stand-in for an NFL bye. */
+  playoff_games?: number | null;
 }
 
 /** GET /draft/players */
@@ -85,6 +95,74 @@ export interface Recommendation extends Player {
   p_available_next: number | null;
   /** Plain-language reasons built by the engine, joined with "; ". */
   reasons: string | null;
+  /** True when he fits one of my open starting slots. */
+  starts?: boolean | null;
+  /** Change in P(win category) if I take him, per category: dp_fg_pct, dp_tov, ... */
+  [dp: `dp_${string}`]: number | null | undefined;
+}
+
+export type PositionKey = 'PG' | 'SG' | 'SF' | 'PF' | 'C';
+
+/** GET /draft/positional_value */
+export interface PositionalValue {
+  pos: PositionKey;
+  best_available: { player_id: number; name: string; value: number | null } | null;
+  replacement_value: number | null;
+  value_over_replacement: number | null;
+  /** 0..1 position of this VOR on the Low→High scale (engine-normalized). */
+  scale_0_1: number | null;
+  my_open_slots: number;
+  /** Value lost by waiting until my following pick (newer API). */
+  drop_if_wait?: number | null;
+}
+
+export interface PositionalValueResponse {
+  positions: PositionalValue[];
+  following_pick?: number | null;
+  /** Engine's explanation of the numbers. */
+  note?: string | null;
+}
+
+/** One team in GET /draft/teams */
+export interface DraftTeam {
+  team_id: number;
+  name: string;
+  is_me: boolean;
+  roster: Player[];
+  position_counts: Partial<Record<PositionKey, number>>;
+  open_slots: string[];
+  z_balance: Record<string, number | null>;
+  next_pick: number | null;
+  picks_until_next: number | null;
+}
+
+export interface TeamsResponse {
+  teams: DraftTeam[];
+}
+
+/** One row of GET /draft/compare: player fields + per-game means + per-category z. */
+export interface ComparePlayer extends Player {
+  pts_mean?: number | null;
+  reb_mean?: number | null;
+  ast_mean?: number | null;
+  stl_mean?: number | null;
+  blk_mean?: number | null;
+  fg3m_mean?: number | null;
+  /** The live API sends makes and attempts; a percentage only if it adds *_pct_mean. */
+  fg_pct_mean?: number | null;
+  fgm_mean?: number | null;
+  fga_mean?: number | null;
+  ft_pct_mean?: number | null;
+  ftm_mean?: number | null;
+  fta_mean?: number | null;
+  tov_mean?: number | null;
+  gain?: number | null;
+  p_available_next?: number | null;
+  [z: `z_${string}`]: number | null | undefined;
+}
+
+export interface CompareResponse {
+  players: ComparePlayer[];
 }
 
 export interface MyTeam {
@@ -142,4 +220,77 @@ export interface PickIn {
 /** FastAPI error body: `detail` is a string, or {error, candidates} for an unmatched name. */
 export interface ApiErrorBody {
   detail?: string | { error?: string; candidates?: unknown[] } | unknown;
+}
+
+/** Head-to-head read of one opponent vs me (absent for my own picks). */
+export interface InsightVsMe {
+  /** P(I win category) against this team, by category key. */
+  p_cat: Record<string, number | null>;
+  p_win_week: number | null;
+  my_edges: string[];
+  their_edges: string[];
+}
+
+/** One "live read" after a pick, from GET /draft/insights. */
+export interface PickInsight {
+  pick_no: number;
+  round: number;
+  team_id: number;
+  team_name: string;
+  player: { player_id: number; name: string; position: string | null; team_abbr: string | null };
+  open_slots: string[];
+  /** P(win category) vs a league-average team. */
+  p_vs_league_avg: Record<string, number | null>;
+  strengths: string[];
+  weaknesses: string[];
+  expected_cats_vs_avg: number | null;
+  vs_me: InsightVsMe | null;
+  /** Plain-language notes written by the engine. */
+  notes: string[];
+}
+
+export interface InsightsResponse {
+  insights: PickInsight[];
+  current_pick: number | null;
+  categories: Category[];
+}
+
+/** One fantasy week (GET /schedule/team_weeks). Weeks 1 and 17 span 14 days. */
+export interface FantasyWeek {
+  week: number;
+  start: string;
+  end: string;
+  n_days: number;
+  is_playoff: boolean;
+}
+
+export interface TeamWeeks {
+  /** NBA team abbreviation in the schedule's codes (NOP, PHX, ...). */
+  team: string;
+  games_by_week: Record<string, number>;
+  b2b_by_week: Record<string, number>;
+  light_day_games_by_week: Record<string, number>;
+  total: number;
+  playoff_games: number;
+}
+
+export interface TeamWeeksResponse {
+  weeks: FantasyWeek[];
+  teams: TeamWeeks[];
+  unscheduled_note: string | null;
+  source: string | null;
+}
+
+export interface TeamDay {
+  date: string;
+  opponent: string;
+  home: boolean;
+  back_to_back: boolean;
+  light_day: boolean;
+  week: number;
+}
+
+export interface TeamDaysResponse {
+  team: string;
+  days: TeamDay[];
 }

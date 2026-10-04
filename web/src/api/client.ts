@@ -1,6 +1,12 @@
 import type {
   ApiErrorBody,
   Board,
+  CompareResponse,
+  InsightsResponse,
+  TeamDaysResponse,
+  TeamWeeksResponse,
+  PositionalValueResponse,
+  TeamsResponse,
   HealthResponse,
   PickIn,
   PlayersResponse,
@@ -29,6 +35,11 @@ export class ApiError extends Error {
   /** 409 "set your draft slot first" */
   get isNoSlot(): boolean {
     return this.status === 409 && /draft slot/i.test(this.message);
+  }
+
+  /** 404: the running API does not have this endpoint yet (or the item is gone). */
+  get isNotFound(): boolean {
+    return this.status === 404;
   }
 }
 
@@ -69,7 +80,19 @@ export interface DraftApi {
   getRosters(): Promise<RostersResponse>;
   pick(body: PickIn): Promise<Session>;
   undo(): Promise<Session>;
+  /** DELETE /draft/pick/{pick_no}: removes one pick (newer API). */
+  removePick(pickNo: number): Promise<Session>;
   exportResults(): Promise<{ path: string }>;
+  getTeams(): Promise<TeamsResponse>;
+  setTeamNames(names: Record<string, string>): Promise<Session | TeamsResponse>;
+  getPositionalValue(): Promise<PositionalValueResponse>;
+  compare(ids: number[]): Promise<CompareResponse>;
+  /** GET /draft/insights?last=N: the live read after each of the last N picks. */
+  getInsights(last?: number): Promise<InsightsResponse>;
+  /** GET /schedule/team_weeks: games per fantasy week for every NBA team. */
+  getTeamWeeks(): Promise<TeamWeeksResponse>;
+  /** GET /schedule/team_days: one team's game days in a date range. */
+  getTeamDays(team: string, start: string, end: string): Promise<TeamDaysResponse>;
 }
 
 /**
@@ -126,6 +149,15 @@ export function createDraftApi(baseUrl = '/api', fetchImpl: FetchLike = (i, init
     pick: (body) => request('POST', '/draft/pick', { source: 'manual', ...body }),
     undo: () => request('POST', '/draft/undo'),
     exportResults: () => request('POST', '/draft/export'),
+    removePick: (pickNo) => request('DELETE', `/draft/pick/${encodeURIComponent(String(pickNo))}`),
+    getTeams: () => request('GET', '/draft/teams'),
+    setTeamNames: (names) => request('PUT', '/draft/teams/names', { names }),
+    getPositionalValue: () => request('GET', '/draft/positional_value'),
+    getInsights: (last = 28) => request('GET', `/draft/insights?last=${last}`),
+    getTeamWeeks: () => request('GET', '/schedule/team_weeks'),
+    getTeamDays: (team, start, end) =>
+      request('GET', `/schedule/team_days?${new URLSearchParams({ team, start, end }).toString()}`),
+    compare: (ids) => request('GET', `/draft/compare?ids=${ids.map((i) => encodeURIComponent(String(i))).join(',')}`),
   };
 }
 

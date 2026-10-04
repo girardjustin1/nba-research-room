@@ -79,4 +79,26 @@ describe('draft API client', () => {
     const [url] = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
     expect(url).toBe('/api/draft/players?q=sample+guard&available_only=true&limit=50');
   });
+
+  it('calls the newer draft endpoints with the right paths and methods', async () => {
+    const fetchImpl = respond(200, { ok: true });
+    const api = createDraftApi('/api', fetchImpl);
+    await api.removePick(27);
+    await api.compare([1, 2, 3]);
+    await api.getInsights(14);
+    await api.setTeamNames({ '1': 'Sample Name' });
+    const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+    expect(calls.map(([u, i]) => `${i.method} ${u}`)).toEqual([
+      'DELETE /api/draft/pick/27',
+      'GET /api/draft/compare?ids=1,2,3',
+      'GET /api/draft/insights?last=14',
+      'PUT /api/draft/teams/names',
+    ]);
+    expect(JSON.parse(String(calls[3]![1].body))).toEqual({ names: { '1': 'Sample Name' } });
+  });
+
+  it('marks a missing endpoint as not found', async () => {
+    const err = (await createDraftApi('/api', respond(404, { detail: 'Not Found' })).getTeams().catch((e: unknown) => e)) as ApiError;
+    expect(err.isNotFound).toBe(true);
+  });
 });

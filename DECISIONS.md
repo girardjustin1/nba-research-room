@@ -194,3 +194,9 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   recommended plan (and up to 3 named alternatives). POST /season/scenario {move_ids} re-simulates
   any set of moves on demand (target < 1 s) and reports feasibility (e.g. acquisitions over 4);
   the browser never computes probabilities. Contract drafted in web/src/api/season.ts.
+- **Planned (Phase 2): Game Center.** The main Matchup screen mirrors an NFL game page for the
+  fantasy week: category score as the scoreboard, a week-progress bar, Win probability vs
+  "With moves" (per-category dropdown), milestone markers (pickups, injuries, locks, category
+  flips, clinched/out of reach), a category linescore with swing categories, key moments, mirrored
+  strength bars (hatched vs solid), a me-vs-opponent daily volume heat map, both rosters' injury
+  reports and ranked pickups. GET /season/week/gamecenter (contract drafted by the web agent).

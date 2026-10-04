@@ -31,6 +31,10 @@ const withDevice: Decorator = (Story, ctx) => {
       ? { '--sim-safe-top': '0px', '--sim-safe-bottom': '21px' }
       : { '--sim-safe-top': '62px', '--sim-safe-bottom': '34px' }
     : {};
+  // Also on :root, so portaled Dialogs, Drawers and Snackbars get the simulated insets too.
+  const root = document.documentElement.style;
+  root.setProperty('--sim-safe-top', device ? (landscape ? '0px' : '62px') : '0px');
+  root.setProperty('--sim-safe-bottom', device ? (landscape ? '21px' : '34px') : '0px');
   return (
     <ThemeProvider theme={theme} disableTransitionOnChange>
       <CssBaseline />
@@ -111,6 +115,26 @@ const preview: Preview = {
     viewport: { value: 'iphone17', isRotated: false },
   },
   parameters: {
+    options: {
+      // Sidebar reads top-down in this fixed category order; alphabetical inside each.
+      storySort: {
+        method: 'alphabetical',
+        order: [
+          'Prototype',
+          'Draft',
+          'Team & Player Analysis',
+          'Team Builder',
+          'Matchup Analysis',
+          'Results',
+          'Results Analysis',
+          'Notifications',
+          'Player Profiles',
+          'Team Profiles',
+          'App Shell',
+          'Foundations',
+        ],
+      },
+    },
     layout: 'fullscreen',
     viewport: { options: IPHONE_17 },
     controls: { matchers: { color: /(background|color)$/i } },

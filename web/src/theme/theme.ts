@@ -1,6 +1,6 @@
 import { createTheme } from '@mui/material/styles';
 import type {} from '@mui/material/themeCssVarsAugmentation';
-import { VIZ } from './viz';
+import { STATUS, VIZ } from './viz';
 
 /**
  * Calm, dense, readable theme. Light + dark via `colorSchemes` and CSS variables
@@ -23,7 +23,8 @@ export const theme = createTheme({
         secondary: { main: '#52514e' },
         success: { main: '#0ca30c', dark: '#006300' },
         warning: { main: '#fab219', dark: '#8a5a00' },
-        error: { main: '#d03b3b' },
+        // Deep crimson: normal-vision dE 20.5 from forMe bad (#d4513f), white text 9.5:1.
+        error: { main: STATUS.light.error },
         info: { main: '#256abf' },
         background: { default: '#f4f4f1', paper: '#fcfcfb' },
         text: { primary: '#0b0b0b', secondary: '#52514e', disabled: '#898781' },
@@ -37,7 +38,8 @@ export const theme = createTheme({
         secondary: { main: '#c3c2b7' },
         success: { main: '#0ca30c' },
         warning: { main: '#fab219' },
-        error: { main: '#e66767' },
+        // Light rose: dE 18.7 from forMe bad (#e5604d), dark text 10.3:1 on it.
+        error: { main: STATUS.dark.error },
         info: { main: '#5598e7' },
         background: { default: '#0d0d0d', paper: '#1a1a19' },
         text: { primary: '#ffffff', secondary: '#c3c2b7', disabled: '#898781' },

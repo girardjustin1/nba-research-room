@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { makeBoard, makeSession } from '../mocks/fixtures';
+import { makeBoard, makeSession } from '../mocks/draft/fixtures';
 import { ApiError, ApiUnreachableError, type DraftApi } from './client';
 import type { Session } from './types';
 import { boardKey, useDraftRoom } from './useDraftRoom';
@@ -28,7 +28,15 @@ function fakeApi(sessions: (Session | Error)[]): DraftApi & { getBoard: ReturnTy
     getRosters: fail,
     pick: fail,
     undo: fail,
+    removePick: fail,
     exportResults: fail,
+    getTeams: async () => Promise.reject(new ApiError(404, 'Not Found')),
+    setTeamNames: fail,
+    getPositionalValue: async () => Promise.reject(new ApiError(404, 'Not Found')),
+    compare: fail,
+    getInsights: async () => Promise.reject(new ApiError(404, 'Not Found')),
+    getTeamWeeks: async () => Promise.reject(new ApiError(404, 'Not Found')),
+    getTeamDays: fail,
   } as unknown as DraftApi & { getBoard: ReturnType<typeof vi.fn> };
 }
 
@@ -54,6 +62,9 @@ describe('useDraftRoom polling', () => {
     await act(async () => new Promise((r) => setTimeout(r, 80)));
     expect(api.getBoard).toHaveBeenCalledTimes(2);
     expect(result.current[0].connection).toBe('up');
+    // Endpoints the API lacks are recorded as 404s, not crashes.
+    expect(result.current[0].teams.error?.isNotFound).toBe(true);
+    expect(result.current[0].insights.error?.isNotFound).toBe(true);
   });
 
   it('reports no session on the 409 and down when unreachable', async () => {
