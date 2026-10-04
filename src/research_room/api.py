@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from research_room import images, schedule, season_api, store, system
 from research_room.config import Settings, settings
-from research_room.draft import tracker
+from research_room.draft import eligibility, tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
 from research_room.draft.board import DraftBoard, slot_assignment, split_starters
 from research_room.draft.bots import BOT_POSITION_CAP, bot_choice
@@ -80,6 +80,7 @@ class Session:
     board: DraftBoard | None = None
     resolver: NameResolver | None = None
     extras: pd.DataFrame | None = None  # player_id, rookie, playoff_games (from the store)
+    yahoo_elig: pd.DataFrame | None = None  # player_id -> Yahoo positions (players.csv snapshot)
     mock: MockState | None = None
     names: dict[int, str] = field(default_factory=dict)   # saved team names for this draft
 
@@ -95,7 +96,10 @@ class Session:
 
     def rebuild(self) -> None:
         """Re-value the pool for the current punts and rebuild the board (punt toggles)."""
-        valued = expected_pick(compute_values(self.pool, self.cfg, punts=self.punts), self.cfg)
+        elig = eligibility.resolve(self.pool, self.yahoo_elig, self.cfg)
+        pool = self.pool.assign(positions=elig["positions"], eligibility_source=elig["eligibility_source"])
+        valued = expected_pick(compute_values(pool, self.cfg, punts=self.punts,
+                                              eligibility=elig["eligible"]), self.cfg)
         self.valued = with_image_urls(add_ranks(valued, self.extras))
         self.board = DraftBoard(self.valued, self.cfg, self.team_games_per_week)
         self.resolver = NameResolver(self.valued[["player_id", "name", "team_abbr"]].rename(
@@ -157,15 +161,37 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         pool = blend_preseason(con, cfg)
         gpw = schedule.games_per_week(schedule.load_games(con, cfg.season.nba_season), cfg.season)
         extras = load_extras(con, cfg)
+        yahoo_elig = eligibility.load_yahoo(con)
         log = mock.con if mock else con
         state = tracker.load_state(log, draft_id, cfg, my_slot)
+        if cfg.draft.keepers:
+            state = apply_configured_keepers(log, state, cfg, pool)
         saved = dict(log.execute("SELECT team_id, name FROM draft_teams WHERE draft_id = ?",
                                  [draft_id]).fetchall())
     finally:
         con.close()
-    s = Session(draft_id, cfg, pool, gpw, set(punts), state, extras=extras, mock=mock, names=saved)
+    s = Session(draft_id, cfg, pool, gpw, set(punts), state, extras=extras, mock=mock, names=saved,
+                yahoo_elig=yahoo_elig)
     s.rebuild()
     return s
+
+
+def apply_configured_keepers(con, state: tracker.DraftState, cfg: Settings,
+                             pool: pd.DataFrame) -> tracker.DraftState:
+    """Place settings.draft.keepers ({team_id, round, player_id or player}) at their team's pick in
+    that round. Names resolve against the pool; an unmatched or ambiguous name is an error."""
+    resolver = NameResolver(pool[["player_id", "name", "team_abbr"]].rename(columns={"name": "full_name"}))
+    names = dict(zip(pool["player_id"].astype(int), pool["name"], strict=True))
+    keepers = []
+    for k in cfg.draft.keepers:
+        pid = k.get("player_id")
+        if pid is None:
+            res = resolver.resolve(str(k.get("player", "")), k.get("team_abbr"))
+            if res.player_id is None:
+                raise ValueError(f"keeper '{k.get('player')}' not matched ({res.reason}); add player_id")
+            pid = res.player_id
+        keepers.append({"team_id": int(k["team_id"]), "round": int(k["round"]), "player_id": int(pid)})
+    return tracker.apply_keepers(con, state, keepers, names)
 
 
 def league_with_teams(teams: int, base: Settings | None = None) -> Settings:
@@ -276,7 +302,7 @@ PLAYER_COLS = [
     "player_id", "headshot_url", "team_logo_url", "name", "team_abbr", "position", "eligible",
     "games", "minutes_pg", "value", "value_pg", "rank", "tier", "expected_pick", "adp_source",
     "yahoo_adp", "injury_risk", "sources", "pos_rank", "adp_rank", "adp_pos_rank", "rookie",
-    "playoff_games",
+    "playoff_games", "positions", "eligibility_source",
 ]
 COMPARE_STATS = ("pts", "reb", "ast", "stl", "blk", "fg3m", "fgm", "fga", "ftm", "fta", "tov")
 

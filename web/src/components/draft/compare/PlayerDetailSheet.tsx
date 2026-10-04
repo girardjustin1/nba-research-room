@@ -67,6 +67,11 @@ export function PlayerDetailSheet(props: PlayerDetailSheetProps) {
                   {eligibleLabel(p.eligible, p.position)} · <TeamBadge abbr={p.team_abbr} logoUrl={p.team_logo_url} size={14} />
                 </Typography>
               </Stack>
+              {p.eligibility_source === 'bbm' && (
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  Position from Basketball Monster; Yahoo eligibility not loaded
+                </Typography>
+              )}
             </Box>
             <IconButton aria-label={props.favorite ? `Unstar ${p.name}` : `Star ${p.name}`} aria-pressed={props.favorite} onClick={props.onToggleFavorite}>
               {props.favorite ? <StarIcon /> : <StarBorderIcon />}

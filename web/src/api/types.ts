@@ -72,6 +72,11 @@ export interface Player {
   rookie?: boolean | null;
   /** Games in fantasy playoff weeks 20-22: the NBA stand-in for an NFL bye. */
   playoff_games?: number | null;
+  /** Positions behind `eligible`, e.g. "PG,SG" (newer API). */
+  positions?: string | null;
+  /** "yahoo" when eligibility came from Yahoo's players.csv; "bbm" = Basketball Monster's primary
+   * position only, so multi-position eligibility may be missing. */
+  eligibility_source?: 'yahoo' | 'bbm' | null;
 }
 
 /** GET /draft/players */

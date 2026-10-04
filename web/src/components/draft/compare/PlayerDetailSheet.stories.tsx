@@ -34,3 +34,5 @@ export const Ranked: Story = {};
 /** Outside the top 10: no gain or availability (the board did not rank him). */
 export const Unranked: Story = { args: { rec: undefined } };
 export const NotMyPick: Story = { args: { draftLabel: 'Draft for Fictional Five', favorite: true, inCompare: true } };
+/** No Yahoo players.csv yet: slots come from Basketball Monster's primary position, labeled as such. */
+export const EligibilityFromBbm: Story = { args: { player: { ...player, eligibility_source: 'bbm' } } };
