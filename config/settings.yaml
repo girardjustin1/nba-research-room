@@ -59,7 +59,18 @@ draft:
   starts_at: "2026-10-18T19:00:00-04:00"
   pick_clock_seconds: 60
   my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order
-  keepers: []
+  keepers: []                  # [{team_id, player_id, round}] once declared
+  rounds: 13                   # ASSUMED: one per non-IL roster slot; confirm in Yahoo draft settings
+  pool_size: 200               # z-scores are computed over the top N by value
+  projection_blend:            # per-game rates; weights must sum to 1.0
+    external: 0.75             # Basketball Monster preseason projection
+    last_season: 0.25          # player's own 2025-26 per-game rates
+    min_last_season_games: 20  # below this, the external projection is used alone
+  sd_prior_games: 20           # shrink a player's per-game sd toward the league CV by this many games
+  adp:                         # availability = P(still on the board at a given pick)
+    sd_base_picks: 4.0         # ADP uncertainty in round 1, in picks
+    sd_per_round: 1.5          # added uncertainty per round
+    fallback_sd_multiplier: 2.0  # for players ranked without any ADP
 
 paths:
   db: data/research_room.duckdb

@@ -32,3 +32,4 @@ team_aliases:            # keys quoted: YAML would read a bare NO as boolean fal
   "SA": SAS
   "PHO": PHX
   "UTAH": UTA
+  "NOR": NOP               # Basketball Monster

@@ -116,6 +116,13 @@ SCHEMA: dict[str, Table] = {
         "decision_id VARCHAR", "ts TIMESTAMPTZ", "page VARCHAR", "kind VARCHAR",
         "recommendation JSON", "inputs JSON", "model_version VARCHAR"),
     # --- additions beyond the build prompt (see DECISIONS.md) ---
+    "external_projections": _t(("source", "snapshot", "ext_id"),
+        "source VARCHAR", "snapshot DATE", "ext_id VARCHAR", "player_id INTEGER", "name VARCHAR",
+        "team_abbr VARCHAR", "position VARCHAR", "age DOUBLE", "games DOUBLE", "minutes DOUBLE",
+        "fgm DOUBLE", "fga DOUBLE", "ftm DOUBLE", "fta DOUBLE", "fg3m DOUBLE", "fg3a DOUBLE",
+        "oreb DOUBLE", "dreb DOUBLE", "reb DOUBLE", "ast DOUBLE", "stl DOUBLE", "blk DOUBLE",
+        "tov DOUBLE", "pts DOUBLE", "yahoo_adp DOUBLE", "adv_adp DOUBLE", "ext_rank DOUBLE",
+        "injury_risk VARCHAR", "role VARCHAR", "fetched_at TIMESTAMPTZ"),
     "player_xref": _t(("source", "source_key"),
         "source VARCHAR", "source_key VARCHAR", "raw_name VARCHAR", "player_id INTEGER",
         "method VARCHAR", "resolved_at TIMESTAMPTZ"),

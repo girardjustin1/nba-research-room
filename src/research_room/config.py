@@ -94,12 +94,36 @@ class Season(BaseModel):
     light_day_max_games: int = 5
 
 
+class ProjectionBlend(BaseModel):
+    external: float
+    last_season: float
+    min_last_season_games: int
+
+    @model_validator(mode="after")
+    def _weights_sum_to_one(self) -> ProjectionBlend:
+        total = self.external + self.last_season
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(f"draft.projection_blend weights sum to {total}, not 1.0")
+        return self
+
+
+class AdpConfig(BaseModel):
+    sd_base_picks: float
+    sd_per_round: float
+    fallback_sd_multiplier: float
+
+
 class Draft(BaseModel):
     type: str
     starts_at: datetime
     pick_clock_seconds: int
     my_slot: int | None = None
     keepers: list[dict] = Field(default_factory=list)
+    rounds: int
+    pool_size: int
+    projection_blend: ProjectionBlend
+    sd_prior_games: float
+    adp: AdpConfig
 
 
 class Paths(BaseModel):

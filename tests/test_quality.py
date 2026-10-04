@@ -41,3 +41,9 @@ def test_missing_player_rows_are_flagged(con):
 def test_points_match_but_minutes_short_is_flagged(con):
     _seed(con, [20] * 5, [18] * 5, minutes=40.0)         # 200 team minutes
     assert not quality.box_score_check(con)["complete"].any()
+
+
+def test_incomplete_team_games_names_only_the_bad_side(con):
+    _seed(con, [20] * 5, [18] * 4)
+    bad = quality.incomplete_team_games(con)
+    assert bad.to_dict("records") == [{"game_id": 1, "team_id": 20}]

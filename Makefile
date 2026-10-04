@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: setup backfill inbox nightly pregame draft-api app test lint
+.PHONY: setup backfill inbox projections nightly pregame draft-api app test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -13,6 +13,9 @@ backfill:  ## pull historical seasons from BallDontLie into the store (resumable
 
 inbox:  ## load Yahoo CSVs from data/inbox (moving newer copies in from ~/Downloads first)
 	$(PY) jobs/ingest_inbox.py --from-downloads
+
+projections:  ## load the newest Basketball Monster exports from reference/
+	$(PY) jobs/ingest_projections.py
 
 nightly:  ## ingest -> features -> projections -> optimize (Phase 1+)
 	@echo "nightly job arrives in Phase 1" && exit 1

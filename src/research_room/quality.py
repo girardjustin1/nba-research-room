@@ -52,6 +52,12 @@ def summary(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return out.reset_index()
 
 
+def incomplete_team_games(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """(game_id, team_id) pairs whose box score is incomplete. Exclude only that side."""
+    check = box_score_check(con)
+    return check.loc[~check["complete"], ["game_id", "team_id"]].reset_index(drop=True)
+
+
 def incomplete_games(con: duckdb.DuckDBPyConnection) -> set[int]:
     """game_ids where either side's box score is incomplete."""
     check = box_score_check(con)
