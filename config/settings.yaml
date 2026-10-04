@@ -86,6 +86,8 @@ draft:
                                # is expected this many picks earlier than his ADP (scaled by share)
     punt_drift_after_round: 3
     punt_drift_p: 0.30         # flag an un-punted category your build wins less often than this
+    edge_p: 0.55               # pick insights: a category is "your edge" at >= this P(win), and
+                               # "their edge" at <= 1 - this
 
 paths:
   db: data/research_room.duckdb

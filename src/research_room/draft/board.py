@@ -248,6 +248,76 @@ class DraftBoard:
                 "setup": 1000 * (t_setup - t0), "score": 1000 * (t_score - t_setup),
                 "monte_carlo": 1000 * (t_mc - t_score), "total": 1000 * (t_end - t0)})
 
+    # ------------------------------------------------------------------ team outlooks
+    def team_projection(self, state: DraftState, team_id: int) -> tuple[simulate.TeamWeek, list[str]]:
+        """A team's projected final roster: its picks so far (starters full, bench discounted) plus
+        a typical player at each of its remaining picks. Returns (team, open starting slots)."""
+        ids = [pid for pid in state.roster(team_id)["player_id"] if pid in self.contrib.index]
+        is_start, open_slots = split_starters([self.pool.at[p, "eligible"] for p in ids],
+                                              self.starting_slots)
+        u = self.bench_utilization
+        rows = self.contrib.loc[ids].mul([1.0 if s else u for s in is_start], axis=0)
+        current = state.current_pick
+        if current is not None:
+            avail = self.pool[~self.pool.index.isin(state.drafted)]
+            order = avail.sort_values("expected_pick").index.to_numpy()
+            remaining = [p for p in picks_for_slot(team_id, state.teams, state.rounds) if p >= current]
+            typical = [self._typical_at(order, p - current) for p in remaining]
+            rows = pd.concat([rows, self._fill_rows(typical, len(open_slots))], ignore_index=True)
+        team = simulate.team_week(rows) if not rows.empty else _empty_team(self.contrib)
+        return team, open_slots
+
+    def pick_insight(self, state: DraftState, pick_no: int, top_n: int = 2) -> dict:
+        """What one pick means: the drafting team's needs, strengths and weaknesses (vs a
+        league-average team), the projected head-to-head against my team, and what it is likely
+        to target next. Every number comes from the simulator; `notes` are built from them."""
+        row = state.picks[state.picks["pick_no"] == pick_no]
+        if row.empty:
+            raise ValueError(f"pick {pick_no} is not recorded")
+        r = row.iloc[0]
+        team_id = int(r["team_id"])
+        labels = {c.key: c.label for c in self.cfg.categories}
+        team, open_slots = self.team_projection(state, team_id)
+        vs_avg = simulate.analytic(team, self.opponent, self.cfg)
+        p_avg = {k: float(np.asarray(v).ravel()[0]) for k, v in vs_avg.p_cat.items()}
+        ranked = sorted(p_avg.items(), key=lambda kv: kv[1])
+        weak = [k for k, v in ranked[:top_n]]
+        strong = [k for k, v in ranked[::-1][:top_n]]
+        pid = int(r["player_id"])
+        player = self.pool.loc[pid] if pid in self.pool.index else None
+        out = {
+            "pick_no": int(pick_no), "round": int(r["round"]), "team_id": team_id,
+            "player": {"player_id": pid, "name": r["player_name"],
+                       "position": None if player is None else player["position"],
+                       "team_abbr": None if player is None else player["team_abbr"]},
+            "open_slots": open_slots,
+            "p_vs_league_avg": p_avg,
+            "strengths": strong, "weaknesses": weak,
+            "expected_cats_vs_avg": float(np.asarray(vs_avg.expected_cats).ravel()[0]),
+            "vs_me": None, "notes": [],
+        }
+        primary_open = [s for s in open_slots if s in _PRIMARY]
+        notes = [f"Needs {', '.join(primary_open)}" if primary_open
+                 else "Starting slots filled at every position"]
+        notes.append("Strong in " + ", ".join(f"{labels[k]} ({p_avg[k]:.0%})" for k in strong)
+                     + "; weak in " + ", ".join(f"{labels[k]} ({p_avg[k]:.0%})" for k in weak))
+        if state.my_slot and team_id != state.my_slot:
+            mine, _ = self.team_projection(state, state.my_slot)
+            h2h = simulate.analytic(mine, team, self.cfg)
+            p_me = {k: float(np.asarray(v).ravel()[0]) for k, v in h2h.p_cat.items()}
+            p_week = float(np.asarray(h2h.p_win_week).ravel()[0])
+            by_p = sorted(p_me.items(), key=lambda kv: kv[1])
+            edge = self.cfg.draft.board.edge_p
+            out["vs_me"] = {"p_cat": p_me, "p_win_week": p_week,
+                            "my_edges": [k for k, v in reversed(by_p) if v >= edge],
+                            "their_edges": [k for k, v in by_p if v <= 1 - edge]}
+            notes.append(f"You'd beat them {p_week:.0%} of weeks as the rosters project now")
+            if out["vs_me"]["their_edges"]:
+                edges = out["vs_me"]["their_edges"][:3]
+                notes.append("They out-project you in " + ", ".join(labels[k] for k in edges))
+        out["notes"] = notes
+        return out
+
     def _reasons(self, r: pd.Series, following: int | None, open_slots: list[str]) -> str:
         labels = {c.key: c.label for c in self.cfg.categories}
         out = [f"{r['gain']:+.2f} expected categories vs a typical pick here"]

@@ -426,6 +426,22 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                 })
             return {"teams": out, "current_pick": current}
 
+    @app.get("/draft/insights")
+    def get_insights(last: int = 5) -> dict:
+        """Live read on the most recent picks: each drafting team's needs, strengths and
+        weaknesses, and its projected head-to-head against me, as rosters stand right now."""
+        with h.lock:
+            s = h.require()
+            picks = s.state.picks.sort_values("pick_no", ascending=False).head(max(1, min(last, 50)))
+            names = s.team_names()
+            out = []
+            for pick_no in picks["pick_no"].astype(int):
+                ins = s.board.pick_insight(s.state, pick_no)
+                ins["team_name"] = names.get(ins["team_id"])
+                out.append(ins)
+            return {"insights": out, "current_pick": s.state.current_pick,
+                    "categories": [{"key": c.key, "label": c.label} for c in s.cfg.categories]}
+
     @app.put("/draft/teams/names")
     def put_team_names(body: NamesIn) -> dict:
         with h.lock:

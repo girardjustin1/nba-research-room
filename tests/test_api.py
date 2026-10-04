@@ -159,3 +159,20 @@ def test_mock_mode_uses_bots_and_never_the_real_store(client, tmp_path):
     con = store.connect(str(tmp_path / "api.duckdb"))
     assert con.execute("SELECT count(*) FROM draft_picks").fetchone()[0] == 0
     assert client.post("/draft/mock/speed", json={"speed_s": 999}).status_code == 400
+
+
+def test_pick_insights_describe_each_drafting_team(client):
+    client.post("/draft/session", json={"draft_id": "league", "my_slot": 2})
+    client.put("/draft/teams/names", json={"names": {"1": "Splash Bros"}})
+    for pid in (1, 2, 3):
+        client.post("/draft/pick", json={"player_id": pid})
+    d = client.get("/draft/insights", params={"last": 2}).json()
+    assert [i["pick_no"] for i in d["insights"]] == [3, 2]
+    first = client.get("/draft/insights", params={"last": 3}).json()["insights"][-1]
+    assert first["team_name"] == "Splash Bros" and first["player"]["player_id"] == 1
+    assert len(first["strengths"]) == 2 and len(first["weaknesses"]) == 2
+    cats = {"fg_pct", "ft_pct", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov"}
+    assert set(first["p_vs_league_avg"]) == cats
+    assert 0 <= first["vs_me"]["p_win_week"] <= 1 and first["notes"][0].startswith("Needs")
+    mine = next(i for i in d["insights"] if i["team_id"] == 2)
+    assert mine["vs_me"] is None                    # no head-to-head against myself

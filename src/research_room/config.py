@@ -120,6 +120,7 @@ class BoardConfig(BaseModel):
     need_shift_picks: float
     punt_drift_after_round: int
     punt_drift_p: float
+    edge_p: float
 
 
 class Draft(BaseModel):
