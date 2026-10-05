@@ -1,8 +1,9 @@
 """Backtest: replay a past season week by week as if the tool had been running.
 
 Inputs: game logs and team context (features.py), the season's schedule (games), player
-positions (players), the baseline model and the simulator calibration, both fitted
-on seasons before the one replayed, settings.backtest / optimizer / roster.
+positions (players), the baseline model and the simulator calibration (fitted the live way, see
+calibration.live_player_weeks), both fitted on seasons before the one replayed,
+settings.backtest / optimizer / roster.
 Outputs: one row per sampled team-week: predicted P(win week) doing nothing and with the
 optimizer's plan, and what actually happened under each (categories won, week won). A summary:
 calibration of the predictions, and the realized lift from following the plan.
@@ -191,7 +192,8 @@ def run(
     built = built[built["min_played_ewma"].notna()]
     test_season = test_season or int(built["season"].max())
     model = BaselineModel(cfg).fit(built[built["season"] < test_season])
-    cal = calibration.calibrate(built, cfg, test_season)
+    season_sched = team_schedule(games).merge(games[["game_id", "season"]], on="game_id")
+    cal = calibration.calibrate(built, cfg, test_season, schedule=season_sched)
     var_mult = dict(zip(cal["category"], cal["multiplier"], strict=True))
     corr = cal.attrs["corr"].to_numpy(float)
     actual = actuals(built[built["season"] == test_season])

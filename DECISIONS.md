@@ -317,3 +317,20 @@ way: each player's Monday state onto every game his team plays that week.
   streams, so it's a ceiling, not the expected gain against active managers.
 - Also approximate: BallDontLie positions (G/F/C) mapped to Yahoo eligibility; one plan per week
   (Monday); plans don't carry between weeks.
+
+**Calibration fitted the live way (2026-10-05).** `calibration.live_player_weeks`: each player's
+Monday state (vectorized `monday_states`, tested equal to the dummy-row method) projected onto
+every game his team plays that week, with missed games counting 0. The old fit used only games
+players appeared in, so surprise absences were left out of the spread.
+- New multipliers (train 2023-24 + 2024-25): PTS 2.00 (was 1.25), REB 1.90, AST 1.69, TO 1.51,
+  3PTM 1.49, FT% 1.45, STL 1.30, BLK 1.26, FG% 1.19. Calibrated team-week coverage on 2025-26 is
+  78–82% in every category. Still about 12 s nightly.
+- Do-nothing check on all 140 matchups of the 20 replayed weeks: Brier 0.180, honest up to 90%
+  (predicted 85% → 88%, 75% → 71%). Only the extreme top still runs hot (95% → 81%, 21 weeks).
+- What remains is a bias in the means, not the spread: 4.75 expected categories against 4.51 won,
+  with favorites slightly overrated. Rosters drafted on projections pick the players whose noisy
+  projections ran high (the winner's curse), and the real draft board does the same. The fix is to
+  shrink noisy per-minute rates toward the league average by reliability. That's a Phase 3 model
+  change, judged on this same backtest.
+- Backtest with the new calibration (80 sampled team-weeks): plans 48% → 91% weekly win rate
+  (+44 pts, 80% range +36 to +51) against a non-streaming opponent; the predicted lift is +39.

@@ -21,6 +21,8 @@ makes P(|z| <= 1.2816 sqrt(k)) = 0.80 on the training seasons.
 
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo
+
 import numpy as np
 import pandas as pd
 
@@ -28,7 +30,8 @@ from research_room import features, store
 from research_room.config import Settings, settings
 from research_room.projections.baseline import STATS, BaselineModel
 
-Z80 = 1.2815515655446004            # half-width of a central 80% normal band, in sd
+ET = ZoneInfo("America/New_York")
+Z80 = 1.2815515655446004  # half-width of a central 80% normal band, in sd
 MODEL = "baseline_team_week"
 
 
@@ -38,8 +41,12 @@ def player_weeks(model, rows: pd.DataFrame) -> pd.DataFrame:
     df = rows.assign(date=rows["game_date"], play_prob=rows["play_rate_ewma"], season_games=10_000)
     p = model.predict(df).pivot_table(index=["player_id", "game_id"], columns="stat", values=["mean", "sd"])
     a = rows.set_index(["player_id", "game_id"]).loc[p.index]
-    g = pd.DataFrame({"player_id": p.index.get_level_values(0),
-                      "week": pd.to_datetime(a["game_date"]).dt.to_period("W-SUN").astype(str).to_numpy()})
+    g = pd.DataFrame(
+        {
+            "player_id": p.index.get_level_values(0),
+            "week": pd.to_datetime(a["game_date"]).dt.to_period("W-SUN").astype(str).to_numpy(),
+        }
+    )
     for s in STATS:
         g[f"{s}_mu"] = p[("mean", s)].to_numpy()
         g[f"{s}_v"] = p[("sd", s)].to_numpy() ** 2
@@ -50,12 +57,83 @@ def player_weeks(model, rows: pd.DataFrame) -> pd.DataFrame:
     return g.groupby(["player_id", "week"]).sum().reset_index()
 
 
+def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
+    """Each player's feature state as of each Monday (00:00 Eastern, given in UTC), from the feature
+    table: his first game at or after Monday carries the state after every game before Monday,
+    exactly what the live system projects from. A player with no later game (out for the season)
+    takes his last game's state, one game stale. Only players who have played before that Monday."""
+    keep = [
+        "player_id",
+        "team_id",
+        "tip_utc",
+        "min_played_ewma",
+        "play_rate_ewma",
+        *[f"{s}_pm_ewma" for s in STATS],
+    ]
+    right = built[keep].sort_values("tip_utc")
+    first = right.groupby("player_id")["tip_utc"].min()
+    pairs = pd.MultiIndex.from_product([first.index, mondays], names=["player_id", "monday"]).to_frame(
+        index=False
+    )
+    pairs = pairs[pairs["monday"] > pairs["player_id"].map(first)].sort_values("monday")
+    fwd = pd.merge_asof(
+        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="forward"
+    )
+    back = pd.merge_asof(
+        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="backward"
+    )
+    use_fwd = np.broadcast_to(fwd["tip_utc"].notna().to_numpy()[:, None], fwd.shape)
+    out = fwd.where(use_fwd, back)
+    return out.drop(columns=["tip_utc"]).dropna(subset=["min_played_ewma"])
+
+
+def live_player_weeks(model, built: pd.DataFrame, schedule: pd.DataFrame, season: int) -> pd.DataFrame:
+    """Player-weeks projected the live way for `season`: Monday state x every game his team plays
+    that Monday-Sunday week; actual totals count 0 for games he missed. From the season's second
+    Monday, so every player has an in-season state."""
+    b = built[built["season"] == season]
+    sched = schedule[schedule["season"] == season] if "season" in schedule else schedule
+    if b.empty or sched.empty:
+        return pd.DataFrame()
+    days = pd.to_datetime(sched["date"])
+    first = days.min() - pd.Timedelta(days=days.min().weekday()) + pd.Timedelta(days=7)
+    mondays = list(pd.date_range(first, days.max(), freq="7D"))
+    to_utc = lambda d: pd.Timestamp(d).tz_localize(ET).tz_convert("UTC")  # noqa: E731
+    states = monday_states(b, [to_utc(m) for m in mondays])
+    states["week"] = states["monday"].dt.tz_convert(ET).dt.date.astype(str)
+    g = sched.assign(
+        date=days.dt.date, week=(days - pd.to_timedelta(days.dt.weekday, unit="D")).dt.date.astype(str)
+    )
+    rows = g.merge(states, on=["team_id", "week"])
+    if rows.empty:
+        return pd.DataFrame()
+    pred = model.predict(rows.assign(play_prob=rows["play_rate_ewma"], season_games=10_000))
+    p = pred.pivot_table(index=["player_id", "game_id"], columns="stat", values=["mean", "sd"])
+    act = b.set_index(["player_id", "game_id"])[[f"y_{s}" for s in STATS]]
+    a = act.reindex(p.index).fillna(0.0)  # a game he missed counts nothing
+    wk = rows.drop_duplicates(["player_id", "game_id"]).set_index(["player_id", "game_id"])["week"]
+    out = pd.DataFrame({"player_id": p.index.get_level_values(0), "week": wk.reindex(p.index).to_numpy()})
+    for s in STATS:
+        out[f"{s}_mu"] = p[("mean", s)].to_numpy()
+        out[f"{s}_v"] = p[("sd", s)].to_numpy() ** 2
+        out[f"{s}_y"] = a[f"y_{s}"].to_numpy(float)
+    for made, att in (("fgm", "fga"), ("ftm", "fta")):
+        pct = np.where(
+            out[f"{att}_mu"] > 0, out[f"{made}_mu"] / out[f"{att}_mu"].where(out[f"{att}_mu"] > 0, 1), 0
+        )
+        out[f"{made}_bin"] = out[f"{att}_mu"] * pct * (1 - pct)
+    return out.groupby(["player_id", "week"]).sum().reset_index()
+
+
 def team_z(weeks: pd.DataFrame, cfg: Settings, seed: int) -> pd.DataFrame:
     """z per category for random teams (rows), using the simulator's variance formulas."""
     sim = cfg.simulation
     rng = np.random.default_rng(seed)
-    pools = [g.nlargest(sim.team_pool, "pts_mu") for _, g in weeks.groupby("week")
-             if len(g) >= sim.min_players_per_week]
+    pools = [
+        g.nlargest(sim.team_pool, "pts_mu")
+        for _, g in weeks.groupby("week")
+        if len(g) >= sim.min_players_per_week
+    ]
     if not pools:
         return pd.DataFrame()
     which = rng.integers(len(pools), size=sim.calibration_teams)
@@ -88,29 +166,52 @@ def coverage(z: pd.Series, k: float = 1.0) -> float:
     return float((z.abs() <= Z80 * np.sqrt(k)).mean()) if len(z) else float("nan")
 
 
-def calibrate(built: pd.DataFrame, cfg: Settings | None = None, test_season: int | None = None,
-              model_cls=BaselineModel) -> pd.DataFrame:
+def calibrate(
+    built: pd.DataFrame,
+    cfg: Settings | None = None,
+    test_season: int | None = None,
+    model_cls=BaselineModel,
+    schedule: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Fit multipliers on the seasons before `test_season`; score raw and calibrated coverage on it.
-    Returns one row per category."""
+    With `schedule` (team_id, game_id, date, season) the player-weeks are built the live way
+    (live_player_weeks: Monday states onto every scheduled game, missed games count 0), so
+    unexpected absences are in the spread; without it, from games played (the older method,
+    which leaves them out). Returns one row per category."""
     cfg = cfg or settings()
-    built = built[built["min_played_ewma"].notna()]
+    built = built[built["min_played_ewma"].notna()] if schedule is None else built
     seasons = sorted(built["season"].unique())
     test_season = test_season or seasons[-1]
     train = built[built["season"] < test_season]
     test = built[built["season"] == test_season]
-    model = model_cls(cfg).fit(train)
-    z_train = team_z(player_weeks(model, train), cfg, cfg.simulation.seed)
-    z_test = team_z(player_weeks(model, test), cfg, cfg.simulation.seed + 1)
+    model = model_cls(cfg).fit(train[train["min_played_ewma"].notna()])
+    if schedule is None:
+        w_train, w_test = player_weeks(model, train), player_weeks(model, test)
+    else:
+        w_train = pd.concat(
+            [live_player_weeks(model, built, schedule, s) for s in sorted(train["season"].unique())],
+            ignore_index=True,
+        )
+        w_test = live_player_weeks(model, built, schedule, test_season)
+    z_train = team_z(w_train, cfg, cfg.simulation.seed)
+    z_test = team_z(w_test, cfg, cfg.simulation.seed + 1)
     lo, hi = cfg.simulation.multiplier_bounds
     rows = []
     for cat in cfg.categories:
         raw = multiplier(z_train[cat.key])
         k = float(np.clip(raw, lo, hi))
-        rows.append({"category": cat.key, "raw_multiplier": raw, "multiplier": k,
-                     "coverage_raw": coverage(z_test[cat.key]), "coverage_80": coverage(z_test[cat.key], k),
-                     "n_teams": int(z_test[cat.key].notna().sum()),
-                     "train_seasons": ",".join(str(s) for s in sorted(train["season"].unique())),
-                     "test_season": int(test_season)})
+        rows.append(
+            {
+                "category": cat.key,
+                "raw_multiplier": raw,
+                "multiplier": k,
+                "coverage_raw": coverage(z_test[cat.key]),
+                "coverage_80": coverage(z_test[cat.key], k),
+                "n_teams": int(z_test[cat.key].notna().sum()),
+                "train_seasons": ",".join(str(s) for s in sorted(train["season"].unique())),
+                "test_season": int(test_season),
+            }
+        )
     dates = pd.to_datetime(test["game_date"])
     out = pd.DataFrame(rows).assign(window_start=dates.min().date(), window_end=dates.max().date())
     out.attrs["corr"] = correlation(z_train, cfg)
@@ -132,31 +233,64 @@ def run(con, cfg: Settings | None = None) -> pd.DataFrame:
     cfg = cfg or settings()
     seasons = sorted(cfg.bdl.backfill_seasons)
     built = features.build(features.load_logs(con, seasons), features.team_context(con, seasons), cfg)
-    return calibrate(built, cfg)
+    return calibrate(built, cfg, schedule=season_schedule(con))
+
+
+def season_schedule(con) -> pd.DataFrame:
+    """Regular-season games, one row per team per game: team_id, game_id, date, season."""
+    g = con.execute("""SELECT game_id, season, game_date, home_team_id, visitor_team_id FROM games
+                       WHERE NOT postseason""").df()
+    d = pd.to_datetime(g["game_date"]).dt.date
+    return pd.concat(
+        [
+            pd.DataFrame({"team_id": g[t], "game_id": g["game_id"], "date": d, "season": g["season"]})
+            for t in ("home_team_id", "visitor_team_id")
+        ],
+        ignore_index=True,
+    )
 
 
 def write(con, cal: pd.DataFrame) -> int:
     """Store the multipliers (sim_calibration) and the calibrated coverage (model_scores)."""
     now = store.utcnow()
-    store.upsert(con, "sim_calibration", cal.assign(model="baseline", fitted_at=now)[
-        ["model", "category", "fitted_at", "multiplier", "raw_multiplier", "train_seasons", "n_teams"]])
+    store.upsert(
+        con,
+        "sim_calibration",
+        cal.assign(model="baseline", fitted_at=now)[
+            ["model", "category", "fitted_at", "multiplier", "raw_multiplier", "train_seasons", "n_teams"]
+        ],
+    )
     corr = cal.attrs.get("corr")
     if corr is not None:
         long = corr.stack().rename("rho").rename_axis(["cat_a", "cat_b"]).reset_index()
         store.upsert(con, "sim_correlation", long.assign(model="baseline", fitted_at=now))
-    scores = pd.DataFrame({"model": MODEL, "stat": cal["category"], "window_start": cal["window_start"],
-                           "window_end": cal["window_end"], "run_at": now, "mae": np.nan, "rmse": np.nan,
-                           "coverage_80": cal["coverage_80"], "n": cal["n_teams"], "beats_baseline": None})
+    scores = pd.DataFrame(
+        {
+            "model": MODEL,
+            "stat": cal["category"],
+            "window_start": cal["window_start"],
+            "window_end": cal["window_end"],
+            "run_at": now,
+            "mae": np.nan,
+            "rmse": np.nan,
+            "coverage_80": cal["coverage_80"],
+            "n": cal["n_teams"],
+            "beats_baseline": None,
+        }
+    )
     return store.upsert(con, "model_scores", scores)
 
 
 def load_correlation(con, cfg: Settings | None = None, model: str = "baseline") -> np.ndarray | None:
     """Latest category correlation as a matrix in settings order, or None if not fitted yet."""
     cfg = cfg or settings()
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT cat_a, cat_b, rho FROM sim_correlation
         WHERE model = ? AND fitted_at = (SELECT max(fitted_at) FROM sim_correlation WHERE model = ?)
-    """, [model, model]).df()
+    """,
+        [model, model],
+    ).df()
     if df.empty:
         return None
     keys = [c.key for c in cfg.categories]
@@ -166,8 +300,11 @@ def load_correlation(con, cfg: Settings | None = None, model: str = "baseline") 
 
 def load_multipliers(con, model: str = "baseline") -> dict[str, float]:
     """Latest fitted multiplier per category (empty: none fitted yet -> the simulator uses 1)."""
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT category, multiplier FROM sim_calibration
         WHERE model = ? AND fitted_at = (SELECT max(fitted_at) FROM sim_calibration WHERE model = ?)
-    """, [model, model]).fetchall()
+    """,
+        [model, model],
+    ).fetchall()
     return {c: float(k) for c, k in rows}

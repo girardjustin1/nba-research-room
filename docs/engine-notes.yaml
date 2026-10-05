@@ -3,6 +3,20 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-live-calibration
+    date: 2026-10-05
+    kind: finding
+    title: Weekly odds now account for surprise absences
+    body: >
+      The weekly spreads were fitted only on games players actually played, so injuries nobody
+      saw coming were missing. Refitted the way the tool really works (each Monday's projections
+      against every scheduled game, missed games counting zero), the spreads are wider: points
+      about 2x, rebounds 1.9x. Checked on 140 head-to-heads from last season, win chances are now
+      honest up to 90%. Only the most lopsided weeks still run a bit hot (95% predicted, 81% won).
+      That last bit comes from rosters built on optimistic projections, which the next projection
+      models will fix.
+    refs: [DECISIONS.md, src/research_room/calibration.py]
+
   - id: 2026-10-05-backtest
     date: 2026-10-05
     kind: finding

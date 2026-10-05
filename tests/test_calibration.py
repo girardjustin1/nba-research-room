@@ -77,3 +77,48 @@ def test_write_and_load_multipliers(con):
         "SELECT stat, coverage_80, mae FROM model_scores WHERE model = 'baseline_team_week'").df()
     assert len(scores) == 2 and scores["mae"].isna().all()
     assert calibration.load_multipliers(store.connect(":memory:")) == {}
+
+
+def test_monday_states_match_the_live_dummy_row_method():
+    """Two independent ways to get a player's state as of Monday must agree."""
+    from datetime import date, datetime
+
+    from research_room import features, matchup
+    from tests.test_leakage import synthetic
+    cfg = settings()
+    logs, ctx = synthetic(n_players=8, n_games=40)
+    logs = logs.assign(game_date=pd.to_datetime(logs["game_date"]))
+    built = features.build(logs, ctx, cfg)
+    monday = date(2025, 11, 17)
+    cut = pd.Timestamp(datetime.combine(monday, datetime.min.time(), matchup.ET)).tz_convert("UTC")
+    fast = calibration.monday_states(built, [cut]).set_index("player_id")
+    pre = logs[logs["tip_utc"] < cut]
+    last = pre.sort_values("tip_utc").groupby("player_id").tail(1)
+    dummy = last.assign(game_id=-last["player_id"], tip_utc=cut, minutes=0.0, did_play=False,
+                        usage_pct=np.nan, game_date=pd.Timestamp(monday))
+    for s in features.RATE_STATS:
+        dummy[s] = 0.0
+    slow = features.build(pd.concat([pre, dummy], ignore_index=True), ctx, cfg)
+    slow = slow[slow["game_id"] < 0].set_index("player_id")
+    cols = ["min_played_ewma", "play_rate_ewma", "pts_pm_ewma", "reb_pm_ewma", "fg3m_pm_ewma"]
+    pd.testing.assert_frame_equal(fast.loc[slow.index, cols].astype(float), slow[cols].astype(float),
+                                  check_exact=False, rtol=1e-9)
+
+
+def test_live_player_weeks_count_missed_games_as_zero():
+    from research_room import features
+    from research_room.projections.baseline import BaselineModel
+    from tests.test_leakage import synthetic
+    cfg = settings()
+    logs, ctx = synthetic(n_players=8, n_games=40)
+    logs = logs.assign(game_date=pd.to_datetime(logs["game_date"]))
+    built = features.build(logs, ctx, cfg)
+    model = BaselineModel(cfg).fit(built[built["min_played_ewma"].notna()])
+    games = logs.drop_duplicates(["game_id", "team_id"])
+    sched = pd.DataFrame({"team_id": games["team_id"], "game_id": games["game_id"],
+                          "date": pd.to_datetime(games["game_date"]).dt.date, "season": 2025})
+    # Player 101 vanishes after Nov 20: his scheduled games after that must count 0 actual.
+    gone = logs[~((logs["player_id"] == 101) & (logs["game_date"] > "2025-11-20"))]
+    w = calibration.live_player_weeks(model, features.build(gone, ctx, cfg), sched, 2025)
+    late = w[(w["player_id"] == 101) & (w["week"] > "2025-11-24")]
+    assert not late.empty and (late["pts_y"] == 0).all() and (late["pts_mu"] > 0).all()
