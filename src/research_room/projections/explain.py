@@ -314,10 +314,11 @@ def player_analysis(
         )
     )
 
-    # ---- news (overrides: X posts and the BallDontLie injury report)
+    # ---- news (overrides: X posts, the NBA injury report and BallDontLie's list)
     start = now.tz_convert(ET).date()
     ov = overrides.resolve(con, start, start + timedelta(days=7), as_of=now.to_pydatetime(), cfg=cfg)
-    ov = ov[ov["player_id"] == player_id].sort_values("ts", ascending=False)
+    ov = ov[(ov["player_id"] == player_id) & (ov["status"] != overrides.NOT_LISTED)].sort_values(
+        "ts", ascending=False)
     tier = {"official": "official", "insider": "insider", "beat": "beat", "aggregator": "aggregator"}
     events = []
     for r in ov.drop_duplicates(["source", "status"]).head(5).itertuples(index=False):
@@ -327,7 +328,10 @@ def player_analysis(
             if code in {"out", "doubtful", "questionable", "probable", "day_to_day"}
             else ("healthy" if code == "available" else None)
         )
-        kind = "x" if str(r.source).startswith("X @") else ("manual" if r.authority == "manual" else "bdl")
+        kind = (
+            "x" if str(r.source).startswith("X @")
+            else {"manual": "manual", "nba_report": "nba_report"}.get(r.authority, "bdl")
+        )
         summary = f"{r.status}" + (f", minutes limit {r.minutes_cap:.0f}" if pd.notna(r.minutes_cap) else "")
         events.append(
             {

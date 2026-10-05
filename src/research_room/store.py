@@ -87,6 +87,11 @@ SCHEMA: dict[str, Table] = {
         "event_id VARCHAR", "player_id INTEGER", "team_id INTEGER", "status VARCHAR",
         "minutes_cap DOUBLE", "starting BOOLEAN", "confidence DOUBLE", "account VARCHAR",
         "authority_rank INTEGER", "ts TIMESTAMPTZ", *_INGEST),
+    "nba_report_rows": _t(("report_ts", "game_id", "player_id"),
+        "report_ts TIMESTAMPTZ", "game_id INTEGER", "team_id INTEGER", "player_id INTEGER",
+        "status VARCHAR", "reason VARCHAR", *_INGEST),
+    "nba_report_teams": _t(("report_ts", "game_id", "team_id"),
+        "report_ts TIMESTAMPTZ", "game_id INTEGER", "team_id INTEGER", "submitted BOOLEAN", *_INGEST),
     "x_feed_log": _t(("poll_at", "query_key"),
         "poll_at TIMESTAMPTZ", "query_key VARCHAR", "day DATE", "posts_read INTEGER",
         "newest_at TIMESTAMPTZ", "events INTEGER"),
@@ -256,6 +261,12 @@ def ingest_run(con: duckdb.DuckDBPyConnection, source: str, job: str) -> Iterato
         raise
     finally:
         upsert(con, "ingest_runs", pd.DataFrame([{**run, "finished_at": utcnow()}]))
+
+
+def has_table(con: duckdb.DuckDBPyConnection, name: str) -> bool:
+    """False for a table added to SCHEMA since a read-only connection's file was last written."""
+    return bool(con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
+                            [name]).fetchone()[0])
 
 
 def table_counts(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:

@@ -23,7 +23,7 @@ import pandas as pd
 
 from research_room import calibration, features, lineup, matchup, overrides, schedule, scoreboard, store
 from research_room.config import Settings, settings
-from research_room.ingest import bdl, kalshi, rundown, x_feed, yahoo
+from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
@@ -112,9 +112,9 @@ def refresh_projections(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date
 
 def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None,
                 client: bdl.BdlClient | None = None, echo=print) -> dict:
-    """Pre-game refresh (game days, every few minutes before tip): X news, BallDontLie injuries,
-    markets, then today's projections and a matchup snapshot. Each feed failing is recorded and
-    the rest goes on."""
+    """Pre-game refresh (game days, every few minutes before tip): X news, the NBA injury report,
+    BallDontLie injuries, markets, then today's projections and a matchup snapshot. Each feed
+    failing is recorded and the rest goes on."""
     cfg = cfg or settings()
     now = now or datetime.now(ET)
     day = now.astimezone(ET).date()
@@ -138,6 +138,8 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
 
     with store.ingest_run(con, "pipeline", "pregame") as run:
         report["x_feed"] = step("x feed", lambda: guarded("x feed", "x", lambda: x_feed.poll(con, cfg)))
+        report["nba_report"] = step("nba injury report", lambda: guarded(
+            "nba injury report", "nba_report", lambda: nba_injury_report.sync(con, cfg)))
         api = client or bdl.BdlClient.from_env()
         report["injuries"] = step("injuries",
                                    lambda: guarded("injuries", "bdl", lambda: bdl.sync_injuries(con, api)))
@@ -149,6 +151,17 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
         run["rows"] = int(report.get("projections") or 0)
         run["detail"] = json.dumps(report, default=str)[:2000]
     return report
+
+
+def _guarded_report(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
+    """The NBA injury report, recorded in ingest_runs; an outage never stops the run."""
+    try:
+        with store.ingest_run(con, "nba_report", "nightly") as run:
+            out = nba_injury_report.sync(con, cfg)
+            run["detail"] = json.dumps(out, default=str)[:2000]
+        return out
+    except Exception as exc:  # noqa: BLE001 - recorded above; the night goes on
+        return {"error": f"{type(exc).__name__}: {exc}"[:300]}
 
 
 def driver_model(cfg: Settings) -> BaselineModel:
@@ -203,6 +216,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         if sync:
             api = client or bdl.BdlClient.from_env()
             report["bdl"] = step("bdl sync", lambda: bdl.sync_daily(con, api, day))
+            report["nba_report"] = step("nba injury report", lambda: _guarded_report(con, cfg))
             report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
         try:
             report["inbox"] = step("yahoo inbox", lambda: yahoo.ingest_inbox(con))

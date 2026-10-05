@@ -185,10 +185,32 @@ class FeaturesConfig(BaseModel):
     rotation_minutes: float
 
 
+class UnlistedConfig(BaseModel):
+    """P(plays) for a rotation player missing from a filed NBA injury report, by recent play rate."""
+    play_rate_bins: list[float] = Field(default_factory=list)   # upper edges; len(probs) - 1
+    probs: list[float] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _shape(self) -> UnlistedConfig:
+        if self.probs and len(self.probs) != len(self.play_rate_bins) + 1:
+            raise ValueError("overrides.unlisted: probs needs one more entry than play_rate_bins")
+        if self.play_rate_bins != sorted(self.play_rate_bins):
+            raise ValueError("overrides.unlisted: play_rate_bins must be increasing")
+        return self
+
+
 class OverridesConfig(BaseModel):
     status_play_prob: dict[str, float]
     no_return_date_days: dict[str, int]
     authority: list[str]
+    unlisted: UnlistedConfig = Field(default_factory=UnlistedConfig)
+
+
+class NbaReportConfig(BaseModel):
+    base_url: str = "https://ak-static.cms.nba.com/referee/injury/"
+    lookback_minutes: int = 180
+    step_minutes: int = 15
+    requests_per_second: float = 2.0
 
 
 class ShrinkageConfig(BaseModel):
@@ -315,6 +337,7 @@ class Settings(BaseModel):
     bdl: BdlConfig
     markets: MarketsConfig
     x_feed: XFeedConfig
+    nba_report: NbaReportConfig = Field(default_factory=NbaReportConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig

@@ -1,13 +1,19 @@
 """Player availability per date: injuries + X status events + manual overrides -> play_prob and
 minutes_cap, with the source that decided it.
 
-Inputs: `injuries` snapshots (BallDontLie), `status_events` (X feed, Phase 3), config/overrides.yaml,
+Inputs: `injuries` snapshots (BallDontLie), the NBA's official injury report (nba_report_rows /
+nba_report_teams), `status_events` (X feed, Phase 3), config/overrides.yaml,
 settings.overrides (status -> P(plays), how long a status lasts without a return date, authority).
 Outputs: DataFrame [player_id, date, play_prob, minutes_cap, status, authority, source, ts, note],
 one row per player-date that any source speaks to. Players with no row are unaffected (the
 baseline's own play rate applies). `ts` is when the news was known: the post time for X, the first
 snapshot listing the current status for the injury report.
-Tables: reads injuries, status_events, players.
+Tables: reads injuries, nba_report_rows, nba_report_teams, status_events, players.
+
+Not listed: for a team that has filed today's NBA report, each of its players who isn't on it gets
+a row with status NOT_LISTED and no play_prob. It outranks BallDontLie's list (a stale "out" for a
+player the league no longer lists), and fill_unlisted() turns it into P(plays) from his recent
+play rate (settings.overrides.unlisted) once the projection rows are known.
 
 Precedence: the most authoritative source wins (manual > official > insider > beat > aggregator >
 bdl); within one authority, the most recent report wins. Injury snapshots are read as of a time,
@@ -20,6 +26,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -28,6 +35,7 @@ from research_room.config import CONFIG_DIR, Settings, settings
 from research_room.ingest.names import normalize_name
 
 COLUMNS = ["player_id", "date", "play_prob", "minutes_cap", "status", "authority", "source", "ts", "note"]
+NOT_LISTED = "Not Listed"
 
 
 def _dates(start: date, end: date) -> list[date]:
@@ -112,6 +120,66 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
+def from_nba_report(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime,
+                    cfg: Settings) -> pd.DataFrame:
+    """The latest NBA injury report at or before `as_of`: listed players with their status (news
+    time = the first report listing that status for that game), and NOT_LISTED rows for every
+    other player of each team that has filed."""
+    from research_room.ingest.nba_injury_report import latest_report_ts
+
+    ts = latest_report_ts(con, as_of)
+    if ts is None:
+        return pd.DataFrame(columns=COLUMNS)
+    listed = con.execute("""
+        WITH cur AS (
+            SELECT r.game_id, r.team_id, r.player_id, r.status, r.reason, g.game_date
+            FROM nba_report_rows r JOIN games g USING (game_id)
+            WHERE r.report_ts = ? AND g.game_date BETWEEN ? AND ?)
+        SELECT c.*, (SELECT min(h.report_ts) FROM nba_report_rows h
+                     WHERE h.game_id = c.game_id AND h.player_id = c.player_id AND h.status = c.status
+                       AND h.report_ts <= ?
+                       AND h.report_ts > coalesce((SELECT max(x.report_ts) FROM nba_report_rows x
+                                                   WHERE x.game_id = c.game_id AND x.player_id = c.player_id
+                                                     AND x.status <> c.status AND x.report_ts <= ?),
+                                                  '-infinity'::TIMESTAMPTZ)) AS since
+        FROM cur c
+    """, [ts, start, end, ts, ts]).df()
+    rows = [{"player_id": int(r.player_id), "date": pd.Timestamp(r.game_date).date(),
+             "play_prob": _prob(r.status, cfg), "minutes_cap": None, "status": r.status,
+             "authority": "nba_report", "source": "NBA injury report",
+             "ts": r.since if pd.notna(r.since) else ts, "note": (r.reason or "")[:200] or None}
+            for r in listed.itertuples(index=False)]
+    filed = con.execute("""
+        SELECT t.team_id, g.game_date, p.player_id
+        FROM nba_report_teams t JOIN games g USING (game_id) JOIN players p ON p.team_id = t.team_id
+        WHERE t.report_ts = ? AND t.submitted AND g.game_date BETWEEN ? AND ?
+    """, [ts, start, end]).df()
+    on_report = {(int(r.player_id), pd.Timestamp(r.game_date).date()) for r in listed.itertuples(index=False)}
+    for r in filed.itertuples(index=False):
+        d = pd.Timestamp(r.game_date).date()
+        if (int(r.player_id), d) not in on_report:
+            rows.append({"player_id": int(r.player_id), "date": d, "play_prob": None, "minutes_cap": None,
+                         "status": NOT_LISTED, "authority": "nba_report", "source": "NBA injury report",
+                         "ts": ts, "note": None})
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def fill_unlisted(df: pd.DataFrame, cfg: Settings) -> pd.Series:
+    """P(plays) for NOT_LISTED rows of projection rows `df` (status_override, play_rate_ewma,
+    min_played_ewma): a rotation player by his recent play rate (settings.overrides.unlisted);
+    anyone else keeps the model's own P(plays) (NaN)."""
+    u = cfg.overrides.unlisted
+    out = pd.Series(np.nan, index=df.index)
+    if "status_override" not in df or not u.probs:
+        return out
+    rate = pd.to_numeric(df["play_rate_ewma"], errors="coerce")
+    rot = pd.to_numeric(df["min_played_ewma"], errors="coerce") >= cfg.baseline.teammates.rotation_minutes
+    hit = (df["status_override"] == NOT_LISTED) & rot & rate.notna()
+    idx = np.searchsorted(np.asarray(u.play_rate_bins, dtype=float), rate[hit].to_numpy(float), side="left")
+    out[hit] = np.asarray(u.probs, dtype=float)[idx]
+    return out
+
+
 def from_manual(con: duckdb.DuckDBPyConnection, start: date, end: date, cfg: Settings,
                 path: Path | None = None) -> pd.DataFrame:
     """config/overrides.yaml entries (player_id, or a name resolved exactly against players)."""
@@ -147,6 +215,7 @@ def resolve(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datet
     cfg = cfg or settings()
     as_of = as_of or store.utcnow()
     parts = [f for f in (from_injuries(con, start, end, as_of, cfg),
+                         from_nba_report(con, start, end, as_of, cfg),
                          from_status_events(con, start, end, as_of, cfg),
                          from_manual(con, start, end, cfg, manual_path)) if not f.empty]
     if not parts:

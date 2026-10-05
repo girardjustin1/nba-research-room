@@ -567,15 +567,16 @@ P(plays) and when the news arrived. A player ruled out on X after the props were
 
   | | no news | 5 PM injury report | report + "not listed" | who sat (hindsight) |
   |---|---|---|---|---|
-  | minutes | −0.0% | −2.0% | −4.5% | −7.1% |
-  | points | −0.1% | −0.6% | −1.7% | −2.4% |
-  | rebounds | +0.1% | −0.3% | −1.1% | −1.8% |
+  | minutes | −0.0% | −2.0% | −4.4% | −7.1% |
+  | points | −0.1% | −0.6% | −1.6% | −2.4% |
+  | rebounds | +0.1% | −0.3% | −1.0% | −1.8% |
   | assists | +0.1% | −0.3% | −1.1% | −1.6% |
   | FGA | −0.3% | −1.2% | −3.3% | −4.7% |
 
-  "Not listed" treats a player missing from the report as likely to play, by his recent play
-  rate (98% at a play rate above 0.95, 42% at 0.3 or less; the table was read from 2025-26
-  itself, a mild in-sample advantage). Earlier challengers moved points by ±0.5%.
+  "Not listed" treats a rotation player missing from the report as likely to play, by his recent
+  play rate: fitted on 2024-25 only (98.3% above 0.95, 96.5% for 0.8-0.95, 89% for 0.6-0.8, 77%
+  for 0.3-0.6, 47% at 0.3 or less) and scored on 2025-26. Earlier challengers moved points by
+  ±0.5%.
 - Backtest (140 team-weeks, Monday projections, so no game-day news): weekly-odds Brier 0.175 on
   vs 0.168 off, but the projections change the simulated draft, so the two runs are different
   leagues (the same do-nothing result in 55% of matchups). Paired by matchup, the difference's 80%
@@ -586,9 +587,34 @@ P(plays) and when the news arrived. A player ruled out on X after the props were
   2024-25 and 2025-26 game day plus the noon report for early tips, 45,643 rows, 98.8% of
   2025-26's NBA (not G League) rows matched to players (suffixes like "ButlerIII" stripped). 80%
   of rotation players who sat were listed. The research scripts were scratch; the method is here.
-- Status calibration from the same reports (how often the player played): Out 0.1% of 9,451,
-  Doubtful 1.4% of 366, Questionable 51% of 1,630, Probable 92% of 575. `status_play_prob` now
-  uses Doubtful 0.02 (was an assumed 0.25), Questionable 0.51, Probable 0.92. "Available" played
-  81% of 968, mostly two-way and G League listings, so it stays 1.0 for X posts.
+- Status calibration from the same reports (how often the player played), 2024-25 / 2025-26:
+  Out 0.3% / 0.1%, Doubtful 2.3% of 266 / 1.4% of 366, Questionable 47% of 1,982 / 51% of 1,630,
+  Probable 91% of 729 / 92% of 575. `status_play_prob` now uses the pooled rates: Doubtful 0.02
+  (was an assumed 0.25), Questionable 0.49, Probable 0.91. "Available" played about 81%, mostly
+  two-way and G League listings, so it stays 1.0 for X posts.
 - Next: read the official report live (the X feed and BallDontLie's list give part of it), which
   is what the "report + not listed" column needs.
+
+**The NBA's official injury report, read live (2026-10-05).** `ingest/nba_injury_report.py`, in the
+pre-game and nightly runs.
+- Each run reads the newest published report (trying each 15-minute slot back 3 hours, in both
+  file-name formats) and stores it once: listed players with status and reason
+  (`nba_report_rows`), and each team-game with whether the team has filed (`nba_report_teams`).
+  The text is read with pdfplumber at a tight character gap (x_tolerance 1.5); at the default,
+  names lose their spaces. New dependency: pdfplumber 0.11.10 (pure Python, plus pypdfium2).
+- On two real reports the production parser matched 99–100% of NBA (not G League) names through
+  the shared resolver and found every team-game, including teams not yet filed. Unmatched names
+  are quarantined as usual.
+- Overrides: listed statuses at the calibrated P(plays), with the news time the first report that
+  showed that status. Authority: manual > team accounts > insiders > NBA report > beat writers >
+  aggregators > BallDontLie, so an insider's later post (a late scratch) still wins, and the
+  report beats BallDontLie's list.
+- Not listed: for a team that has filed, every other player gets a "Not Listed" row. It outranks
+  BallDontLie (a stale "out" for a player the league no longer lists) and, for a rotation player,
+  becomes P(plays) from his recent play rate (settings.overrides.unlisted, fitted on 2024-25).
+  Bench players keep the model's own P(plays). It never stales a betting line (it changes
+  P(plays) only), and the explanation screen leaves it out of the news list.
+- Read-only connections on a store written before this change have no report tables; the report
+  then reads as absent instead of failing (`store.has_table`).
+- Not yet checked live: no report has been published in the preseason (none in the 3 hours before
+  12:40 ET today). The health screen's check for it starts with the regular season.

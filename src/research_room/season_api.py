@@ -82,7 +82,7 @@ def _player_refs(con, roster: pd.DataFrame, status_by_pid: dict, now: datetime) 
 
 def _status(row: pd.Series, now: datetime) -> dict:
     code, label = STATUS_CODES.get(str(row["status"] or "").lower(), ("healthy", ""))
-    kind = {"bdl": "bdl", "manual": "manual"}.get(row["authority"], "x")
+    kind = {"bdl": "bdl", "manual": "manual", "nba_report": "nba_report"}.get(row["authority"], "x")
     tiers = ("official", "insider", "beat", "aggregator")
 
     def num(v):

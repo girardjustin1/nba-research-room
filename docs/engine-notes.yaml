@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-nba-report
+    date: 2026-10-05
+    kind: update
+    title: The app now reads the NBA's official injury report
+    body: >
+      Before each game day the app reads the league's own injury report, the one every team must
+      file. Listed players get a calibrated chance of playing, and a regular who isn't listed is
+      treated as very likely to play, which also tells his teammates' projections who is back.
+      It starts with the regular season (no reports are published in the preseason).
+    refs: [DECISIONS.md, src/research_room/ingest/nba_injury_report.py]
+
   - id: 2026-10-05-teammates-out
     date: 2026-10-05
     kind: update
@@ -10,8 +21,8 @@ notes:
     body: >
       Projections now move minutes and shots to the teammates who play when rotation players are
       ruled out, and back when they return. Tested on last season with the NBA's own 5 PM injury
-      reports: minutes error down 2-4.5% and points 0.6-1.7%, depending on how much of the report
-      we read. Doubtful players are now treated as almost certainly out (1.4% played last season,
+      reports: minutes error down 2-4.4% and points 0.6-1.6%, depending on how much of the report
+      we read. Doubtful players are now treated as almost certainly out (2% played over two seasons,
       not the 25% assumed).
     refs: [DECISIONS.md, src/research_room/teammates.py]
 

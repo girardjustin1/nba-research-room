@@ -108,16 +108,17 @@ features:                      # chosen from 2024-26 data: see DECISIONS.md (Pha
 
 overrides:
   # P(plays) by injury status. Doubtful / Questionable / Probable: how often players with that
-  # status on the NBA's 5 PM (or pre-tip morning) injury report played in 2024-26 (DECISIONS.md,
-  # teammates out): 1.4% of 366, 51% of 1,630, 92% of 575. Day-To-Day (BallDontLie's word) is not
-  # on the official report and stays assumed. A manual entry or an explicit play_prob wins.
+  # status on the NBA's 5 PM (or pre-tip noon) injury report played, 2024-25 and 2025-26 pooled
+  # (DECISIONS.md, teammates out): 1.8% of 632, 49% of 3,612, 91% of 1,304. Day-To-Day
+  # (BallDontLie's word) is not on the official report and stays assumed. A manual entry or an
+  # explicit play_prob wins.
   status_play_prob:
     "Out": 0.0
     "Out For Season": 0.0
     "Doubtful": 0.02
-    "Questionable": 0.51
+    "Questionable": 0.49
     "Day-To-Day": 0.6
-    "Probable": 0.92
+    "Probable": 0.91
     "Available": 1.0
   # With no return date, a status applies for this many days after the report (inclusive).
   no_return_date_days:
@@ -127,8 +128,16 @@ overrides:
     "Day-To-Day": 2
     "Probable": 1
     "Available": 1
-  # Authority, highest first. Manual entries (overrides.yaml) outrank everything.
-  authority: [manual, official, insider, beat, aggregator, bdl]
+  # Authority, highest first. Manual entries (overrides.yaml) outrank everything. The NBA's own
+  # injury report sits below team accounts and insiders (whose later posts carry late scratches)
+  # and above beat writers, aggregators and BallDontLie's list.
+  authority: [manual, official, insider, nba_report, beat, aggregator, bdl]
+  # A rotation player (EWMA minutes >= baseline.teammates.rotation_minutes) missing from his
+  # team's filed NBA injury report: how often he played, by his recent play rate, 2024-25
+  # (DECISIONS.md, teammates out). Bins are upper edges of the play rate.
+  unlisted:
+    play_rate_bins: [0.3, 0.6, 0.8, 0.95]
+    probs: [0.47, 0.77, 0.89, 0.965, 0.983]
 
 baseline:
   preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
@@ -184,6 +193,7 @@ system:                        # health-check freshness budgets, in hours
   freshness_hours:
     bdl_sync: 30               # nightly at 18:30 -> a missed night turns this yellow
     injuries: 30
+    nba_report: 30             # the NBA's official injury report (checked once the season starts)
     odds: 30
     projections: 30
     yahoo_roster: 48           # only checked once a roster snapshot is expected (after the draft)
@@ -224,6 +234,12 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     game_markets: {1: moneyline, 2: spread, 3: total}
     days_ahead: 2              # today plus this many days of events per nightly run
     requests_per_second: 5
+
+nba_report:                    # the NBA's official injury report (ingest/nba_injury_report.py)
+  base_url: https://ak-static.cms.nba.com/referee/injury/
+  lookback_minutes: 180        # look this far back for the newest published report
+  step_minutes: 15             # reports are named by their publishing slot
+  requests_per_second: 2
 
 x_feed:                        # injury / lineup news from config/x_accounts.yaml (ingest/x_feed.py)
   daily_read_budget: 300       # posts read per day (X is pay-per-use); polling stops at the cap

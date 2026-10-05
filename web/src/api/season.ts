@@ -130,7 +130,7 @@ export type SourceTier = 'official' | 'insider' | 'beat' | 'aggregator';
 
 /** A source of news or a line. X sources carry the curated tier from `x_accounts.yaml`. */
 export interface SourceRef {
-  kind: 'x' | 'bdl' | 'yahoo' | 'kalshi' | 'sportsbook' | 'manual';
+  kind: 'x' | 'bdl' | 'nba_report' | 'yahoo' | 'kalshi' | 'sportsbook' | 'manual';
   /** "@TeamPR" for X; book name for sportsbooks; null otherwise. */
   handle: string | null;
   display_name: string;

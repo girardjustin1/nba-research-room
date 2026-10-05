@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from research_room import features, schedule, store, teammates
+from research_room import overrides as overrides_mod
 from research_room.config import Settings, settings
 from research_room.draft.value import NBA_REGULAR_SEASON_GAMES
 
@@ -266,10 +267,13 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
                      **{f"{s}_mean": f"prior_{s}" for s in STATS}})
         df = df.merge(pr, on="player_id", how="left")
     if overrides is not None and not overrides.empty:
-        ov = overrides[["player_id", "date", "play_prob", "minutes_cap"]].rename(
-            columns={"play_prob": "play_prob_override"})
+        ov = overrides[["player_id", "date", "play_prob", "minutes_cap", "status"]].rename(
+            columns={"play_prob": "play_prob_override", "status": "status_override"})
         ov = ov.assign(date=pd.to_datetime(ov["date"]).dt.date)
         df = df.merge(ov, on=["player_id", "date"], how="left")
+        # Missing from his team's filed NBA injury report: likely to play (overrides.fill_unlisted).
+        df["play_prob_override"] = pd.to_numeric(df["play_prob_override"], errors="coerce").fillna(
+            overrides_mod.fill_unlisted(df, cfg))
     return model.predict(df)
 
 

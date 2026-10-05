@@ -26,8 +26,12 @@ catboost==1.2.10
     # via research-room
 certifi==2026.7.22
     # via requests
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+    # via cryptography
 charset-normalizer==3.5.2
-    # via requests
+    # via
+    #   pdfminer-six
+    #   requests
 click==8.5.0
     # via
     #   streamlit
@@ -44,6 +48,8 @@ contourpy==1.4.0
     # via matplotlib
 cpsat-logutils==1.0.0
     # via orloge
+cryptography==50.0.2
+    # via pdfminer-six
 cycler==0.12.1
     # via matplotlib
 docopt==0.6.2
@@ -161,9 +167,14 @@ pandas==3.0.6
     #   research-room
     #   shap
     #   streamlit
+pdfminer-six==20260107
+    # via pdfplumber
+pdfplumber==0.11.10
+    # via research-room
 pillow==12.3.0
     # via
     #   matplotlib
+    #   pdfplumber
     #   streamlit
 plotly==7.1.0
     # via
@@ -181,6 +192,8 @@ pyarrow==25.0.1
     # via
     #   research-room
     #   streamlit
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pydantic==2.13.5
     # via
     #   anthropic
@@ -199,6 +212,8 @@ pygments==2.21.0
     # via pytest
 pyparsing==3.3.3
     # via matplotlib
+pypdfium2==5.14.0
+    # via pdfplumber
 pytest==9.1.1
 python-dateutil==2.9.0.post0
     # via

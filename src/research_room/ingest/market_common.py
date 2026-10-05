@@ -32,7 +32,7 @@ class RateLimited:
         self._last = 0.0
         self.calls = 0
 
-    def get(self, url: str, params: dict | None = None) -> dict:
+    def _send(self, url: str, params: dict | None = None) -> requests.Response:
         for attempt in range(self.retries + 1):
             wait = self._last + self.gap - time.monotonic()
             if wait > 0:
@@ -43,10 +43,21 @@ class RateLimited:
             if r.status_code == 429 or r.status_code >= 500:
                 time.sleep(min(2**attempt, 15))
                 continue
-            r.raise_for_status()
-            return r.json()
+            return r
+        return r
+
+    def get(self, url: str, params: dict | None = None) -> dict:
+        r = self._send(url, params)
         r.raise_for_status()
-        return {}
+        return r.json()
+
+    def get_bytes(self, url: str) -> bytes | None:
+        """A file's bytes, or None when it isn't there (403 / 404: not published)."""
+        r = self._send(url)
+        if r.status_code in (403, 404):
+            return None
+        r.raise_for_status()
+        return r.content
 
 
 class GameIndex:

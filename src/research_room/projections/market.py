@@ -111,7 +111,7 @@ def unconditional(mu: float, sd: float, p_play: float) -> tuple[float, float]:
     return mean, float(np.sqrt(max(p_play * (sd**2 + mu**2) - mean**2, 0.0)))
 
 
-LIMITING_EXEMPT = {"available", "out"}  # news that changes P(plays) only: the line if he plays holds
+LIMITING_EXEMPT = {"available", "out", "not listed"}  # P(plays) only: the line if he plays holds
 
 
 def news_times(news: pd.DataFrame | None) -> dict[tuple[int, object], pd.Timestamp]:

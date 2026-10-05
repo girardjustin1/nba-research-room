@@ -65,6 +65,13 @@ def health(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
     checks.append(_fresh("bdl_sync", "BallDontLie data", last_sync, fh["bdl_sync"], now, "run make nightly"))
     checks.append(_fresh("injuries", "Injury report", one("SELECT max(fetched_at) FROM injuries"),
                          fh["injuries"], now, "run make nightly"))
+    if now.tz_convert("America/New_York").date() >= cfg.season.first_game_date:  # reports start then
+        checks.append(_fresh(
+            "nba_report", "NBA injury report",
+            one("SELECT max(fetched_at) FROM nba_report_teams") if store.has_table(con, "nba_report_teams")
+            else None,
+            fh.get("nba_report", fh["injuries"]), now, "run make pregame (or make nightly)",
+            missing_detail="no official report read yet: 'not listed' players use their play rate"))
     odds_last = one("SELECT max(fetched_at) FROM odds")
     checks.append(_fresh("odds", "Betting-line archive", odds_last, fh["odds"], now,
                          "run make nightly (odds history only exists from the first nightly run)",
