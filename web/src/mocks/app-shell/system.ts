@@ -143,7 +143,7 @@ export const readinessWarn: ReadinessResponse = {
     { key: 'eligibility', label: 'Yahoo position eligibility', status: 'warn', detail: "62% of the top 200 have Yahoo eligibility; the rest use Basketball Monster's primary position", action: 'save players.csv (all players, with eligible_positions) to data/inbox, run make inbox' },
     { key: 'names', label: 'Yahoo names', status: 'ok', detail: 'all matched', action: null },
     { key: 'slot', label: 'My draft slot', status: 'ok', detail: 'slot 6 of 14', action: null },
-    { key: 'rounds', label: 'Draft rounds', status: 'ok', detail: '13 rounds', action: null },
+    { key: 'rounds', label: 'Draft rounds', status: 'ok', detail: '12 rounds', action: null },
     { key: 'keepers', label: 'Keepers', status: 'ok', detail: '0 configured', action: null },
     { key: 'weeks', label: 'Fantasy week boundaries', status: 'warn', detail: 'weeks 1-19 assumed (affects games-per-week on the board)', action: 'compare with the Yahoo league schedule, then set season.week_boundaries_verified' },
     { key: 'listener', label: 'Pick listener', status: 'warn', detail: 'only tested against the local mock room', action: 'run a Yahoo mock draft with a throwaway draft id (README), then set draft.confirmed.listener: true; manual entry always works' },

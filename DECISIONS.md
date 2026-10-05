@@ -154,6 +154,9 @@ a draft-night fallback) and the Tampermonkey listener all read and write the sam
   schedule, not a constant.
 - Incomplete box scores are excluded per team side, not per game.
 - Rounds assumed 13 (one per non-IL slot) = 182 picks; confirm in Yahoo's draft settings.
+  **Superseded 2026-10-04:** Yahoo's roster has 2 bench spots, not the build prompt's 3
+  (PG, SG, G, SF, PF, F, C, C, Util, Util, BN, BN, IL). Rounds are now assumed 12 (168 picks)
+  and unconfirmed until checked in Yahoo's draft settings.
 
 **Kalshi (checked 2026-10-04, public API, no key).** `https://api.elections.kalshi.com/trade-api/v2`
 answers without auth; 70 NBA game markets (`KXNBAGAME`) were open, including preseason. Player

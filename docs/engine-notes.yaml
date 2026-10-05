@@ -71,6 +71,6 @@ notes:
     kind: recommendation
     title: Three league facts still need confirming
     body: >
-      Draft rounds (assumed 13), fantasy week boundaries for weeks 1-19 (assumed: week 1 and the
+      Draft rounds (assumed 12: Yahoo's roster has 2 bench spots, not 3), fantasy week boundaries for weeks 1-19 (assumed: week 1 and the
       All-Star week are double weeks), and keepers. Each is a setting in config/settings.yaml.
     refs: [config/settings.yaml]
