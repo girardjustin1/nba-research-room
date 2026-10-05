@@ -258,7 +258,10 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
 
 def write_projections(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, model_name: str,
                       run_at: datetime | None = None) -> int:
-    """Store mean and sd (never a point estimate alone) in `projections`."""
-    rows = proj[["player_id", "date", "stat", "mean", "sd"]].assign(
-        model=model_name, run_at=run_at or store.utcnow())
+    """Store mean and sd (never a point estimate alone) in `projections`, with the pieces behind
+    them when present (P(plays), expected minutes, the model's mean before the market overlay,
+    whether the market set it) so explain.py can show where each number came from."""
+    cols = ["player_id", "date", "stat", "mean", "sd",
+            *[c for c in ("p_play", "minutes_mean", "model_mean", "market") if c in proj]]
+    rows = proj[cols].assign(model=model_name, run_at=run_at or store.utcnow())
     return store.upsert(con, "projections", rows)

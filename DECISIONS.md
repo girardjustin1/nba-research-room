@@ -505,3 +505,23 @@ the nightly run after the markets step.
   in the 3 hours before each game day's first tip.
 - Robustness: read-only connections don't create tables added since the last write, so the health
   screen's table counts now treat a missing new table as empty instead of failing.
+
+**Explanations (2026-10-05).** `projections/explain.py`, `GET /season/players/{id}`.
+- The build prompt planned SHAP waterfalls for tree models, but no tree model won (the challengers
+  lost to the baseline), so SHAP would explain a model that isn't used. The driving projection is
+  multiplicative, so it is explained exactly instead: his season average per game → chance of
+  playing → minutes when playing → per-minute production → betting market (when it set the
+  number). Each step is the change it makes, and the steps add up to the stored projection
+  (tested).
+- To make that possible the nightly run now stores, next to each projection, P(plays), expected
+  minutes, the model's mean before the market overlay, and whether the market set it.
+- Factors shown are only the ones the engine uses: projection (next game and the rest of the
+  week), minutes, news (X posts and the injury report, with source and authority), market (lines,
+  implied mean vs ours, agreement), drivers (the waterfall) and, once the week's inputs exist,
+  schedule (games, open slots, would start). Opponent, Vegas and teammate factors are left out
+  (tested and not used), not invented.
+- Recommendation: from the week's plan when it exists (start days for a roster player, add or drop
+  with the move id, else not in the plan). Before the season it says there's no advice yet and
+  why, with low confidence. An unknown player is a 404.
+- Example (real data, top projected scorer for opening week): 33.5-point average → 28.4
+  projection, mostly from an 83% chance of playing (−5.7); minutes +0.1, per-minute +0.6.

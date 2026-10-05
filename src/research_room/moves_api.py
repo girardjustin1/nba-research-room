@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 import duckdb
 import pandas as pd
 
-from research_room import matchup, optimizer
+from research_room import matchup, optimizer, season_api
 from research_room.config import Settings, settings
 from research_room.season_api import STALE_AFTER, NotReady, _iso, _player_refs
 
@@ -405,3 +405,162 @@ def with_recommended(
         }
     )
     return resp
+
+
+# ------------------------------------------------------------------ one player's analysis
+
+
+def _player_ref(con, player_id: int, now: datetime) -> dict:
+    row = con.execute(
+        """SELECT p.full_name, p.position FROM players p WHERE p.player_id = ?""", [player_id]
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"Unknown player {player_id}.")
+    yel = con.execute(
+        """SELECT eligible_positions FROM yahoo_players WHERE player_id = ?
+                         ORDER BY snapshot_at DESC LIMIT 1""",
+        [player_id],
+    ).fetchone()
+    if yel and yel[0]:
+        elig = [p for p in yel[0].split(",") if p]
+    else:
+        from research_room.backtest import eligibility  # BallDontLie position -> Yahoo-style slots
+
+        elig = eligibility(row[1])
+    frame = pd.DataFrame({"player_id": [player_id], "name": [row[0]], "eligible": [elig]})
+    ref = _player_refs(con, frame, {}, now)[player_id]
+    on_mine = con.execute(
+        """SELECT count(*) FROM yahoo_rosters WHERE player_id = ? AND team_id = ?
+                             AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_rosters
+                                                WHERE team_id = ?)""",
+        [player_id, settings().league.my_team_id, settings().league.my_team_id],
+    ).fetchone()[0]
+    ref["owner"] = "mine" if on_mine else "free_agent"
+    return ref
+
+
+def _player_plan(con, inp: dict, plan: optimizer.Plan, player_id: int, cfg: Settings) -> tuple[dict, dict]:
+    """Recommendation and schedule factor for one player from the week's plan."""
+    days, base = inp["days"], inp["me_roster"]
+    rosters = plan.rosters or [base] * len(days)
+    td = matchup.team_days(rosters, inp["proj"], days, cfg)
+    has_game = {
+        d: not inp["proj"][(inp["proj"]["player_id"] == player_id) & (inp["proj"]["date"] == d)].empty
+        for d in days
+    }
+    on_roster = [player_id in set(r["player_id"]) for r in rosters]
+    added = next((m for m in plan.moves if m.add == player_id), None)
+    dropped = next((m for m in plan.moves if m.drop == player_id), None)
+    day_plan, starts = [], []
+    for i, d in enumerate(days):
+        if not on_roster[i]:
+            action = "not_rostered"
+        elif not has_game[d]:
+            action = "no_game"
+        elif player_id in td.starters[i]:
+            action = "start"
+            starts.append(d)
+        else:
+            action = "bench"
+        day_plan.append({"date": str(d), "weekday": f"{d:%a}", "action": action, "slot": None})
+    fmt_days = ", ".join(f"{d:%a}" for d in starts)
+    if added is not None:
+        action, move_id = "add", added.move_id
+        headline = f"Add from {added.effective:%a}" + (f"; start {fmt_days}" if fmt_days else "")
+    elif dropped is not None:
+        action, move_id, headline = (
+            "drop",
+            dropped.move_id,
+            f"Drop from {dropped.effective:%a} for a better week",
+        )
+    elif on_roster[0]:
+        action, move_id = ("start" if starts else "bench"), None
+        headline = f"Start {fmt_days}" if starts else "Bench: no start fits this week"
+    else:
+        action, move_id, headline = "hold", None, "Not in this week's plan"
+    rec = {
+        "action": action,
+        "headline": headline,
+        "slot": None,
+        "plan": day_plan,
+        "delta_p_win": None,
+        "versus": None,
+        "confidence": {"level": "medium", "score": None, "missing": []},
+        "move_id": move_id,
+    }
+    games = season_api._games(con, days[0], days[-1], cfg) if days else pd.DataFrame()
+    team = con.execute("SELECT team_id FROM players WHERE player_id = ?", [player_id]).fetchone()
+    mine = games[games["team_id"] == (team[0] if team else -1)] if not games.empty else games
+    sched_days = []
+    for i, d in enumerate(days):
+        g = mine[mine["date"] == d] if not mine.empty else mine
+        game = None
+        if not g.empty:
+            r = g.iloc[0]
+            game = {
+                "game_id": int(r["game_id"]),
+                "date": str(d),
+                "tip_at": r["tip_at"],
+                "opp_abbr": r["opp_abbr"],
+                "home": bool(r["home"]),
+                "b2b": bool(r["b2b"]),
+            }
+        sched_days.append(
+            {
+                "date": str(d),
+                "weekday": f"{d:%a}",
+                "game": game,
+                "open_slots": max(0, cfg.roster.active_per_day - td.counted[i]),
+                "would_start": player_id in td.starters[i],
+                "light_day": False,
+            }
+        )
+    n = sum(1 for x in sched_days if x["game"])
+    factor = {
+        "id": "schedule",
+        "kind": "schedule",
+        "title": "Schedule",
+        "value": float(n),
+        "format": "count",
+        "value_note": "games left",
+        "reading": (
+            f"{n} games left this week; would start {len(starts)} of them."
+            if on_roster[0] or added
+            else f"{n} games left this week."
+        ),
+        "push": "for" if starts else "neutral",
+        "confidence": {"level": "high", "score": None, "missing": []},
+        "provenance": [
+            {
+                "module": "optimizer",
+                "as_of": inp["now"].isoformat(),
+                "run_id": None,
+                "note": "10 active slots per day; the week's plan applied",
+            }
+        ],
+        "detail": {"kind": "schedule", "days": sched_days},
+    }
+    return rec, factor
+
+
+def player_response(
+    con: duckdb.DuckDBPyConnection, player_id: int, cfg: Settings | None = None, now: datetime | None = None
+) -> dict:
+    """PlayerAnalysisResponse: the explained projection, plus advice when the week's inputs exist."""
+    from research_room.projections import explain
+
+    cfg = cfg or settings()
+    when = (now or datetime.now(matchup.ET)).astimezone(matchup.ET)
+    ref = _player_ref(con, player_id, when)
+    rec = sched = None
+    try:
+        inp, _pool, plan, _acq = _week_and_plan(con, cfg, now)
+        rec, sched = _player_plan(con, inp, plan, player_id, cfg)
+    except NotReady:
+        pass
+    try:
+        return explain.player_analysis(
+            con, player_id, cfg, when, season_api.week_context(when.date(), cfg), ref, rec, sched
+        )
+    except explain.NotReady as exc:
+        raise NotReady(str(exc)) from exc

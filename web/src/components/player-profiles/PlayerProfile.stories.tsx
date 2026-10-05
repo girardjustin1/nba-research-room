@@ -7,6 +7,7 @@ import {
   playerBramwellStale,
   playerHargreaveLastDay,
   playerPellham,
+  playerPreseasonExplained,
   playerRosswell,
 } from '../../mocks/player-profiles/player';
 import { teamDaysNOP, teamWeeks } from '../../mocks/team-profiles/schedule';
@@ -31,5 +32,7 @@ export const LastDayStream: Story = { args: { analysis: playerHargreaveLastDay, 
 export const PlayoffWeek: Story = { args: { analysis: playerBramwellPlayoff, calendar: null, teamDays: null } };
 export const PuntBuild: Story = { args: { analysis: playerBramwellPunt } };
 export const StaleData: Story = { args: { analysis: playerBramwellStale } };
+/** Before the season (no matchup yet): the projection explained step by step, no advice. */
+export const PreseasonExplained: Story = { args: { analysis: playerPreseasonExplained, calendar: null, teamDays: null } };
 export const Loading: Story = { args: { analysis: null, loading: true } };
 export const ApiError: Story = { args: { analysis: null, error: 'Request failed (HTTP 404): unknown player', onRetry: () => {} } };

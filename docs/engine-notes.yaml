@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-explain
+    date: 2026-10-05
+    kind: update
+    title: Every projection now explains itself
+    body: >
+      Open any player and the "Why this number" card walks from his average to his projection,
+      step by step: chance of playing, minutes, per-minute production, and the betting market when
+      it set the number. The steps add up exactly. Alongside it you see the latest news and its
+      source, his minutes trend, and, once the season starts, which days he'd start or whether he's
+      in this week's add/drop plan.
+    refs: [DECISIONS.md, src/research_room/projections/explain.py]
+
   - id: 2026-10-05-x-feed
     date: 2026-10-05
     kind: update

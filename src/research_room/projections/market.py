@@ -97,6 +97,7 @@ def overlay(
     ov = cfg.markets.overlay
     out = proj.copy()
     out["market"] = False
+    out["model_mean"] = out["mean"]                       # the model's number, kept for explanations
     if not ov.enabled or out.empty or "game_id" not in out:
         return out
     pts = ladder_points(

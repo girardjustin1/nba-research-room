@@ -7,7 +7,7 @@ page says where each number comes from.
 
 | Status | Endpoints |
 |---|---|
-| **Implemented** | `GET /season/lineup`, `GET /season/week/probability` (history, do nothing and the recommended plan; `season_api.py`, `matchup.py`, `moves_api.py`), `GET /season/moves` (add/drop moves), `POST /season/scenario`, `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
+| **Implemented** | `GET /season/lineup`, `GET /season/week/probability` (history, do nothing and the recommended plan; `season_api.py`, `matchup.py`, `moves_api.py`), `GET /season/moves` (add/drop moves), `POST /season/scenario`, `GET /season/players/{id}` (factors: projection, minutes, news, market, drivers, schedule; `projections/explain.py`), `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
 | **Proposed** | everything else on this page, including named alternative plans (`custom` scenarios in `/season/week/probability`), start/bench moves in `/season/moves`, and `GET /season/week/gamecenter` |
 
 All endpoints are served by the local API on 127.0.0.1:8765. The app calls `/api/...` and the

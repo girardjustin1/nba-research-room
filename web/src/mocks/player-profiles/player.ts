@@ -688,3 +688,44 @@ export const playerHargreaveLastDay: PlayerAnalysisResponse = {
   confidence: { ...conf('medium', 0.7), summary: 'Medium. One game, starting confirmed by a beat writer.' },
 };
 
+
+/** What the engine returns before the season (no matchup yet): the projection explained, no advice.
+ * Factor set and wording mirror projections/explain.py; numbers are invented. */
+export const playerPreseasonExplained: PlayerAnalysisResponse = {
+  ...playerBramwell,
+  recommendation: {
+    action: 'hold',
+    headline: 'No move needed from the projection alone',
+    slot: null,
+    plan: [],
+    delta_p_win: null,
+    versus: null,
+    confidence: { level: 'low', score: null, missing: [{ key: 'week', label: 'No matchup this week yet', effect: 'Start/sit and add/drop advice needs the week’s rosters' }] },
+    move_id: null,
+  },
+  factors: playerBramwell.factors.filter((f) => f.kind === 'projection' || f.kind === 'minutes').concat([
+    {
+      id: 'drivers',
+      kind: 'drivers',
+      title: 'Why this number',
+      value: 24.4,
+      format: 'decimal',
+      value_note: 'points',
+      reading: 'From his 27.6-point average to 24.4: the biggest change is chance of playing (-3.9).',
+      push: 'neutral',
+      confidence: { level: 'high', score: null, missing: [] },
+      provenance: [{ module: 'projections', as_of: playerBramwell.as_of, run_id: null, note: 'exact decomposition, adds up' }],
+      detail: {
+        kind: 'drivers',
+        model: 'baseline',
+        target: 'pts',
+        base_value: 27.6,
+        drivers: [
+          { feature: 'availability', label: 'Chance of playing', value_label: '86%', contribution: -3.9 },
+          { feature: 'minutes', label: 'Minutes when playing', value_label: '33.1 (avg 34.0)', contribution: -0.6 },
+          { feature: 'rate', label: 'Points per minute', value_label: '0.857 (avg 0.812)', contribution: 1.3 },
+        ],
+      },
+    },
+  ]),
+};

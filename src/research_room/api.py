@@ -755,6 +755,20 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         finally:
             con.close()
 
+    @app.get("/season/players/{player_id}")
+    def get_season_player(player_id: int, now: str | None = None) -> dict:
+        """PlayerAnalysisResponse: where his projection comes from, and what to do with him."""
+        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return moves_api.player_response(con, player_id, now=when)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc).strip("'")) from exc
+        except season_api.NotReady as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
+
     @app.get("/season/moves")
     def get_season_moves(now: str | None = None) -> dict:
         """MovesResponse: the optimizer's add/drop plan for the rest of the week."""
