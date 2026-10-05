@@ -191,9 +191,16 @@ class OverridesConfig(BaseModel):
     authority: list[str]
 
 
+class ShrinkageConfig(BaseModel):
+    enabled: bool = False
+    k_grid_minutes: list[float] = Field(default_factory=lambda: [0.0])
+
+
 class BaselineConfig(BaseModel):
     preseason_prior_games: float
     min_play_prob: float
+    minutes_recalibration: bool = False
+    shrinkage: ShrinkageConfig = Field(default_factory=ShrinkageConfig)
 
 
 class BacktestConfig(BaseModel):

@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from research_room import features, store
+from research_room import features, schedule, store
 from research_room.config import Settings, settings
 from research_room.projections.baseline import STATS, BaselineModel
 
@@ -57,62 +57,16 @@ def player_weeks(model, rows: pd.DataFrame) -> pd.DataFrame:
     return g.groupby(["player_id", "week"]).sum().reset_index()
 
 
-def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
-    """Each player's feature state as of each Monday (00:00 Eastern, given in UTC), from the feature
-    table: his first game at or after Monday carries the state after every game before Monday,
-    exactly what the live system projects from. A player with no later game (out for the season)
-    takes his last game's state, one game stale. Only players who have played before that Monday."""
-    keep = [
-        "player_id",
-        "team_id",
-        "tip_utc",
-        "min_played_ewma",
-        "play_rate_ewma",
-        *[f"{s}_pm_ewma" for s in STATS],
-    ]
-    right = built[keep].sort_values("tip_utc")
-    first = right.groupby("player_id")["tip_utc"].min()
-    pairs = pd.MultiIndex.from_product([first.index, mondays], names=["player_id", "monday"]).to_frame(
-        index=False
-    )
-    pairs = pairs[pairs["monday"] > pairs["player_id"].map(first)].sort_values("monday")
-    fwd = pd.merge_asof(
-        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="forward"
-    )
-    back = pd.merge_asof(
-        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="backward"
-    )
-    use_fwd = np.broadcast_to(fwd["tip_utc"].notna().to_numpy()[:, None], fwd.shape)
-    out = fwd.where(use_fwd, back)
-    return out.drop(columns=["tip_utc"]).dropna(subset=["min_played_ewma"])
-
-
 def live_player_weeks(model, built: pd.DataFrame, schedule: pd.DataFrame, season: int) -> pd.DataFrame:
-    """Player-weeks projected the live way for `season`: Monday state x every game his team plays
-    that Monday-Sunday week; actual totals count 0 for games he missed. From the season's second
-    Monday, so every player has an in-season state."""
-    b = built[built["season"] == season]
-    sched = schedule[schedule["season"] == season] if "season" in schedule else schedule
-    if b.empty or sched.empty:
-        return pd.DataFrame()
-    days = pd.to_datetime(sched["date"])
-    first = days.min() - pd.Timedelta(days=days.min().weekday()) + pd.Timedelta(days=7)
-    mondays = list(pd.date_range(first, days.max(), freq="7D"))
-    to_utc = lambda d: pd.Timestamp(d).tz_localize(ET).tz_convert("UTC")  # noqa: E731
-    states = monday_states(b, [to_utc(m) for m in mondays])
-    states["week"] = states["monday"].dt.tz_convert(ET).dt.date.astype(str)
-    g = sched.assign(
-        date=days.dt.date, week=(days - pd.to_timedelta(days.dt.weekday, unit="D")).dt.date.astype(str)
-    )
-    rows = g.merge(states, on=["team_id", "week"])
+    """Player-weeks projected the live way for `season` (features.live_rows: Monday state x every
+    game his team plays that week); actual totals count 0 for games he missed."""
+    rows = features.live_rows(built, schedule, season)
     if rows.empty:
         return pd.DataFrame()
-    pred = model.predict(rows.assign(play_prob=rows["play_rate_ewma"], season_games=10_000))
+    pred = model.predict(rows)
     p = pred.pivot_table(index=["player_id", "game_id"], columns="stat", values=["mean", "sd"])
-    act = b.set_index(["player_id", "game_id"])[[f"y_{s}" for s in STATS]]
-    a = act.reindex(p.index).fillna(0.0)  # a game he missed counts nothing
-    wk = rows.drop_duplicates(["player_id", "game_id"]).set_index(["player_id", "game_id"])["week"]
-    out = pd.DataFrame({"player_id": p.index.get_level_values(0), "week": wk.reindex(p.index).to_numpy()})
+    a = rows.drop_duplicates(["player_id", "game_id"]).set_index(["player_id", "game_id"]).reindex(p.index)
+    out = pd.DataFrame({"player_id": p.index.get_level_values(0), "week": a["week"].to_numpy()})
     for s in STATS:
         out[f"{s}_mu"] = p[("mean", s)].to_numpy()
         out[f"{s}_v"] = p[("sd", s)].to_numpy() ** 2
@@ -123,6 +77,9 @@ def live_player_weeks(model, built: pd.DataFrame, schedule: pd.DataFrame, season
         )
         out[f"{made}_bin"] = out[f"{att}_mu"] * pct * (1 - pct)
     return out.groupby(["player_id", "week"]).sum().reset_index()
+
+
+monday_states = features.monday_states  # moved to features (kept for callers)
 
 
 def team_z(weeks: pd.DataFrame, cfg: Settings, seed: int) -> pd.DataFrame:
@@ -185,6 +142,8 @@ def calibrate(
     train = built[built["season"] < test_season]
     test = built[built["season"] == test_season]
     model = model_cls(cfg).fit(train[train["min_played_ewma"].notna()])
+    if schedule is not None:
+        model.fit_minutes(built, schedule, sorted(train["season"].unique()))
     if schedule is None:
         w_train, w_test = player_weeks(model, train), player_weeks(model, test)
     else:
@@ -237,17 +196,7 @@ def run(con, cfg: Settings | None = None) -> pd.DataFrame:
 
 
 def season_schedule(con) -> pd.DataFrame:
-    """Regular-season games, one row per team per game: team_id, game_id, date, season."""
-    g = con.execute("""SELECT game_id, season, game_date, home_team_id, visitor_team_id FROM games
-                       WHERE NOT postseason""").df()
-    d = pd.to_datetime(g["game_date"]).dt.date
-    return pd.concat(
-        [
-            pd.DataFrame({"team_id": g[t], "game_id": g["game_id"], "date": d, "season": g["season"]})
-            for t in ("home_team_id", "visitor_team_id")
-        ],
-        ignore_index=True,
-    )
+    return schedule.season_schedule(con)
 
 
 def write(con, cal: pd.DataFrame) -> int:

@@ -131,6 +131,11 @@ overrides:
 baseline:
   preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
   min_play_prob: 0.0           # floor on P(plays) from the play-rate EWMA (overrides can set 0)
+  minutes_recalibration: false # expected minutes (x P(plays)) regressed toward the mean. Fixes stars'
+                               # minutes bias but made weekly odds worse in the backtest (DECISIONS.md)
+  shrinkage:                   # pull noisy per-minute rates toward the league average (empirical Bayes)
+    enabled: false             # turned on only if it beats the unshrunk baseline (DECISIONS.md)
+    k_grid_minutes: [0, 60, 120, 250, 500, 1000, 2000, 4000]   # prior strength searched per stat
 
 optimizer:                     # weekly add/drop plan (research_room/optimizer.py)
   candidate_pool: 40           # free agents considered, the most valuable this week under the current weights

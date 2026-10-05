@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-shrinkage
+    date: 2026-10-05
+    kind: finding
+    title: Three ways to temper projections, none better yet
+    body: >
+      Tested pulling noisy projections toward the average three ways (per-minute rates, minutes,
+      team-vs-team gaps) on last season's head-to-heads. The real bias is in minutes: top players
+      play about 7% less than projected. Fixing it made the weekly odds worse elsewhere, so the
+      current engine stays as is. Both switches stay in the code, off, as the bar the Phase 3
+      models must clear.
+    refs: [DECISIONS.md, src/research_room/projections/baseline.py]
+
   - id: 2026-10-05-live-calibration
     date: 2026-10-05
     kind: finding

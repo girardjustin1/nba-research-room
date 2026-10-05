@@ -84,7 +84,7 @@ def week_projections(
     for s in features.RATE_STATS:
         dummy[s] = 0.0
     built = features.build(pd.concat([pre, dummy], ignore_index=True), team_ctx, cfg)
-    keep = ["player_id", "min_played_ewma", "play_rate_ewma", *[f"{s}_pm_ewma" for s in STATS]]
+    keep = ["player_id", "min_played_ewma", "play_rate_ewma", "games_prior", *[f"{s}_pm_ewma" for s in STATS]]
     state = built[built["game_id"] < 0][keep].merge(last[["player_id", "team_id"]], on="player_id")
     week = schedule[schedule["date"].isin(days)]
     rows = week.merge(state, on="team_id")
@@ -191,8 +191,10 @@ def run(
     built = features.build(logs, team_ctx, cfg)
     built = built[built["min_played_ewma"].notna()]
     test_season = test_season or int(built["season"].max())
-    model = BaselineModel(cfg).fit(built[built["season"] < test_season])
     season_sched = team_schedule(games).merge(games[["game_id", "season"]], on="game_id")
+    train_seasons = sorted(built.loc[built["season"] < test_season, "season"].unique())
+    model = BaselineModel(cfg).fit(built[built["season"] < test_season])
+    model.fit_minutes(built, season_sched, train_seasons)
     cal = calibration.calibrate(built, cfg, test_season, schedule=season_sched)
     var_mult = dict(zip(cal["category"], cal["multiplier"], strict=True))
     corr = cal.attrs["corr"].to_numpy(float)

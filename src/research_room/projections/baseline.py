@@ -11,6 +11,17 @@ Per game, for stat s with per-minute EWMA rate r_s and minutes-when-playing m:
               against projected minutes, so it includes minutes uncertainty)
   P(plays) = p (play-rate EWMA, or an override)
   unconditional mean = p x mean_s; variance = p (phi_s mean_s + mean_s^2) - (p mean_s)^2
+Shrinkage (settings.baseline.shrinkage): each per-minute rate r_s is pulled toward the league
+average rate m_s by its evidence, n = min(games played, the EWMA's effective window) x minutes per
+game: r_s' = (n r_s + k_s m_s) / (n + k_s). k_s (in minutes) is fitted per stat on the training
+rows by minimizing next-game error given actual minutes. A few strong weeks then count for less,
+which counters the winner's curse of drafting and adding players whose projections ran high.
+Minutes recalibration (settings.baseline.minutes_recalibration): projected minutes x P(plays), u,
+is regressed toward the mean: u' = alpha + beta u, fitted by `fit_minutes` on live-way projections
+of earlier seasons (Monday states onto every scheduled game, missed games 0). Backtests showed the
+top 30 projected players got 7% fewer minutes than projected and fringe players 16% more, while
+per-minute rates were unbiased; each line is scaled by u'/u. Not applied where an injury override
+or minutes cap is set (those carry news).
 Early season, the in-season line is shrunk toward the preseason projection with weight
 n / (n + preseason_prior_games), n = games played this season. With no NBA history the
 preseason projection is used alone and `source` says so; with neither, no row is produced.
@@ -24,7 +35,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from research_room import features, store
+from research_room import features, schedule, store
 from research_room.config import Settings, settings
 from research_room.draft.value import NBA_REGULAR_SEASON_GAMES
 
@@ -37,9 +48,64 @@ class BaselineModel:
 
     name = "baseline"
 
-    def __init__(self, cfg: Settings | None = None) -> None:
+    def __init__(self, cfg: Settings | None = None, shrink: bool | None = None) -> None:
         self.cfg = cfg or settings()
         self.phi: dict[str, float] = {}
+        self.shrink = self.cfg.baseline.shrinkage.enabled if shrink is None else shrink
+        self.prior_rate: dict[str, float] = {}
+        self.shrink_k: dict[str, float] = {}
+        self.minutes_ab: tuple[float, float] | None = None      # (alpha, beta) once fit_minutes runs
+        if shrink is not None:                       # an explicit variant, e.g. for the scoreboard
+            self.name = "baseline_eb" if shrink else "baseline_unshrunk"
+
+    def _evidence(self, df: pd.DataFrame) -> pd.Series:
+        """Minutes of evidence behind each row's rates: min(games, EWMA effective window) x minutes."""
+        a = 0.5 ** (1.0 / self.cfg.features.ewma_halflife_rates)
+        window = (1 + a) / (1 - a)
+        games = df["games_prior"] if "games_prior" in df else pd.Series(np.inf, index=df.index)
+        return np.minimum(games.astype(float), window) * df["min_played_ewma"].astype(float)
+
+    def shrunk(self, df: pd.DataFrame) -> pd.DataFrame:
+        """`df` with its per-minute rates pulled toward the league average (no-op when off)."""
+        if not self.shrink or not self.shrink_k:
+            return df
+        out = df.copy()
+        n = self._evidence(df)
+        for s, k in self.shrink_k.items():
+            col = f"{s}_pm_ewma"
+            if col in out and k > 0:
+                out[col] = (n * out[col] + k * self.prior_rate[s]) / (n + k)
+        return out
+
+    def fit_minutes(self, built: pd.DataFrame, schedule: pd.DataFrame, seasons: list[int]) -> BaselineModel:
+        """Fit the minutes recalibration on live-way projections of `seasons` (call after fit())."""
+        if not self.cfg.baseline.minutes_recalibration:
+            return self
+        rows = pd.concat([features.live_rows(built, schedule, s) for s in seasons], ignore_index=True)
+        if rows.empty:
+            return self
+        self.minutes_ab = None
+        pred = self.predict(rows)
+        u = pred[pred["stat"] == "minutes"].set_index(["player_id", "game_id"])["mean"]
+        y = rows.drop_duplicates(["player_id", "game_id"]).set_index(["player_id", "game_id"])["y_minutes"]
+        y = y.reindex(u.index)
+        ok = u.notna() & y.notna()
+        beta, alpha = np.polyfit(u[ok].to_numpy(float), y[ok].to_numpy(float), 1)
+        self.minutes_ab = (float(alpha), float(beta))
+        return self
+
+    def _fit_shrinkage(self, played: pd.DataFrame) -> None:
+        n = self._evidence(played)
+        for s in STATS:
+            r, y, mins = played[f"{s}_pm_ewma"], played[f"y_{s}"], played["y_minutes"]
+            ok = r.notna() & n.notna() & (mins > 0)
+            m = float(y[ok].sum() / mins[ok].sum())
+            best, best_err = 0.0, np.inf
+            for k in self.cfg.baseline.shrinkage.k_grid_minutes:
+                rk = (n[ok] * r[ok] + k * m) / (n[ok] + k) if k > 0 else r[ok]
+                err = float(((y[ok] - rk * mins[ok]) ** 2).sum())
+                best, best_err = (k, err) if err < best_err else (best, best_err)
+            self.prior_rate[s], self.shrink_k[s] = m, float(best)
 
     def fit(self, train: pd.DataFrame) -> BaselineModel:
         """phi_s = sum((y - pred)^2) / sum(pred) over played games with a prediction, where pred
@@ -47,6 +113,9 @@ class BaselineModel:
         uncertainty, which the per-minute-only fit left out (weekly bands came out too narrow;
         DECISIONS.md, calibration)."""
         played = train[train["y_did_play"].astype(bool) & train["min_played_ewma"].notna()]
+        if self.shrink:
+            self._fit_shrinkage(played)
+            played = self.shrunk(played)
         for s in (*STATS, "minutes"):
             if s == "minutes":
                 pred, y = played["min_played_ewma"], played["y_minutes"]
@@ -61,6 +130,7 @@ class BaselineModel:
         season_games; optional prior columns prior_minutes, prior_<stat>; optional minutes_cap."""
         if not self.phi:
             raise RuntimeError("fit() the baseline before predict()")
+        df = self.shrunk(df)
         b = self.cfg.baseline
         n = df.get("season_games", pd.Series(0, index=df.index)).fillna(0)
         w = n / (n + b.preseason_prior_games)
@@ -87,6 +157,13 @@ class BaselineModel:
             capped = np.minimum(m, pd.to_numeric(cap, errors="coerce").fillna(np.inf).to_numpy(float))
             scale = np.where(m > 0, capped / np.where(m > 0, m, 1), 1.0)
             m = capped
+        if self.minutes_ab is not None:
+            alpha, beta = self.minutes_ab
+            u = p.to_numpy(float) * m
+            news = ov.notna().to_numpy() | (pd.to_numeric(cap, errors="coerce").notna().to_numpy()
+                                            if cap is not None else np.zeros(len(df), bool))
+            rc = np.where((u > 0) & ~news, np.maximum(alpha + beta * u, 0.0) / np.where(u > 0, u, 1.0), 1.0)
+            m, scale = m * rc, scale * rc
         source = np.where(has_ewma & has_prior, "ewma+preseason", np.where(has_ewma, "ewma", "preseason"))
         rows = []
         usable = (has_ewma | has_prior).to_numpy()
@@ -155,11 +232,11 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
     if model is None:
         seasons = sorted(cfg.bdl.backfill_seasons)
         train = features.build(features.load_logs(con, seasons), features.team_context(con, seasons), cfg)
-        model = BaselineModel(cfg).fit(train)
+        model = BaselineModel(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
     games = upcoming_rows(con, start, end, cfg)
     games["date"] = pd.to_datetime(games["date"]).dt.date          # one date type for every join
     state = current_states(con, cfg)
-    keep = ["player_id", "min_played_ewma", "play_rate_ewma", "season_games",
+    keep = ["player_id", "min_played_ewma", "play_rate_ewma", "season_games", "games_prior",
             *[f"{s}_pm_ewma" for s in STATS]]
     # Current players only: played last season or this one, or in the preseason pool.
     recent_ids = set(state.loc[state["season_last"] >= cfg.season.nba_season - 1, "player_id"])

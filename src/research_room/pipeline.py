@@ -118,7 +118,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         seasons = sorted(cfg.bdl.backfill_seasons)
         train = step("features (train)", lambda: features.build(
             features.load_logs(con, seasons), features.team_context(con, seasons), cfg))
-        model = BaselineModel(cfg).fit(train)
+        model = BaselineModel(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
         start, end = projection_window(day, cfg)
         ov = step("overrides", lambda: overrides.resolve(con, start, end, cfg=cfg))
         try:

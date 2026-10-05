@@ -90,3 +90,34 @@ def test_object_typed_override_columns_from_a_merge_still_work():
     pred = fitted().predict(df)
     p2 = pred[(pred["player_id"] == 2) & (pred["stat"] == "pts")].iloc[0]
     assert p2["p_play"] == pytest.approx(0.5) and p2["mean"] == pytest.approx(0.5 * 0.5 * 20)
+
+
+def test_rate_shrinkage_moves_thin_evidence_most():
+    from research_room.config import settings
+    from research_room.projections.baseline import BaselineModel
+    cfg = settings()
+    m = BaselineModel(cfg, shrink=True)
+    m.shrink_k, m.prior_rate = {"pts": 500.0}, {"pts": 0.5}
+    df = pd.DataFrame({"pts_pm_ewma": [1.0, 1.0], "games_prior": [3, 200], "min_played_ewma": [20.0, 30.0]})
+    out = m.shrunk(df)["pts_pm_ewma"]
+    assert 0.5 < out[0] < out[1] < 1.0                        # 60 min of evidence vs ~1270
+    assert BaselineModel(cfg, shrink=False).shrunk(df)["pts_pm_ewma"].tolist() == [1.0, 1.0]
+    assert BaselineModel(cfg, shrink=True).name == "baseline_eb"
+
+
+def test_minutes_recalibration_pulls_toward_the_mean_and_skips_news():
+    from research_room.config import settings
+    from research_room.projections.baseline import STATS, BaselineModel
+    cfg = settings()
+    on = cfg.model_copy(update={"baseline": cfg.baseline.model_copy(update={"minutes_recalibration": True})})
+    m = BaselineModel(on)
+    m.phi = {s: 1.0 for s in (*STATS, "minutes")}
+    row = {"player_id": 1, "game_id": 1, "date": "2026-11-02", "min_played_ewma": 36.0, "play_prob": 1.0,
+           "season_games": 50, **{f"{s}_pm_ewma": 0.5 for s in STATS}}
+    df = pd.DataFrame([row, {**row, "player_id": 2, "play_prob_override": 1.0}])
+    base = m.predict(df)
+    m.minutes_ab = (2.0, 0.85)                                 # actual = 2 + 0.85 x projected
+    rc = m.predict(df)
+    mins = lambda d, pid: float(d[(d["stat"] == "minutes") & (d["player_id"] == pid)]["mean"].iloc[0])  # noqa: E731
+    assert mins(rc, 1) == pytest.approx(2.0 + 0.85 * 36.0)
+    assert mins(rc, 2) == pytest.approx(mins(base, 2))        # an override is news: untouched

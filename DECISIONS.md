@@ -334,3 +334,27 @@ players appeared in, so surprise absences were left out of the spread.
   change, judged on this same backtest.
 - Backtest with the new calibration (80 sampled team-weeks): plans 48% → 91% weekly win rate
   (+44 pts, 80% range +36 to +51) against a non-streaming opponent; the predicted lift is +39.
+
+**Shrinking noisy projections: tested, not adopted (2026-10-05).** All judged on 2025-26 out of
+sample. Every variant was fitted on 2023-24 and 2024-25, then checked on next-game error and on all
+140 head-to-heads of the 20 replayed weeks, with weeks scored by Yahoo's rule (more categories wins;
+ties counted).
+
+| Variant | Finding | Week Brier |
+|---|---|---|
+| Current engine | — | **0.1795** |
+| Per-minute rate shrinkage toward the league mean (empirical Bayes, strength fitted per stat) | fitted strengths are small (about 60 minutes, two games); next-game RMSE −0.05%, MAE +0.4% | no change |
+| Minutes recalibration (actual = 1.29 + 0.89 × projected, fitted the live way) | removes the stars' minutes bias (top 30: 0.93× → 1.00×) but the middle of the week odds got worse | 0.1876 |
+| Edge tempering (actual vs projected team difference, slope 0.64–0.89 per category) | tested in a scratch script only | 0.1799 |
+
+- Where the bias really is: per-minute rates are unbiased (actual/projected 1.00–1.03 at every
+  rank). Minutes are where it sits: the top 30 projected players get 7% fewer than projected,
+  fringe players 16% more.
+- None of these improve the weekly odds, so no prediction changes. Rate shrinkage
+  (`baseline.shrinkage`) and minutes recalibration (`baseline.minutes_recalibration`) stay as
+  switches, off, with tests. Phase 3 models are compared against them on this same check.
+- Still open: the most lopsided weeks (93–95% predicted won about 81%, about 20 weeks). Part of it
+  may be the backtest itself. It sets lineups on Monday and never swaps in a bench player for a
+  starter who sits, which a real manager does.
+- Refactor: Monday states and live-way projection rows now live in `features.py`
+  (`monday_states`, `live_rows`), and the season schedule loader in `schedule.py`.

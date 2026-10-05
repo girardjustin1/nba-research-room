@@ -148,3 +148,17 @@ def games_per_week(games: pd.DataFrame, season: Season, playoffs: bool = False) 
     m = m[m["is_playoff"] == playoffs]
     calendar_weeks = m["week"].map(weeks["n_days"] / 7)
     return float(m["games"].sum() / calendar_weeks.sum())
+
+
+def season_schedule(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """Regular-season games, one row per team per game: team_id, game_id, date, season."""
+    g = con.execute("""SELECT game_id, season, game_date, home_team_id, visitor_team_id FROM games
+                       WHERE NOT postseason""").df()
+    d = pd.to_datetime(g["game_date"]).dt.date
+    return pd.concat(
+        [
+            pd.DataFrame({"team_id": g[t], "game_id": g["game_id"], "date": d, "season": g["season"]})
+            for t in ("home_team_id", "visitor_team_id")
+        ],
+        ignore_index=True,
+    )

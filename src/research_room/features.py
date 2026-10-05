@@ -158,3 +158,68 @@ def build_and_store(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
     finally:
         con.unregister("_features")
     return feats
+
+
+# ------------------------------------------------------------------ states as the live system sees them
+
+ET = "America/New_York"
+
+
+def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
+    """Each player's feature state as of each Monday (00:00 Eastern, given in UTC), from the feature
+    table: his first game at or after Monday carries the state after every game before Monday,
+    exactly what the live system projects from. A player with no later game (out for the season)
+    takes his last game's state, one game stale. Only players who have played before that Monday."""
+    keep = [
+        "player_id",
+        "team_id",
+        "tip_utc",
+        "games_prior",
+        "min_played_ewma",
+        "play_rate_ewma",
+        *[f"{s}_pm_ewma" for s in RATE_STATS],
+    ]
+    right = built[keep].sort_values("tip_utc")
+    first = right.groupby("player_id")["tip_utc"].min()
+    pairs = pd.MultiIndex.from_product([first.index, mondays], names=["player_id", "monday"]).to_frame(
+        index=False
+    )
+    pairs = pairs[pairs["monday"] > pairs["player_id"].map(first)].sort_values("monday")
+    fwd = pd.merge_asof(
+        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="forward"
+    )
+    back = pd.merge_asof(
+        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="backward"
+    )
+    use_fwd = np.broadcast_to(fwd["tip_utc"].notna().to_numpy()[:, None], fwd.shape)
+    out = fwd.where(use_fwd, back)
+    return out.drop(columns=["tip_utc"]).dropna(subset=["min_played_ewma"])
+
+
+def live_rows(built: pd.DataFrame, schedule: pd.DataFrame, season: int) -> pd.DataFrame:
+    """Projection inputs made the live way for `season`: each Monday (from the season's second),
+    every player's state as of that Monday (monday_states) on every game his team plays that
+    Monday-Sunday week, whether or not he played. Carries the actual outcome columns (y_*), 0 for
+    a game he missed, and `week` (the Monday). Ready for BaselineModel.predict."""
+    b = built[built["season"] == season]
+    sched = schedule[schedule["season"] == season] if "season" in schedule else schedule
+    if b.empty or sched.empty:
+        return pd.DataFrame()
+    days = pd.to_datetime(sched["date"])
+    first = days.min() - pd.Timedelta(days=days.min().weekday()) + pd.Timedelta(days=7)
+    mondays = [
+        pd.Timestamp(m).tz_localize(ET).tz_convert("UTC") for m in pd.date_range(first, days.max(), freq="7D")
+    ]
+    states = monday_states(b, mondays)
+    states["week"] = states["monday"].dt.tz_convert(ET).dt.date.astype(str)
+    g = sched.assign(
+        date=days.dt.date, week=(days - pd.to_timedelta(days.dt.weekday, unit="D")).dt.date.astype(str)
+    )
+    rows = g.merge(states, on=["team_id", "week"])
+    if rows.empty:
+        return pd.DataFrame()
+    ycols = ["y_minutes", *[f"y_{s}" for s in RATE_STATS]]
+    act = b.set_index(["player_id", "game_id"])[ycols]
+    y = act.reindex(pd.MultiIndex.from_frame(rows[["player_id", "game_id"]])).fillna(0.0).to_numpy()
+    rows[ycols] = y
+    return rows.assign(play_prob=rows["play_rate_ewma"], season_games=10_000)
