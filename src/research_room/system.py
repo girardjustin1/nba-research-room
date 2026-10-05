@@ -133,11 +133,15 @@ def health(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
                    "action": None if faces else "run make images"})
     xs = (yaml.safe_load((CONFIG_DIR / "x_accounts.yaml").read_text()) or {}).get("accounts") or []
     verified = sum(1 for a in xs if a.get("verified"))
+    failed = [a["handle"] for a in xs if a.get("lookup")]
+    unchecked = len(xs) - verified - len(failed)
     checks.append({"key": "x_accounts", "label": "X account list",
-                   "status": "ok" if verified == len(xs) and xs else "warn", "last_ok_at": None,
-                   "freshness_budget_h": None, "detail": f"{verified} of {len(xs)} handles verified",
-                   "action": None if verified == len(xs)
-                   else "verified by one lookup when the X feed is built (Phase 3)"})
+                   "status": "ok" if xs and unchecked == 0 else "warn", "last_ok_at": None,
+                   "freshness_budget_h": None,
+                   "detail": f"{verified} of {len(xs)} handles verified"
+                   + (f"; {len(failed)} failed lookup and are skipped" if failed else ""),
+                   "action": None if xs and unchecked == 0
+                   else "run the X users lookup for the unchecked handles"})
 
     status_rank = {"ok": 0, "warn": 1, "error": 2}
     overall = max((c["status"] for c in checks), key=status_rank.get, default="ok")

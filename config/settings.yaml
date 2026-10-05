@@ -218,5 +218,12 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     days_ahead: 2              # today plus this many days of events per nightly run
     requests_per_second: 5
 
-x_feed:
-  daily_read_budget: 300
+x_feed:                        # injury / lineup news from config/x_accounts.yaml (ingest/x_feed.py)
+  daily_read_budget: 300       # posts read per day (X is pay-per-use); polling stops at the cap
+  base_url: https://api.x.com/2
+  max_query_chars: 512         # X recent-search query length limit
+  poll_minutes: 15             # pre-game cadence (make pregame-schedule)
+  window_hours_before_tip: 3   # polling starts this long before the day's first tip
+  lookback_minutes: 90         # first poll of a query reads at most this far back
+  llm_model: claude-haiku-4-5-20251001   # small model that turns posts into status events
+  max_posts_per_llm_call: 40

@@ -23,7 +23,7 @@ import pandas as pd
 
 from research_room import calibration, features, lineup, matchup, overrides, schedule, scoreboard, store
 from research_room.config import Settings, settings
-from research_room.ingest import bdl, kalshi, rundown, yahoo
+from research_room.ingest import bdl, kalshi, rundown, x_feed, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
@@ -84,6 +84,71 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
     return payload
 
 
+def refresh_projections(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date, step,
+                        report: dict) -> pd.DataFrame:
+    """Fit the driver model, project the window with today's overrides and the market overlay,
+    and store it (one projections run). Shared by the nightly and pre-game runs."""
+    seasons = sorted(cfg.bdl.backfill_seasons)
+    train = step("features (train)", lambda: features.build(
+        features.load_logs(con, seasons), features.team_context(con, seasons), cfg))
+    model = driver_model(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
+    start, end = projection_window(day, cfg)
+    ov = step("overrides", lambda: overrides.resolve(con, start, end, cfg=cfg))
+    try:
+        prior = blend_preseason(con, cfg)
+    except ProjectionFileError:
+        prior = None
+    proj = step("projections", lambda: project_window(con, start, end, cfg, overrides=ov, prior=prior,
+                                                     model=model))
+    # Where a liquid prop ladder exists (archived first), the market sets that game's points /
+    # rebounds / assists (projections/market.py; tested in DECISIONS.md).
+    proj = market.overlay(con, proj, cfg)
+    report["market_overlay"] = int(proj["market"].sum())
+    report["projections"] = step("store projections", lambda: write_projections(con, proj, model.name))
+    return proj
+
+
+def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None,
+                client: bdl.BdlClient | None = None, echo=print) -> dict:
+    """Pre-game refresh (game days, every few minutes before tip): X news, BallDontLie injuries,
+    markets, then today's projections and a matchup snapshot. Each feed failing is recorded and
+    the rest goes on."""
+    cfg = cfg or settings()
+    now = now or datetime.now(ET)
+    day = now.astimezone(ET).date()
+    timings, report = {}, {"day": str(day)}
+
+    def step(name, fn):
+        t0 = time.perf_counter()
+        out = fn()
+        timings[name] = round(time.perf_counter() - t0, 2)
+        echo(f"{name}: {out if not isinstance(out, pd.DataFrame) else f'{len(out)} rows'} ({timings[name]}s)")
+        return out
+
+    def guarded(name, source, fn):
+        try:
+            with store.ingest_run(con, source, "pregame") as run:
+                out = fn()
+                run["detail"] = json.dumps(out, default=str)[:2000]
+            return out
+        except Exception as exc:  # noqa: BLE001 - recorded in ingest_runs; the refresh goes on
+            return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+
+    with store.ingest_run(con, "pipeline", "pregame") as run:
+        report["x_feed"] = step("x feed", lambda: guarded("x feed", "x", lambda: x_feed.poll(con, cfg)))
+        api = client or bdl.BdlClient.from_env()
+        report["injuries"] = step("injuries",
+                                   lambda: guarded("injuries", "bdl", lambda: bdl.sync_injuries(con, api)))
+        report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
+        refresh_projections(con, cfg, day, step, report)
+        report["matchup"] = step("matchup snapshot",
+                                 lambda: _snapshot(con, cfg, event=("news", "Pre-game refresh")))
+        report["timings_s"] = timings
+        run["rows"] = int(report.get("projections") or 0)
+        run["detail"] = json.dumps(report, default=str)[:2000]
+    return report
+
+
 def driver_model(cfg: Settings) -> BaselineModel:
     """The model that writes the nightly projections (settings.models.driver). A challenger is
     switched on only after it beats the baseline on the scoreboard and the backtest."""
@@ -109,10 +174,10 @@ def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None
     return out
 
 
-def _snapshot(con, cfg: Settings) -> dict:
+def _snapshot(con, cfg: Settings, event: tuple[str, str] = ("nightly", "Nightly run")) -> dict:
     """This week's P(win) for the chart history; skipped (with the reason) before the season."""
     try:
-        return matchup.snapshot(con, cfg)
+        return matchup.snapshot(con, cfg, event=event)
     except matchup.NoMatchup as exc:
         return {"status": "skipped", "reason": str(exc)}
 
@@ -143,23 +208,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             report["inbox"] = {"rejected": str(exc)}
             echo(f"yahoo inbox REJECTED: {exc}")
         seasons = sorted(cfg.bdl.backfill_seasons)
-        train = step("features (train)", lambda: features.build(
-            features.load_logs(con, seasons), features.team_context(con, seasons), cfg))
-        model = driver_model(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
-        start, end = projection_window(day, cfg)
-        ov = step("overrides", lambda: overrides.resolve(con, start, end, cfg=cfg))
-        try:
-            prior = blend_preseason(con, cfg)
-        except ProjectionFileError:
-            prior = None
-        proj = step("projections", lambda: project_window(con, start, end, cfg, overrides=ov,
-                                                         prior=prior, model=model))
-        # Where a liquid prop ladder exists (archived just above), the market sets that game's
-        # points / rebounds / assists (projections/market.py; tested in DECISIONS.md).
-        proj = market.overlay(con, proj, cfg)
-        report["market_overlay"] = int(proj["market"].sum())
-        report["projections"] = step("store projections",
-                                     lambda: write_projections(con, proj, model.name))
+        proj = refresh_projections(con, cfg, day, step, report)
         report["lineup"] = step("lineup", lambda: recommend_lineup(con, proj, day, cfg))
         if len(seasons) > 1:                                   # needs an earlier season to fit on
             report["scoreboard"] = step("scoreboard", lambda: scoreboard.write_scores(

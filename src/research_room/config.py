@@ -284,6 +284,13 @@ class MarketsConfig(BaseModel):
 
 class XFeedConfig(BaseModel):
     daily_read_budget: int
+    base_url: str = "https://api.x.com/2"
+    max_query_chars: int = 512
+    poll_minutes: int = 15
+    window_hours_before_tip: float = 3
+    lookback_minutes: int = 90
+    llm_model: str = "claude-haiku-4-5-20251001"
+    max_posts_per_llm_call: int = 40
 
 
 class Settings(BaseModel):

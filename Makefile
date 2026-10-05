@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: backtest doctor markets setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: backtest doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -23,8 +23,11 @@ nightly:  ## ingest -> features -> projections -> lineup, once now
 nightly-schedule:  ## stay running and do the nightly run every day at 18:30 local
 	$(PY) jobs/nightly.py --schedule
 
-pregame:  ## pre-tip injuries / status refresh (Phase 3)
-	@echo "pregame job arrives in Phase 3" && exit 1
+pregame:  ## pre-tip refresh now: X news, injuries, markets, today's projections, matchup snapshot
+	$(PY) jobs/pregame.py
+
+pregame-schedule:  ## stay running; on game days poll every 15 min in the 3 h before first tip
+	$(PY) jobs/pregame.py --schedule
 
 draft-api:  ## local draft API on 127.0.0.1:8765 (React app, Streamlit Draft page, Tampermonkey)
 	$(PY) jobs/draft_api.py

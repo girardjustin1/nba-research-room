@@ -482,3 +482,26 @@ the nightly run after the markets step.
   are untested. Makes and attempts (FG%/FT%) stay the baseline's.
 - Props post mostly on game day, so this sharpens today's lineup and the current matchup day. The
   rest of the week stays on the baseline.
+
+**X news feed and the pre-game job (2026-10-05).** `ingest/x_feed.py`, `pipeline.run_pregame`,
+`make pregame` / `make pregame-schedule`.
+- Handles verified with X's users-by-username lookup (2 requests): 122 of 131 exist and now carry
+  their stable X `user_id`. 9 failed (8 not found, including `Underdog__NBA`, which settles that
+  duplicate for `UnderdogNBA`; 1 restricted). They stay in the file, as the owner asked, but are
+  skipped.
+- Reading: game days only. League, insider and aggregator accounts always; official and beat
+  accounts only for teams playing today. The app-only token can't create the private X list the
+  account file planned (that would be an action on the owner's account), so handles are batched
+  into `from:` recent-search queries within X's 512-character limit. Each query reads only posts
+  newer than its last read. The 300 posts/day budget is hard: no search once fewer than 10 reads
+  remain, because X returns at least 10.
+- Parsing: posts with availability words go to Claude Haiku 4.5 in one forced-tool call per batch,
+  into the overrides' own vocabulary (Out … Available) plus minutes cap, starting and confidence.
+  Raw text is never stored. Authority: official 1, insider 2, beat 3, aggregator 4; unmatched
+  names are quarantined. The live check (one invented post, one 10-post search of @NBA) passed.
+- `run_pregame`: X news → BallDontLie injuries → markets → today's projections (the nightly
+  projection step, now shared as `refresh_projections`) → a matchup snapshot marked as news. Each
+  feed failing is recorded and the refresh goes on. `make pregame-schedule` polls every 15 minutes
+  in the 3 hours before each game day's first tip.
+- Robustness: read-only connections don't create tables added since the last write, so the health
+  screen's table counts now treat a missing new table as empty instead of failing.

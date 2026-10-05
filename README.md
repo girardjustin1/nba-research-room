@@ -40,6 +40,7 @@ make app                         # http://localhost:8501
 make test && make lint
 make doctor                      # draft-night readiness: what is missing and how to fix it
 make markets                     # archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
+make pregame-schedule            # game days: X news + injuries + markets + projections every 15 min before tip
 ```
 
 `.env`, `oauth2.json` and `data/` are gitignored and must never be committed.

@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-x-feed
+    date: 2026-10-05
+    kind: update
+    title: Injury and lineup news from X now feeds your projections
+    body: >
+      On game days, `make pregame-schedule` checks the curated X accounts every 15 minutes in the
+      3 hours before the first tip, turns posts like "ruled out tonight" or "on a minutes limit"
+      into status updates, and refreshes your projections and matchup odds. Team accounts outrank
+      reporters, who outrank aggregators. It reads at most 300 posts a day. 122 of the 131 handles
+      checked out on X; 9 couldn't be found and are skipped.
+    refs: [DECISIONS.md, src/research_room/ingest/x_feed.py, config/x_accounts.yaml]
+
   - id: 2026-10-05-market-overlay
     date: 2026-10-05
     kind: update

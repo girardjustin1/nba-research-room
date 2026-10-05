@@ -87,6 +87,9 @@ SCHEMA: dict[str, Table] = {
         "event_id VARCHAR", "player_id INTEGER", "team_id INTEGER", "status VARCHAR",
         "minutes_cap DOUBLE", "starting BOOLEAN", "confidence DOUBLE", "account VARCHAR",
         "authority_rank INTEGER", "ts TIMESTAMPTZ", *_INGEST),
+    "x_feed_log": _t(("poll_at", "query_key"),
+        "poll_at TIMESTAMPTZ", "query_key VARCHAR", "day DATE", "posts_read INTEGER",
+        "newest_at TIMESTAMPTZ", "events INTEGER"),
     "yahoo_league": _t(("league_id", "snapshot_at"),
         "league_id INTEGER", "snapshot_at TIMESTAMPTZ", "settings JSON", *_INGEST),
     "yahoo_rosters": _t(("snapshot_at", "team_id", "yahoo_player_key"),
@@ -256,7 +259,9 @@ def ingest_run(con: duckdb.DuckDBPyConnection, source: str, job: str) -> Iterato
 
 def table_counts(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """Row count per table, for the Data page and health checks."""
-    rows = [(t, con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]) for t in SCHEMA]
+    have = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+    # A read-only connection doesn't create tables added since the last write; count those as empty.
+    rows = [(t, con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] if t in have else 0) for t in SCHEMA]
     return pd.DataFrame(rows, columns=["table", "rows"])
 
 
