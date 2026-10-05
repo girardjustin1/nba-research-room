@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: backtest doctor setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: backtest doctor markets setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -46,6 +46,9 @@ mock-draft:  ## timed end-to-end mock draft (12 teams by default)
 
 doctor:  ## draft-night readiness: projections, Yahoo eligibility, slot, keepers, board speed
 	$(PY) jobs/doctor.py
+
+markets:  ## archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
+	$(PY) jobs/markets.py
 
 backtest:  ## replay last season week by week: are the win odds honest, do the plans win more?
 	$(PY) jobs/backtest.py

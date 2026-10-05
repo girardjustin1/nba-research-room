@@ -373,3 +373,28 @@ All 7 matchups a week, 20 weeks (140 team-weeks, about 8 min):
 - Plans: 54% → 94% weekly win rate (+40 pts, 80% range +34 to +45), predicted +37, still against an
   opponent who never streams.
 - So part of the top-end overconfidence was the backtest's fixed Monday lineups, not the engine.
+
+**Betting-market ingest (2026-10-05).** `ingest/kalshi.py`, `ingest/rundown.py`,
+`ingest/market_common.py`, `make markets`, plus a nightly step. Checked against both live APIs
+first:
+- **Kalshi** (public, no key). Prices are dollar strings (`yes_bid_dollars`, `yes_ask_dollars`),
+  volume is `volume_fp`. A prop rung is "Player: 30+ points" with `floor_strike` 29.5. Event
+  tickers are SERIES-YYMONDD + away + home. Settled markets move to `/historical/markets`, and
+  hourly prices of past markets are kept at `/historical/markets/{ticker}/candlesticks`, so past
+  pre-tip ladders can be recovered later for Phase 3. No props are listed in preseason; game
+  markets are.
+- **TheRundown** (key in .env). The free tier is 500M data points a month at 10 requests/s. NBA
+  props are already listed for opening night: points, rebounds, assists, threes, blocks (steals
+  and turnovers as books post them). About 25 books, including Pinnacle, DraftKings and FanDuel.
+- **Storage.** Props go into the existing `props_ladder` (new columns: bid, ask, open_interest,
+  market_ref). Game lines go into `odds` next to BallDontLie's (vendor `kalshi` / `rundown:<book>`).
+  Each row is tied to a BallDontLie game by league date and teams. Player names go through the
+  shared resolver: an unmatched name is quarantined and its row skipped.
+- **Liquidity.** A Kalshi rung thinner than 100 contracts or wider than 10¢ keeps its quotes but
+  gets no probability (missing, not guessed). Sportsbook sides are de-vigged within their pair; a
+  side without its pair keeps its price but gets no probability.
+- `implied_ladder(player, stat, game)` returns the latest liquid ladder as P(stat > threshold),
+  forced never to rise with the threshold. Feeding it into the simulator is Phase 3 work, as the
+  build prompt says (Kalshi distributions where liquid, normal otherwise).
+- A market outage is recorded in `ingest_runs` and shown by the Jobs and Markets health checks,
+  but never stops the nightly run.

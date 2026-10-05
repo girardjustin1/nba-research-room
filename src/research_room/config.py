@@ -236,6 +236,29 @@ class SystemConfig(BaseModel):
     failed_job_lookback_days: int
 
 
+class KalshiConfig(BaseModel):
+    base_url: str
+    prop_series: dict[str, str]
+    game_series: str
+    min_volume: float
+    max_spread: float
+    requests_per_second: float
+
+
+class RundownConfig(BaseModel):
+    base_url: str
+    sport_id: int
+    prop_markets: dict[int, str]
+    game_markets: dict[int, str]
+    days_ahead: int
+    requests_per_second: float
+
+
+class MarketsConfig(BaseModel):
+    kalshi: KalshiConfig
+    rundown: RundownConfig
+
+
 class XFeedConfig(BaseModel):
     daily_read_budget: int
 
@@ -252,6 +275,7 @@ class Settings(BaseModel):
     baseline: BaselineConfig
     paths: Paths
     bdl: BdlConfig
+    markets: MarketsConfig
     x_feed: XFeedConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig

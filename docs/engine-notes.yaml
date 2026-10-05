@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-markets
+    date: 2026-10-05
+    kind: update
+    title: Betting lines and player props are now archived every night
+    body: >
+      Kalshi prop ladders and game markets and sportsbook lines from TheRundown (about 25 books,
+      including Pinnacle, DraftKings and FanDuel) are saved every night. Neither service keeps a
+      usable pre-game history for us to download later, so the archive matters. Sportsbook props
+      for opening night are already listed; Kalshi lists its props closer to game days. Thin
+      markets are kept but not trusted. These feed the Phase 3 models.
+    refs: [DECISIONS.md, src/research_room/ingest/kalshi.py, src/research_room/ingest/rundown.py]
+
   - id: 2026-10-05-backtest-realism
     date: 2026-10-05
     kind: finding

@@ -39,6 +39,7 @@ make backfill                    # 2023-24 .. 2025-26 history + the 2026-27 sche
 make app                         # http://localhost:8501
 make test && make lint
 make doctor                      # draft-night readiness: what is missing and how to fix it
+make markets                     # archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
 ```
 
 `.env`, `oauth2.json` and `data/` are gitignored and must never be committed.

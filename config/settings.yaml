@@ -170,6 +170,7 @@ system:                        # health-check freshness budgets, in hours
     projections: 30
     yahoo_roster: 48           # only checked once a roster snapshot is expected (after the draft)
     preseason_projections: 168 # refresh Basketball Monster exports within a week of the draft
+    markets: 30                # Kalshi / sportsbook lines archive (only checked once games are on the schedule)
   failed_job_lookback_days: 7
 
 paths:
@@ -184,6 +185,22 @@ bdl:
   backfill_seasons: [2023, 2024, 2025]
   timeout_seconds: 30
   max_retries: 5
+
+markets:                       # betting-market inputs (ingest/kalshi.py, ingest/rundown.py), archived nightly
+  kalshi:                      # public market data, no key
+    base_url: https://api.elections.kalshi.com/trade-api/v2
+    prop_series: {KXNBAPTS: pts, KXNBAREB: reb, KXNBAAST: ast, KXNBA3PT: fg3m, KXNBASTL: stl, KXNBABLK: blk, KXNBAFTM: ftm}
+    game_series: KXNBAGAME
+    min_volume: 100            # contracts traded; a thinner rung keeps its quotes but no probability
+    max_spread: 0.10           # yes ask - yes bid (dollars); wider = illiquid, no probability
+    requests_per_second: 8
+  rundown:                     # sportsbook lines + player props (RUNDOWN_API_KEY)
+    base_url: https://therundown.io/api/v2
+    sport_id: 4
+    prop_markets: {29: pts, 35: reb, 39: ast, 38: fg3m, 34: stl, 98: blk, 33: tov}
+    game_markets: {1: moneyline, 2: spread, 3: total}
+    days_ahead: 2              # today plus this many days of events per nightly run
+    requests_per_second: 5
 
 x_feed:
   daily_read_budget: 300

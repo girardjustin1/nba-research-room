@@ -23,7 +23,7 @@ import pandas as pd
 
 from research_room import calibration, features, lineup, matchup, overrides, schedule, scoreboard, store
 from research_room.config import Settings, settings
-from research_room.ingest import bdl, yahoo
+from research_room.ingest import bdl, kalshi, rundown, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
 
@@ -83,6 +83,22 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
     return payload
 
 
+def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None = None) -> dict:
+    """Archive Kalshi and TheRundown lines. A market outage is recorded in ingest_runs (the Jobs
+    health check shows it) and never stops the nightly run: markets are an input, not the core."""
+    out = {}
+    jobs = (("kalshi", lambda: kalshi.sync(con, cfg)), ("rundown", lambda: rundown.sync(con, cfg, today=day)))
+    for name, fn in jobs:
+        try:
+            with store.ingest_run(con, name, "sync_markets") as run:
+                counts = fn()
+                run["rows"], run["detail"] = int(sum(counts.values())), json.dumps(counts)
+            out[name] = counts
+        except Exception as exc:  # noqa: BLE001 - recorded above; the night goes on
+            out[name] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    return out
+
+
 def _snapshot(con, cfg: Settings) -> dict:
     """This week's P(win) for the chart history; skipped (with the reason) before the season."""
     try:
@@ -110,6 +126,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         if sync:
             api = client or bdl.BdlClient.from_env()
             report["bdl"] = step("bdl sync", lambda: bdl.sync_daily(con, api, day))
+            report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
         try:
             report["inbox"] = step("yahoo inbox", lambda: yahoo.ingest_inbox(con))
         except yahoo.YahooCsvError as exc:
