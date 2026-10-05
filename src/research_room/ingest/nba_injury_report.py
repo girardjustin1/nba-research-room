@@ -31,9 +31,15 @@ import duckdb
 import pandas as pd
 
 from research_room import store
-from research_room.config import Settings, settings
+from research_room.config import Settings, load_aliases, settings
 from research_room.ingest.market_common import ET, RateLimited
-from research_room.ingest.names import normalize_name, resolve_and_record
+from research_room.ingest.names import (
+    NameResolver,
+    load_team_aliases,
+    normalize_name,
+    player_universe,
+    resolve_and_record,
+)
 
 SOURCE = "nba_report"
 STATUSES = ("Out", "Doubtful", "Questionable", "Probable", "Available")
@@ -166,8 +172,10 @@ def sync(
     cfg: Settings | None = None,
     client: RateLimited | None = None,
     now: datetime | None = None,
+    record_names: bool = True,
 ) -> dict:
-    """Read the newest report and store it (once per report). Returns counts."""
+    """Read the newest report and store it (once per report). Returns counts. `record_names=False`
+    (history backfills) resolves names without adding misses to the review queue."""
     cfg = cfg or settings()
     now = now or store.utcnow()
     client = client or RateLimited(cfg.nba_report.requests_per_second, headers={"User-Agent": "Mozilla/5.0"})
@@ -197,7 +205,12 @@ def sync(
             "raw_name": players["raw_name"],
             "team_abbr": players["team_id"].map(abbr),
         }).drop_duplicates("source_key").reset_index(drop=True)
-        ids = dict(zip(names["source_key"], resolve_and_record(con, SOURCE, names), strict=True))
+        if record_names:
+            resolved = resolve_and_record(con, SOURCE, names)
+        else:
+            res = NameResolver(player_universe(con), load_aliases(), load_team_aliases())
+            resolved = [res.resolve(r.raw_name, r.team_abbr).player_id for r in names.itertuples()]
+        ids = dict(zip(names["source_key"], resolved, strict=True))
         players["player_id"] = (players["raw_name"] + "|" + players["team_id"].map(abbr).fillna("")).map(ids)
         ok = players["player_id"].notna() & players["game_id"].notna()
         unmatched = int((~ok).sum())

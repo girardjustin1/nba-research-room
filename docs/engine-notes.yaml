@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-news-backtest
+    date: 2026-10-05
+    kind: finding
+    title: Game-day news makes the weekly odds more honest
+    body: >
+      Replaying last season day by day with the NBA's 5 PM injury reports, win-the-week odds
+      re-made each morning with the report and teammates-out were more accurate than Monday-only
+      odds on every day of the week. Lineup choices barely matter in this league (12 players for
+      10 active slots); the news pays off in the odds and in adds and drops.
+    refs: [DECISIONS.md, src/research_room/backtest_news.py]
+
   - id: 2026-10-05-nba-report
     date: 2026-10-05
     kind: update

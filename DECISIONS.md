@@ -618,3 +618,29 @@ pre-game and nightly runs.
   then reads as absent instead of failing (`store.has_table`).
 - Not yet checked live: no report has been published in the preseason (none in the 3 hours before
   12:40 ET today). The health screen's check for it starts with the regular season.
+
+**News backtest: game-day news makes the weekly odds more honest (2026-10-05).**
+`backtest_news.py`, `make report-backfill SEASONS="2025"` then `make backtest-news`.
+- 2025-26's NBA injury reports are stored with the production reader (`jobs/nba_report_backfill.py`:
+  the noon report on early-tip days, then the 5 PM one; 218 reports, 21,633 player rows, every
+  game day, no errors, names resolved without filling the review queue). At 5 PM, 35% of
+  team-games had not filed yet, so "not listed" applies to fewer teams here than live, where the
+  pre-game job polls every 15 minutes until tip. Each game uses the latest report at least 30
+  minutes before its tip; "not listed" uses that season's rosters (the players table only knows
+  today's teams).
+- Same simulated league and matchups as the weekly backtest (140 team-weeks), five versions:
+  Monday-only projections, re-projected daily without news, daily with the report and teammates
+  out, the same without teammates out, and hindsight lineups. P(win week) is scored at the start
+  of every day from that version's real totals so far plus its projections for the rest.
+- Weekly-odds Brier, pooled over the days of the week: Monday-only 0.1108, daily 0.1084, daily
+  with news 0.1063 (paired difference to Monday-only −0.0045, 80% range −0.0089 to −0.0002); at
+  the start of the week 0.1548, 0.1556, 0.1513. With news it beats Monday-only on every day,
+  and beats daily-without-news on every day but the last (0.0536 vs 0.0530).
+  Teammates out, same news, on minus off: −0.0011 pooled (better in 90% of resamples) and
+  −0.0025 at the start of the week (97%). Small but consistent; both stay on.
+- Lineups barely matter in this league: every version's lineups gave the same weekly result in
+  98.6% of matchups (12 players for 10 active slots leaves few start/sit choices). Both sides use
+  the same version, so lineup gains would cancel anyway; the summary reports how often a
+  version changed the result instead of a win rate. Game-day news pays off in the odds and in
+  adds and drops, which this replay leaves out (rosters as drafted). A news-aware replay of the
+  optimizer's streaming adds is the open test.
