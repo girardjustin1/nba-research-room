@@ -42,7 +42,7 @@ def test_return_date_window_and_no_date_horizon(con, tmp_path):
     ov = by(overrides.resolve(con, date(2026, 10, 19), date(2026, 10, 25), as_of=SNAP, manual_path=empty))
     assert ov[(1, date(2026, 10, 22))].play_prob == 0.0
     assert (1, date(2026, 10, 23)) not in ov                       # back on his return date
-    assert ov[(2, date(2026, 10, 19))].play_prob == 0.5
+    assert ov[(2, date(2026, 10, 19))].play_prob == settings().overrides.status_play_prob["Questionable"]
     assert (2, date(2026, 10, 20)) not in ov                       # questionable lasts 1 day w/o a date
     assert ov[(3, date(2026, 10, 25))].play_prob == 0.0            # out for season covers everything
 
@@ -61,7 +61,8 @@ def test_manual_beats_x_beats_bdl_and_recency_breaks_ties(con, tmp_path):
     as_of = datetime(2026, 10, 23, tzinfo=UTC)
     ov = by(overrides.resolve(con, date(2026, 10, 20), date(2026, 10, 25), as_of=as_of, manual_path=manual))
     official = ov[(1, date(2026, 10, 21))]
-    assert (official.authority, official.play_prob, official.minutes_cap) == ("official", 0.85, 24.0)
+    probable = settings().overrides.status_play_prob["Probable"]
+    assert (official.authority, official.play_prob, official.minutes_cap) == ("official", probable, 24.0)
     assert ov[(1, date(2026, 10, 22))].authority == "bdl"           # the X event only covers its game day
     assert ov[(1, date(2026, 10, 24))].authority == "manual"
     assert ov[(2, date(2026, 10, 21))].status == "Out"              # later report from the same tier wins

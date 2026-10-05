@@ -35,7 +35,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from research_room import features, schedule, store
+from research_room import features, schedule, store, teammates
 from research_room.config import Settings, settings
 from research_room.draft.value import NBA_REGULAR_SEASON_GAMES
 
@@ -55,6 +55,7 @@ class BaselineModel:
         self.prior_rate: dict[str, float] = {}
         self.shrink_k: dict[str, float] = {}
         self.minutes_ab: tuple[float, float] | None = None      # (alpha, beta) once fit_minutes runs
+        self.teammates: teammates.TeammatesAdjust | None = None  # fitted when settings enable it
         if shrink is not None:                       # an explicit variant, e.g. for the scoreboard
             self.name = "baseline_eb" if shrink else "baseline_unshrunk"
 
@@ -123,6 +124,8 @@ class BaselineModel:
                 pred, y = played[f"{s}_pm_ewma"] * played["min_played_ewma"], played[f"y_{s}"]
             ok = pred.notna() & (pred > 0)
             self.phi[s] = float(((y[ok] - pred[ok]) ** 2).sum() / pred[ok].sum()) if ok.any() else 1.0
+        if self.cfg.baseline.teammates.enabled and set(teammates.PRIOR_COLUMNS) <= set(train.columns):
+            self.teammates = teammates.TeammatesAdjust(self.cfg).fit(train)
         return self
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -151,6 +154,18 @@ class BaselineModel:
         m = np.where(has_ewma, df["min_played_ewma"], 0.0) * w + np.where(
             has_prior, df.get("prior_minutes", 0.0), 0.0) * (1 - w)
         m = np.asarray(m, dtype=float)
+        # Teammates out (teammates.py): every row's chance of sitting moves minutes and production
+        # to the teammates who play, before any minutes cap.
+        rate_f, tm_scale = {}, np.ones(len(df))
+        if self.teammates is not None and {"game_id", "team_id", *teammates.PRIOR_COLUMNS} <= set(df.columns):
+            dl = self.teammates.deltas(df, 1.0 - p.to_numpy(float))
+            m_ewma = df["min_played_ewma"].fillna(0.0).to_numpy(float)
+            shift = self.teammates.minutes_delta(dl["d_min"].to_numpy(float), m_ewma)
+            moved = np.clip(m + np.where(has_ewma, shift, 0.0), 0.0, 48.0)
+            tm_scale = np.where(m > 0, moved / np.where(m > 0, m, 1.0), 1.0)   # stats follow the minutes
+            m = moved
+            rate_f = {s: np.where(has_ewma, self.teammates.rate_factor(s, dl[f"dsh_{s}"].to_numpy(float)),
+                                  1.0) for s in STATS}
         cap = df.get("minutes_cap")
         scale = np.ones(len(df))
         if cap is not None:
@@ -177,6 +192,8 @@ class BaselineModel:
                 prior = df.get(f"prior_{s}", pd.Series(np.nan, index=df.index)).to_numpy()
                 cond = (np.where(has_ewma, ew, 0.0) * w + np.where(has_prior, prior, 0.0) * (1 - w)) * scale
                 cond = np.nan_to_num(cond[usable])
+                if s in rate_f:
+                    cond = cond * rate_f[s][usable] * tm_scale[usable]
             phi = self.phi.get(s, 1.0)
             mean = pu * cond
             var = pu * (phi * cond + cond ** 2) - mean ** 2

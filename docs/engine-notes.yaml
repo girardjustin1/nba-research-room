@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-teammates-out
+    date: 2026-10-05
+    kind: update
+    title: When a starter sits, his teammates' projections go up
+    body: >
+      Projections now move minutes and shots to the teammates who play when rotation players are
+      ruled out, and back when they return. Tested on last season with the NBA's own 5 PM injury
+      reports: minutes error down 2-4.5% and points 0.6-1.7%, depending on how much of the report
+      we read. Doubtful players are now treated as almost certainly out (1.4% played last season,
+      not the 25% assumed).
+    refs: [DECISIONS.md, src/research_room/teammates.py]
+
   - id: 2026-10-05-market-news
     date: 2026-10-05
     kind: finding

@@ -107,15 +107,17 @@ features:                      # chosen from 2024-26 data: see DECISIONS.md (Pha
   rotation_minutes: 20         # a teammate with EWMA minutes >= this is "rotation" for usage-out
 
 overrides:
-  # P(plays) by injury status. ASSUMED (no injury history yet to calibrate against); revisit once
-  # a few weeks of reports and outcomes are archived. A manual entry or an explicit play_prob wins.
+  # P(plays) by injury status. Doubtful / Questionable / Probable: how often players with that
+  # status on the NBA's 5 PM (or pre-tip morning) injury report played in 2024-26 (DECISIONS.md,
+  # teammates out): 1.4% of 366, 51% of 1,630, 92% of 575. Day-To-Day (BallDontLie's word) is not
+  # on the official report and stays assumed. A manual entry or an explicit play_prob wins.
   status_play_prob:
     "Out": 0.0
     "Out For Season": 0.0
-    "Doubtful": 0.25
-    "Questionable": 0.5
+    "Doubtful": 0.02
+    "Questionable": 0.51
     "Day-To-Day": 0.6
-    "Probable": 0.85
+    "Probable": 0.92
     "Available": 1.0
   # With no return date, a status applies for this many days after the report (inclusive).
   no_return_date_days:
@@ -136,6 +138,11 @@ baseline:
   shrinkage:                   # pull noisy per-minute rates toward the league average (empirical Bayes)
     enabled: false             # turned on only if it beats the unshrunk baseline (DECISIONS.md)
     k_grid_minutes: [0, 60, 120, 250, 500, 1000, 2000, 4000]   # prior strength searched per stat
+  teammates:                   # minutes and production shift to teammates when rotation players sit
+    enabled: true              # wins with game-day news, neutral without (DECISIONS.md, teammates out)
+    rotation_minutes: 12       # a teammate with EWMA minutes >= this counts when he sits
+    clip_minutes: 60           # missing-minutes change beyond this is treated as this
+    clip_share: 0.6            # missing-production share change beyond this is treated as this
 
 models:                        # Phase 3 challengers (projections/*.py); each must beat the baseline first
   driver: baseline             # which model writes the nightly projections: baseline | lgbm

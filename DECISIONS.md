@@ -548,3 +548,47 @@ P(plays) and when the news arrived. A player ruled out on X after the props were
 - Not checked on live data: the store has no archived prop prices yet (`make markets` hasn't run
   against it). Covered by tests: the round trip, P(plays) scaling, Out after the price, a stale
   source dropped while a newer one counts, a minutes cap, and the injury news time.
+
+**Teammates out: switched on (2026-10-05).** `teammates.py`, applied inside the baseline's
+`predict`, so live, calibration, backtest and scoreboard projections all get it.
+- Measure, per player-game: teammates' missing minutes (rotation teammates, EWMA ≥ 12 min, × P(they
+  sit)) and their missing share of each stat, minus what the player is used to (an EWMA over his
+  own previous games). His moving averages already reflect a long absence, so only the change is
+  news; a teammate returning gives a negative change. In history P(sit) is what happened; live it
+  is 1 − P(plays) after the overrides.
+- Box scores, 2025-26 against the baseline (fitted on 2023-24 and 2024-25), with who sat known:
+  when 30+ more teammate minutes are missing than he's used to, bench players play +6.7 minutes,
+  rotation players +3.1, starters about +0.3 (near their ceiling); returns reverse it (−3.5). The
+  same in the training seasons.
+- Fit: minutes when playing += change × (c0 + c1·m + c2·m²/48); per-minute rate × (1 + b × change
+  in missing share), per stat (points 0.37, assists 0.35, rebounds 0.04; steals and blocks
+  slightly negative). Stats follow the adjusted minutes.
+- What it is worth depends on knowing who sits. RMSE change on 2025-26 played games, if he plays:
+
+  | | no news | 5 PM injury report | report + "not listed" | who sat (hindsight) |
+  |---|---|---|---|---|
+  | minutes | −0.0% | −2.0% | −4.5% | −7.1% |
+  | points | −0.1% | −0.6% | −1.7% | −2.4% |
+  | rebounds | +0.1% | −0.3% | −1.1% | −1.8% |
+  | assists | +0.1% | −0.3% | −1.1% | −1.6% |
+  | FGA | −0.3% | −1.2% | −3.3% | −4.7% |
+
+  "Not listed" treats a player missing from the report as likely to play, by his recent play
+  rate (98% at a play rate above 0.95, 42% at 0.3 or less; the table was read from 2025-26
+  itself, a mild in-sample advantage). Earlier challengers moved points by ±0.5%.
+- Backtest (140 team-weeks, Monday projections, so no game-day news): weekly-odds Brier 0.175 on
+  vs 0.168 off, but the projections change the simulated draft, so the two runs are different
+  leagues (the same do-nothing result in 55% of matchups). Paired by matchup, the difference's 80%
+  range is −0.029 to +0.037: no measurable change, as expected without news. Switched on because
+  it is neutral without news and clearly better with it.
+- The injury reports: the NBA's official PDFs (`ak-static.cms.nba.com/referee/injury/`, named
+  `..._05PM.pdf` until late December 2025 and `..._05_00PM.pdf` since), the 5 PM report for each
+  2024-25 and 2025-26 game day plus the noon report for early tips, 45,643 rows, 98.8% of
+  2025-26's NBA (not G League) rows matched to players (suffixes like "ButlerIII" stripped). 80%
+  of rotation players who sat were listed. The research scripts were scratch; the method is here.
+- Status calibration from the same reports (how often the player played): Out 0.1% of 9,451,
+  Doubtful 1.4% of 366, Questionable 51% of 1,630, Probable 92% of 575. `status_play_prob` now
+  uses Doubtful 0.02 (was an assumed 0.25), Questionable 0.51, Probable 0.92. "Available" played
+  81% of 968, mostly two-way and G League listings, so it stays 1.0 for X posts.
+- Next: read the official report live (the X feed and BallDontLie's list give part of it), which
+  is what the "report + not listed" column needs.

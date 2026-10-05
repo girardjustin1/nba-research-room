@@ -196,11 +196,19 @@ class ShrinkageConfig(BaseModel):
     k_grid_minutes: list[float] = Field(default_factory=lambda: [0.0])
 
 
+class TeammatesConfig(BaseModel):
+    enabled: bool = False
+    rotation_minutes: float = 12.0
+    clip_minutes: float = 60.0
+    clip_share: float = 0.6
+
+
 class BaselineConfig(BaseModel):
     preseason_prior_games: float
     min_play_prob: float
     minutes_recalibration: bool = False
     shrinkage: ShrinkageConfig = Field(default_factory=ShrinkageConfig)
+    teammates: TeammatesConfig = Field(default_factory=TeammatesConfig)
 
 
 class LgbmConfig(BaseModel):

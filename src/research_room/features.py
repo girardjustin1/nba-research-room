@@ -23,7 +23,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from research_room import quality
+from research_room import quality, teammates
 from research_room.config import Settings, settings
 
 RATE_STATS = ("pts", "reb", "ast", "stl", "blk", "fg3m", "tov", "fgm", "fga", "ftm", "fta")
@@ -132,6 +132,9 @@ def build(logs: pd.DataFrame, team_ctx: pd.DataFrame, cfg: Settings | None = Non
     out["teammates_out_usage"] = team_out - out["_out_usage"]
     out = out.drop(columns="_out_usage")
 
+    # What each player is used to: teammates missing in his previous games (teammates.py).
+    out = pd.concat([out, teammates.prior_states(out, played, cfg)], axis=1)
+
     # Targets (what happened), kept separate from features by name: `y_` prefix.
     out["y_minutes"] = df["minutes"].to_numpy()
     out["y_did_play"] = played.to_numpy()
@@ -167,7 +170,7 @@ ET = "America/New_York"
 # A player's state as of a given moment: everything a projection model may use that does not
 # depend on the next game's opponent (so live, calibration and backtest projections agree).
 STATE_COLUMNS = ["min_played_ewma", "play_rate_ewma", "games_prior", "min_r3", "min_r5", "min_r10",
-                 "usage_r5", "fga_r5", *[f"{s}_pm_ewma" for s in RATE_STATS]]
+                 "usage_r5", "fga_r5", *[f"{s}_pm_ewma" for s in RATE_STATS], *teammates.PRIOR_COLUMNS]
 
 
 def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
