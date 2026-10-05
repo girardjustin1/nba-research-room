@@ -82,7 +82,7 @@ Columns marked * are required. Unknown columns are rejected.
 | `teams.csv` | `team_id`\*, `team_name`\* | the league's 14 teams (Yahoo ids 1–14); with `draft.order` set, they name the draft board's columns |
 | `roster.csv` | `team_id`\*, `player_name`\*, `selected_slot`\*, `eligible_positions`\*, `status`, `team_abbr`, `yahoo_player_key` | slot ∈ PG SG G SF PF F C Util BN IL IL+ |
 | `players.csv` | `player_name`\*, `team_abbr`\*, `eligible_positions`\*, `pct_rostered`\*, `status`, `owner_team_id`, `yahoo_player_key` | `pct_rostered` 0–100; a trailing % is fine |
-| `matchup.csv` | `week`\*, `team_id`\*, `opponent_team_id`\*, `fg_pct`\*, `ft_pct`\*, `fg3m`\*, `pts`\*, `reb`\*, `ast`\*, `stl`\*, `blk`\*, `tov`\* | percentages as decimals (0.471) |
+| `matchup.csv` | `week`\*, `team_id`\*, `opponent_team_id`\*, `fg_pct`\*, `ft_pct`\*, `fg3m`\*, `pts`\*, `reb`\*, `ast`\*, `stl`\*, `blk`\*, `tov`\*, `acquisitions_used` | percentages as decimals (0.471); `acquisitions_used` = this week's adds so far (my team), else the optimizer assumes 0 and says so |
 | `draft_results.csv` | `pick_no`\*, `round`\*, `team_id`\*, `player_name`\*, `team_abbr`, `yahoo_player_key` | written by the draft tracker or exported from Yahoo |
 
 `eligible_positions` accepts `,`, `/` or `;` separators. `team_abbr` may be Yahoo's short form

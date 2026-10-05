@@ -196,6 +196,14 @@ class BaselineConfig(BaseModel):
     min_play_prob: float
 
 
+class OptimizerConfig(BaseModel):
+    candidate_pool: int
+    add_takes_effect_days: int
+    min_gain_per_acquisition: float
+    relinearize_iterations: int
+    solver_time_limit_s: float
+
+
 class SimulationConfig(BaseModel):
     calibration_teams: int
     team_size: int
@@ -229,6 +237,7 @@ class Settings(BaseModel):
     paths: Paths
     bdl: BdlConfig
     x_feed: XFeedConfig
+    optimizer: OptimizerConfig
     simulation: SimulationConfig
     system: SystemConfig
 

@@ -81,17 +81,20 @@ def _wide(proj: pd.DataFrame, day: date, value: str) -> pd.DataFrame:
         if not d.empty else pd.DataFrame()
 
 
-def team_days(roster: pd.DataFrame, proj: pd.DataFrame, days: list[date],
+def team_days(roster: pd.DataFrame | list[pd.DataFrame], proj: pd.DataFrame, days: list[date],
               cfg: Settings | None = None) -> TeamDays:
-    """`roster`: player_id, name, eligible (list), status, current_slot. `proj`: long rows
-    player_id, date, stat, mean, sd for every projected player (the day's pool sets the lineup
-    weights). A player has a game on a day when he has projection rows that day."""
+    """`roster`: player_id, name, eligible (list), status, current_slot; or one such frame per day
+    (a roster that changes mid-week with adds and drops). `proj`: long rows player_id, date, stat,
+    mean, sd for every projected player (the day's pool sets the lineup weights). A player has a
+    game on a day when he has projection rows that day."""
     cfg = cfg or settings()
     cats = cfg.categories
     out = {k: {c.key: np.zeros(len(days)) for c in cats} for k in ("mean", "var", "made", "att", "bin_var")}
     scheduled, counted, starters_by_day = [], [], []
-    ids = roster["player_id"].astype(int).tolist()
+    by_day = roster if isinstance(roster, list) else [roster] * len(days)
     for i, day in enumerate(days):
+        roster = by_day[i]
+        ids = roster["player_id"].astype(int).tolist()
         mean_day, sd_day = _wide(proj, day, "mean"), _wide(proj, day, "sd")
         if mean_day.empty:
             scheduled.append(0), counted.append(0), starters_by_day.append([])
@@ -332,6 +335,7 @@ def week_inputs(con, cfg: Settings | None = None, now: datetime | None = None) -
     return {"week": week_no, "start": start, "end": end, "days": days, "now": now, "run_at": run,
             "cats_as_of": cats_as_of, "me_id": me_id, "opp_id": opp_id,
             "me": team_days(me_roster, proj, days, cfg), "opp": team_days(opp_roster, proj, days, cfg),
+            "me_roster": me_roster, "opp_roster": opp_roster, "proj": proj,
             "me_done": me_done, "opp_done": opp_done, "missing": miss,
             "var_mult": calibration.load_multipliers(con), "corr": calibration.load_correlation(con, cfg)}
 

@@ -53,6 +53,7 @@ SCHEMAS: dict[str, tuple[Column, ...]] = {
     "matchup": (
         Column("week", "int"), Column("team_id", "int"), Column("opponent_team_id", "int"),
         *(Column(c, "float") for c in ("fg_pct", "ft_pct", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov")),
+        Column("acquisitions_used", "int", required=False),
     ),
     "draft_results": (
         Column("pick_no", "int"), Column("round", "int"), Column("team_id", "int"),

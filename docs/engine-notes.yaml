@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-optimizer
+    date: 2026-10-05
+    kind: update
+    title: The weekly add/drop plan is built
+    body: >
+      Each week the engine searches your free agents for the adds (and drops) that raise your
+      chance of winning the week the most, within 4 acquisitions, your roster spots and the
+      10 active slots. Every move is scored by the matchup engine. It drives the With moves line
+      on the Matchup chart, the Moves tab, and toggling moves on and off. It needs players.csv for
+      the free agents; add an acquisitions_used column to matchup.csv so it knows how many adds
+      you have left (until then it assumes none used and says so).
+    refs: [DECISIONS.md, src/research_room/optimizer.py]
+
   - id: 2026-10-05-matchup
     date: 2026-10-05
     kind: update

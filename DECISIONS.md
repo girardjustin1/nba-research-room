@@ -280,3 +280,22 @@ are drawn from the top 180 players by projected points, one Monday–Sunday week
   eligibility, so a "PG" never filled G (or an "SF" never filled F). It now expands positions to
   their combo slots and Util, using `draft.position_eligibility`.
 - Response time is about 320 ms on a 5-day week, mostly the 10 daily lineup solves.
+
+**Add/drop optimizer (2026-10-05).** `optimizer.py`, `moves_api.py`, `GET /season/moves`,
+`POST /season/scenario`, and the With moves line in `/season/week/probability`.
+- Weekly MILP, linearized at the matchup. Each category's weight is dP(win week)/d(my total) =
+  P(the category is pivotal) × the slope of its win chance. The plan is then scored exactly by
+  the matchup engine, re-weighted at the plan and re-solved, up to 3 times. The best exact
+  P(win week) is kept, and it must beat doing nothing.
+- Rules: 12 non-IL roster spots, 10 active slots, eligibility, 4 acquisitions a week, adds count
+  from the next day, and each add must be worth at least 0.2 points of P(win week). Free agents
+  can be streamed (added, then dropped for another add).
+- Free agents come from players.csv (no owner, matched, not ruled out). The 40 most valuable this
+  week are considered. Acquisitions used come from an optional `acquisitions_used` column in
+  matchup.csv. Without it, 0 is assumed and every move lists that in `confidence.missing`.
+- A single move's effect has no uncertainty band yet (lo = hi = the expected change). That's
+  labeled too.
+- On a full-size synthetic week (12 v 12, 60 free agents), it solves in about 2 s. The plan is
+  cached so the Matchup and Moves screens share one solve.
+- Not yet validated on real past weeks (did the plans win more often?). That's the backtest
+  harness.

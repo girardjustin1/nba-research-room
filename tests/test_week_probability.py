@@ -70,7 +70,7 @@ def test_probability_endpoint_end_to_end(client):
     assert [p["ts"][:10] for p in dn["points"][1:]] == [str(d) for d in WEEK2[2:]]   # Wed..Sun
     assert dn["points"][0]["p_win_week"] == j["current"]["p_win_week"]
     assert dn["final"]["hi"] - dn["final"]["lo"] > dn["points"][1]["hi"] - dn["points"][1]["lo"]
-    assert {p["module"] for p in j["provenance"]} == {"projections", "simulate", "yahoo"}
+    assert {p["module"] for p in j["provenance"]} == {"projections", "simulate", "yahoo", "optimizer"}
 
     con = store.connect(db)
     out = matchup.snapshot(con, now=datetime.fromisoformat(NOW))
@@ -89,3 +89,60 @@ def test_probability_says_what_is_missing(tmp_path):
     c = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
     r = c.get("/season/week/probability", params={"now": NOW})
     assert r.status_code == 409 and "matchup.csv" in r.json()["detail"]
+
+
+def _free_agents(con, strength=1.6):
+    t = pd.Timestamp("2026-11-04T09:00:00-05:00")
+    meta = {"source": "test", "fetched_at": t}
+    fa = [{"snapshot_at": t, "yahoo_player_key": f"fa{pid}", "player_name": f"Free {pid}", "team_abbr": "X",
+           "eligible_positions": pos, "pct_rostered": 12.0, "status": None, "owner_team_id": None,
+           "player_id": pid, **meta} for pid, pos in ((201, "C"), (202, "PG"), (203, "SF"), (204, "PF"))]
+    store.upsert(con, "yahoo_players", pd.DataFrame(fa))
+    base = {"pts": 15, "reb": 6, "ast": 4, "stl": 1, "blk": 0.6, "fg3m": 1.6, "tov": 1.8, "fgm": 5.5,
+            "fga": 12, "ftm": 2.5, "fta": 3.2, "minutes": 30}
+    run = pd.Timestamp("2026-11-03T23:40:00Z")
+    rows = [{"model": "baseline", "run_at": run, "player_id": pid, "date": d, "stat": s,
+             "mean": base[s] * strength, "sd": (1.3 * base[s] * strength) ** 0.5}
+            for pid in (201, 202, 203, 204) for d in WEEK2 for s in (*STATS, "minutes")]
+    store.upsert(con, "projections", pd.DataFrame(rows))
+
+
+def test_moves_plan_with_moves_line_and_scenarios(client):
+    c, db = client
+    con = store.connect(db)
+    _free_agents(con)
+    con.close()
+    mv = c.get("/season/moves", params={"now": NOW})
+    assert mv.status_code == 200, mv.text
+    m = mv.json()
+    assert m["moves"] and m["with_all"]["delta_vs_baseline"] > 0
+    assert m["acquisitions"] == {"used": 0, "max": 4, "pending": 0, "resets_on": "2026-11-09"}
+    first = m["moves"][0]
+    assert first["player"]["owner"] == "free_agent" and first["counterpart"]["owner"] == "mine"
+    assert any(x["key"] == "acquisitions_used" for x in first["confidence"]["missing"])
+    assert first["dates"][0] >= "2026-11-05"                          # adds count from tomorrow
+
+    prob = c.get("/season/week/probability", params={"now": NOW}).json()
+    kinds = [s["kind"] for s in prob["scenarios"]]
+    assert kinds == ["do_nothing", "recommended"]
+    rec = prob["scenarios"][1]
+    assert prob["recommended_move_ids"] == rec["move_ids"] and rec["move_ids"]
+    assert rec["final"]["p_win_week"] > prob["scenarios"][0]["final"]["p_win_week"]
+    assert rec["points"][0]["p_win_week"] == prob["current"]["p_win_week"]   # nothing made yet "now"
+    assert all(p["lo"] <= p["p_win_week"] <= p["hi"] for p in rec["points"])
+
+    one = c.post("/season/scenario", params={"now": NOW}, json={"move_ids": [first["move_id"]]}).json()
+    assert one["feasible"] and one["scenario"]["kind"] == "custom"
+    assert one["scenario"]["delta_vs_do_nothing"] == pytest.approx(first["delta_p_win"]["mean"], abs=1e-9)
+    too_many = [f"add-{200 + i}-drop-{i}-2026-11-06" for i in range(1, 6)]
+    bad = c.post("/season/scenario", params={"now": NOW}, json={"move_ids": too_many}).json()
+    assert not bad["feasible"] and "acquisitions" in bad["message"]
+
+
+def test_moves_need_players_csv_but_probability_still_answers(client):
+    c, _db = client
+    r = c.get("/season/moves", params={"now": NOW})
+    assert r.status_code == 409 and "players.csv" in r.json()["detail"]
+    prob = c.get("/season/week/probability", params={"now": NOW}).json()
+    assert [s["kind"] for s in prob["scenarios"]] == ["do_nothing"]
+    assert any("players.csv" in (p["note"] or "") for p in prob["provenance"])

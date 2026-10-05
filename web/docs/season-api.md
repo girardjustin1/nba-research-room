@@ -7,8 +7,8 @@ page says where each number comes from.
 
 | Status | Endpoints |
 |---|---|
-| **Implemented** | `GET /season/lineup`, `GET /season/week/probability` (history + the do-nothing scenario; `season_api.py`, `matchup.py`), `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
-| **Proposed** | everything else on this page, including the recommended and alternative scenarios of `/season/week/probability`, `GET /season/week/gamecenter` and `POST /season/scenario` (Phase 2, with the optimizer) |
+| **Implemented** | `GET /season/lineup`, `GET /season/week/probability` (history, do nothing and the recommended plan; `season_api.py`, `matchup.py`, `moves_api.py`), `GET /season/moves` (add/drop moves), `POST /season/scenario`, `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
+| **Proposed** | everything else on this page, including named alternative plans (`custom` scenarios in `/season/week/probability`), start/bench moves in `/season/moves`, and `GET /season/week/gamecenter` |
 
 All endpoints are served by the local API on 127.0.0.1:8765. The app calls `/api/...` and the
 Vite proxy strips the `/api` prefix. The app reaches the season screens at `#/season/<tab>`,
@@ -73,8 +73,9 @@ Implemented: `history[]` from `matchup_snapshots` (one per nightly run, plus a l
 a snapshot's `lo`/`hi` equal its `p_win_week`, since a snapshot is a measurement, not a projection),
 the `do_nothing` scenario (its first point is now, then each remaining day's end at 11:59 pm ET,
 lo/hi = the 10th–90th percentile of P(win week) over simulated weeks), `current` and `cats_as_of`.
-`recommended_move_ids` is empty and `scenarios` holds only `do_nothing` until the optimizer
-lands. 409 when the week's matchup.csv, a roster or projections are missing.
+The `recommended` scenario is the optimizer's plan (`moves_api.py`); without players.csv it is
+left out and the provenance says why. 409 when the week's matchup.csv, a roster or projections
+are missing.
 
 | Field | Produced by | Notes |
 |---|---|---|

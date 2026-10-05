@@ -100,7 +100,7 @@ SCHEMA: dict[str, Table] = {
         "snapshot_at TIMESTAMPTZ", "week INTEGER", "team_id INTEGER",
         "opponent_team_id INTEGER", "fg_pct DOUBLE", "ft_pct DOUBLE", "fg3m DOUBLE",
         "pts DOUBLE", "reb DOUBLE", "ast DOUBLE", "stl DOUBLE", "blk DOUBLE", "tov DOUBLE",
-        *_INGEST),
+        "acquisitions_used INTEGER", *_INGEST),
     "draft_picks": _t(("draft_id", "pick_no"),
         "draft_id VARCHAR", "pick_no INTEGER", "round INTEGER", "team_id INTEGER",
         "player_id INTEGER", "player_name VARCHAR", "is_keeper BOOLEAN",

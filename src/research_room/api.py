@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import images, readiness, schedule, season_api, store, system
+from research_room import images, moves_api, readiness, schedule, season_api, store, system
 from research_room.config import Settings, settings
 from research_room.draft import eligibility, tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
@@ -245,6 +245,10 @@ def finish_mock(s: Session) -> None:
 
 
 # ------------------------------------------------------------------ request bodies
+class ScenarioIn(BaseModel):
+    move_ids: list[str] = Field(default_factory=list)
+
+
 class SessionIn(BaseModel):
     draft_id: str = Field(default_factory=lambda: f"hoopdreams-{settings().season.nba_season}")
     my_slot: int | None = None
@@ -745,7 +749,30 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
-            return season_api.probability_response(con, now=when)
+            return moves_api.with_recommended(season_api.probability_response(con, now=when), con, now=when)
+        except season_api.NotReady as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.get("/season/moves")
+    def get_season_moves(now: str | None = None) -> dict:
+        """MovesResponse: the optimizer's add/drop plan for the rest of the week."""
+        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        try:
+            return moves_api.moves_response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
+        except season_api.NotReady as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.post("/season/scenario")
+    def post_season_scenario(body: ScenarioIn, now: str | None = None) -> dict:
+        """ScenarioResponse: re-simulate the moves the user toggled on."""
+        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return moves_api.scenario_response(con, body.move_ids, now=when)
         except season_api.NotReady as exc:
             raise HTTPException(409, str(exc)) from exc
         finally:

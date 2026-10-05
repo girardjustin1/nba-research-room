@@ -132,6 +132,13 @@ baseline:
   preseason_prior_games: 10    # in-season EWMA vs the preseason projection: weight = n / (n + this)
   min_play_prob: 0.0           # floor on P(plays) from the play-rate EWMA (overrides can set 0)
 
+optimizer:                     # weekly add/drop plan (research_room/optimizer.py)
+  candidate_pool: 40           # free agents considered, the most valuable this week under the current weights
+  add_takes_effect_days: 1     # an add made today counts from tomorrow (today's games may have tipped)
+  min_gain_per_acquisition: 0.002   # spend an acquisition only for >= 0.2 pts of P(win week)
+  relinearize_iterations: 3    # re-weight at the plan and re-solve; the best exact P(win week) wins
+  solver_time_limit_s: 20
+
 simulation:                    # team-week variance calibration (research_room/calibration.py)
   calibration_teams: 6000      # random teams sampled per season to fit / score the multipliers
   team_size: 10                # players per sampled team (one active lineup)

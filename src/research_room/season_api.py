@@ -330,3 +330,4 @@ def probability_response(con: duckdb.DuckDBPyConnection, cfg: Settings | None = 
         "current": {"p_win_week": m.p_win_week, "delta_since_yesterday": since},
         "cats_as_of": _iso(inp["cats_as_of"]),
     }
+
