@@ -57,7 +57,7 @@ backtest:  ## replay last season week by week: are the win odds honest, do the p
 	$(PY) jobs/backtest.py
 
 backtest-news:  ## replay last season day by day with the NBA injury reports: does game-day news help?
-	$(PY) jobs/backtest_news.py
+	$(PY) jobs/backtest_news.py $(ARGS)
 
 report-backfill:  ## store past NBA injury reports for the news backtest (SEASONS="2025")
 	$(PY) jobs/nba_report_backfill.py --seasons $(SEASONS)

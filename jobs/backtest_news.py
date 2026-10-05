@@ -1,6 +1,7 @@
 """Replay the latest backfilled season day by day with game-day news (see research_room.backtest_news).
 
 Usage: make backtest-news   (needs `make report-backfill SEASONS="<season>"` first; prints the summary)
+       make backtest-news ARGS=--moves   (the add/drop replay: about an hour)
 """
 
 from __future__ import annotations
@@ -12,9 +13,10 @@ from research_room import backtest_news, store
 
 
 def main() -> int:
+    moves = "--moves" in sys.argv[1:]
     con = store.connect(read_only=True)
     try:
-        _, summary = backtest_news.run_from_store(con)
+        _, summary = backtest_news.run_from_store(con, moves=moves)
     finally:
         con.close()
     print(json.dumps(summary, indent=2, default=str))

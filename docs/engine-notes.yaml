@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-moves-replay
+    date: 2026-10-05
+    kind: finding
+    title: Make the week's add/drop plan early and stick to it
+    body: >
+      Replaying last season, re-planning adds and drops every morning (with or without the
+      injury report) never beat the plan made before the week started: the results changed in
+      only 3-4 of 140 weeks, each for the worse. The early plan already uses nearly all four
+      acquisitions and won 89% of weeks against a manager who doesn't stream.
+    refs: [DECISIONS.md, src/research_room/backtest_news.py]
+
   - id: 2026-10-05-multi-day-news
     date: 2026-10-05
     kind: update

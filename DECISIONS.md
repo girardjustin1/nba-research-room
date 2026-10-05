@@ -664,3 +664,24 @@ pre-game and nightly runs.
   and "Why this number" shows it as its own step ("+2.9 min, +8% per minute; out: …", naming
   teammates the overrides rule out that day). His own minutes and rate steps exclude it, and the
   steps still add up exactly (tested).
+
+**Add/drop replay with game-day news: re-planning each morning doesn't help (2026-10-05).**
+`backtest_news.run_moves`, `make backtest-news ARGS=--moves` (about 30 minutes). Same league and
+matchups as the weekly backtest (140 team-weeks); my side streams, the opponent never does; each
+day's lineups come from that version's projections that morning.
+- Versions: do nothing; the Sunday plan for the week (as the weekly backtest); re-plan each
+  morning with that morning's projections and the acquisitions left, making only the moves that
+  must be made that day (adds counting from tomorrow); the same with the NBA report and
+  teammates out.
+- Win rate (a tie scores 0.5) / categories: do nothing 56% / 4.72, Sunday plan 89% / 6.17, daily
+  re-plan 86% / 6.13, daily re-plan with news 86% / 6.12. The re-plans changed the week's result
+  in only 3 and 4 of 140 weeks, all for the worse (sign test p = 0.25 and 0.12): no evidence of
+  a gain, a slight lean against. News against no news: 1 week differs.
+- Why little can change here: the Sunday plan already spends about 3.9 of the 4 acquisitions and
+  wins 89% of weeks against a non-streaming opponent; most of what news would change (a rostered
+  player out) is absorbed by lineups and the plan's own streaming.
+- Product consequence: the Moves screen should make the week's plan early and keep it, re-planning
+  only when news changes it materially (for example, a rostered player newly out several days),
+  rather than reshuffling every morning. Not built yet; the threshold needs a test of its own.
+- The replay's two parts (odds by day, add/drop) now share one setup (`_prepare`, `_weeks`), so
+  both draw the weekly backtest's matchups.

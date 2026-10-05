@@ -95,3 +95,15 @@ def test_summary_pairs_versions_by_team_week():
     assert s["team_weeks"] == 4
     assert s["versions"]["daily_news"]["vs_monday"] == pytest.approx(0.04 - 0.25)
     assert s["versions"]["daily_news"]["same_result_as_monday"] == 1.0
+
+
+def test_moves_summary_pairs_against_the_monday_plan():
+    rows = []
+    for wk in range(4):
+        for v, won in (("do_nothing", False), ("monday_plan", wk < 2), ("replan_news", True)):
+            rows.append({"week_start": wk, "team": 1, "version": v, "won": won, "tie": False,
+                         "cats": 5, "moves": 0 if v == "do_nothing" else 4})
+    s = backtest_news.summarize_moves(pd.DataFrame(rows))
+    assert s["versions"]["monday_plan"]["win_rate"] == 0.5
+    assert s["versions"]["replan_news"]["vs_monday_plan"] == pytest.approx(0.5)
+    assert s["versions"]["do_nothing"]["moves"] == 0
