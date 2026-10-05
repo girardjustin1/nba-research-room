@@ -462,3 +462,23 @@ and over-dispersed spread, fitted on 2023-24 and 2024-25.
   relying on it: work out why only 68% of Kalshi names matched (TheRundown matched 100%), then
   build market-informed projections and judge them on the same test.
 - The scripts were scratch research; the method is above.
+
+**Market-informed projections, switched on (2026-10-05).** `projections/market.py`, applied in
+the nightly run after the markets step.
+- Kalshi name fix first: prop titles come in two formats ("Name: 30+ points" and "Name records 25+
+  points"). The parser read only the first, so the live archive would have silently skipped every
+  older-format market. `kalshi.player_from_title` reads both; two nickname aliases (Nic Claxton,
+  Alex Sarr) were added. Kalshi names now match 106 of 106, and the props test re-run on all 40
+  games (1,665 rungs) holds: Brier market 0.164 vs baseline 0.179 (80% range of the difference
+  −0.019 to −0.010).
+- Market means against actual stats (same 40 games, 462 player-game-stats with a liquid ladder,
+  median 4 rungs): RMSE points 7.75 vs 8.84, rebounds 2.96 vs 3.12, assists 2.48 vs 2.65, threes
+  1.37 vs 1.38 (tie). The baseline under-projects points for these players by 3.0 a game (the
+  market by 0.9). The game-resampled range of the squared-error difference is clear of zero.
+- Method: each source's latest snapshot, at most 30 h old; the median across sources and books
+  per threshold; a probit-line normal fit (sd kept within 0.5–2× the baseline's; one line keeps
+  the baseline's sd; a ladder that doesn't get harder is ignored). Only points, rebounds and
+  assists are overlaid (`markets.overlay.stats`): threes tied, and steals, blocks and turnovers
+  are untested. Makes and attempts (FG%/FT%) stay the baseline's.
+- Props post mostly on game day, so this sharpens today's lineup and the current matchup day. The
+  rest of the week stays on the baseline.

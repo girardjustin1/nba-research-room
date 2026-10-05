@@ -205,6 +205,11 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     min_volume: 100            # contracts traded; a thinner rung keeps its quotes but no probability
     max_spread: 0.10           # yes ask - yes bid (dollars); wider = illiquid, no probability
     requests_per_second: 8
+  overlay:                     # market-informed projections (projections/market.py)
+    enabled: true
+    stats: [pts, reb, ast]     # tested 2026-10-05: the market beat the baseline here (threes tied; others untested)
+    sd_bounds: [0.5, 2.0]      # market spread kept within these multiples of the baseline's
+    max_age_hours: 30          # ignore ladders older than this
   rundown:                     # sportsbook lines + player props (RUNDOWN_API_KEY)
     base_url: https://therundown.io/api/v2
     sport_id: 4

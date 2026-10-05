@@ -269,9 +269,17 @@ class RundownConfig(BaseModel):
     requests_per_second: float
 
 
+class OverlayConfig(BaseModel):
+    enabled: bool = False
+    stats: list[str] = Field(default_factory=list)
+    sd_bounds: tuple[float, float] = (0.5, 2.0)
+    max_age_hours: float = 30
+
+
 class MarketsConfig(BaseModel):
     kalshi: KalshiConfig
     rundown: RundownConfig
+    overlay: OverlayConfig = Field(default_factory=OverlayConfig)
 
 
 class XFeedConfig(BaseModel):

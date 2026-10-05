@@ -25,6 +25,7 @@ from research_room import calibration, features, lineup, matchup, overrides, sch
 from research_room.config import Settings, settings
 from research_room.ingest import bdl, kalshi, rundown, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
+from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
 
 ET = ZoneInfo("America/New_York")
@@ -153,6 +154,10 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             prior = None
         proj = step("projections", lambda: project_window(con, start, end, cfg, overrides=ov,
                                                          prior=prior, model=model))
+        # Where a liquid prop ladder exists (archived just above), the market sets that game's
+        # points / rebounds / assists (projections/market.py; tested in DECISIONS.md).
+        proj = market.overlay(con, proj, cfg)
+        report["market_overlay"] = int(proj["market"].sum())
         report["projections"] = step("store projections",
                                      lambda: write_projections(con, proj, model.name))
         report["lineup"] = step("lineup", lambda: recommend_lineup(con, proj, day, cfg))

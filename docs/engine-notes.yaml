@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-market-overlay
+    date: 2026-10-05
+    kind: update
+    title: Game-day projections now follow the betting market
+    body: >
+      For any game where a player has a liquid prop line (Kalshi or the sportsbooks), his points,
+      rebounds and assists projections now come from the market. On last season's games the
+      market's numbers were clearly closer to what happened (points error 7.8 vs 8.8). Ours
+      under-projected those players' points by 3 a game. Everything else, and the rest of the
+      week, still comes from our model. Also fixed: Kalshi writes some prop titles a second way,
+      and those were being skipped.
+    refs: [DECISIONS.md, src/research_room/projections/market.py]
+
   - id: 2026-10-05-props-test
     date: 2026-10-05
     kind: finding

@@ -253,3 +253,22 @@ def test_rundown_parse_and_sync(seeded, cfg):
     ).fetchall()
     assert pp[0][2] + pp[1][2] == pytest.approx(1.0)  # 22.5 over/under pair
     assert pp[2][0] == 30.5 and pp[2][2] is None  # no pair -> price kept, no probability
+
+
+def test_both_kalshi_title_formats_give_the_player():
+    assert kalshi.player_from_title("Jalen Brunson: 30+ points") == "Jalen Brunson"
+    assert kalshi.player_from_title("Kawhi Leonard records 25+ points") == "Kawhi Leonard"
+    assert kalshi.player_from_title("De'Aaron Fox records 8+ assists") == "De'Aaron Fox"
+    assert kalshi.player_from_title("Denver wins") is None
+    df = kalshi.parse_props(
+        [
+            {
+                **rung("Invented Guard", "NYK", 20, 0.6, 0.62, 5000),
+                "title": "Invented Guard records 20+ points",
+            }
+        ],
+        "pts",
+        NOW,
+        settings(),
+    )
+    assert df["player_name"].tolist() == ["Invented Guard"]

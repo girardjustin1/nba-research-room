@@ -39,6 +39,16 @@ MONTHS = {
         ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
     )
 }
+# Prop titles come in two formats: "Jalen Brunson: 30+ points" and "Kawhi Leonard records 25+ points".
+_TITLE = re.compile(r"^\s*(?P<name>.+?)(?:\s*:\s*|\s+records\s+)(?P<k>\d+)\+")
+
+
+def player_from_title(title: str | None) -> str | None:
+    """The player's name in a prop title (either format), or None when it isn't a prop title."""
+    m = _TITLE.match(title or "")
+    return m.group("name").strip() if m else None
+
+
 _EVENT = re.compile(r"^[A-Z0-9]+-(\d{2})([A-Z]{3})(\d{2})([A-Z]{6})$")
 
 
@@ -72,7 +82,8 @@ def parse_props(markets: list[dict], stat: str, fetched_at: datetime, cfg: Setti
     for m in markets:
         ev = parse_event_ticker(m.get("event_ticker", ""))
         title, strike = m.get("title") or "", _f(m.get("floor_strike"))
-        if ev is None or ":" not in title or strike is None:
+        name = player_from_title(title)
+        if ev is None or name is None or strike is None:
             continue
         day, away, home = ev
         seg = m["ticker"].split("-")[-2] if m.get("ticker", "").count("-") >= 3 else ""
@@ -87,7 +98,7 @@ def parse_props(markets: list[dict], stat: str, fetched_at: datetime, cfg: Setti
                 "away": away,
                 "home": home,
                 "team": team,
-                "player_name": title.split(":")[0].strip(),
+                "player_name": name,
                 "kalshi_player": player,
                 "threshold": strike,
                 "bid": bid,

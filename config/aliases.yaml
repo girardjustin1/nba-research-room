@@ -22,6 +22,9 @@ aliases:
   - {name: Hansen Yang,        player_id: 1057275769, variants: [Yang Hansen]}
   - {name: David Jones,        player_id: 1028245237, variants: [David Jones Garcia, David Jones-Garcia]}
   - {name: Elijah Harkless,    player_id: 1028264794, variants: [EJ Harkless]}
+  # Kalshi prop markets (found 2026-10-05).
+  - {name: Nicolas Claxton,    player_id: 666508,     variants: [Nic Claxton]}
+  - {name: Alexandre Sarr,     player_id: 1028028405, variants: [Alex Sarr]}
 
 # Other sources' team abbreviations -> BallDontLie abbreviations. Used to break ties
 # between players who share a name. Yahoo's short forms are listed; extend as needed.
