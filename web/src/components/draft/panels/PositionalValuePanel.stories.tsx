@@ -14,8 +14,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Bars on the engine's Low→High scale, colored by position group; the (i) has the table. */
+/** Bars on the engine's Low→High scale, colored by position group; tap the panel for the explanation card. */
 export const Default: Story = {};
 export const CentersScarce: Story = { args: { positions: makePositional([0.2, 0.25, 0.3, 0.45, 0.95]) } };
 export const Loading: Story = { args: { positions: null, loading: true } };
 export const EndpointMissing: Story = { args: { positions: null, error: notFound } };
+/** The slide-up card that explains every bar. */
+export const ExplanationCard: Story = { args: { initialOpen: true } };

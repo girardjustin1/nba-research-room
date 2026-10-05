@@ -283,9 +283,11 @@ export function makeStrength(session: Session, pCat: Record<string, number> = SA
 
 /** GET /draft/positional_value: invented VOR per position. */
 export function makePositional(scale: number[] = [0.82, 0.35, 0.58, 0.2, 0.67]): PositionalValue[] {
+  // Like the engine, the top position is 1 (= 100) and the rest are relative to it.
+  const top = Math.max(...scale) || 1;
   return POS_LIST.map((pos, i) => {
     const best = SAMPLE_PLAYERS.find((p) => p.position === pos) ?? null;
-    const s = scale[i] ?? 0.5;
+    const s = (scale[i] ?? 0.5) / top;
     return {
       pos,
       best_available: best ? { player_id: best.player_id, name: best.name, value: best.value } : null,

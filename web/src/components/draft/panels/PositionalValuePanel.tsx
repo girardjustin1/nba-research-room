@@ -1,18 +1,8 @@
 import { useState } from 'react';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
+import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { ApiError } from '../../../api/client';
@@ -22,6 +12,7 @@ import { GROUP_COLORS, POSITIONS, positionGroup } from '../../../lib/positions';
 import { useResolvedMode, useVizColors } from '../../../theme/viz';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { EndpointNotice } from '../../app-shell/EndpointNotice';
+import { DetailSheet } from '../../foundations/DetailSheet';
 
 export interface PositionalValuePanelProps {
   positions: PositionalValue[] | null;
@@ -29,22 +20,33 @@ export interface PositionalValuePanelProps {
   loading?: boolean;
   /** The engine's own note on these numbers. */
   note?: string | null;
+  /** Stories: open the explanation sheet on first render. */
+  initialOpen?: boolean;
 }
 
 /**
  * "Positional Value Over Replacement": one bar per position on the engine's Low→High scale
  * (scale_0_1), from available players and my open slots. Bars are colored by position group
- * and labelled with the position; the info dialog has the explanation and a table of every value.
+ * and labelled with the position. The bars have no hover tooltips: tapping anywhere on the
+ * panel slides up one card that explains every position (score, best available, value over
+ * replacement, open slots, what waiting costs).
  */
-export function PositionalValuePanel({ positions, error, loading, note }: PositionalValuePanelProps) {
-  const [open, setOpen] = useState(false);
+export function PositionalValuePanel({ positions, error, loading, note, initialOpen = false }: PositionalValuePanelProps) {
+  const [open, setOpen] = useState(initialOpen);
   const mode = useResolvedMode();
   const viz = useVizColors();
   const byPos = new Map((positions ?? []).map((p) => [p.pos, p]));
-  const hasDrop = (positions ?? []).some((p) => p.drop_if_wait != null);
 
+  const canOpen = positions != null && positions.length > 0;
   return (
     <Box sx={{ minWidth: 0 }}>
+      <ButtonBase
+        onClick={() => canOpen && setOpen(true)}
+        disabled={!canOpen}
+        aria-label="Positional value over replacement: tap for what each bar means"
+        aria-haspopup="dialog"
+        sx={{ display: 'block', width: '100%', textAlign: 'left', borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+      >
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
         <Typography variant="subtitle2" component="h2" sx={{ lineHeight: 1.2 }}>
           Positional value
@@ -52,9 +54,7 @@ export function PositionalValuePanel({ positions, error, loading, note }: Positi
             over replacement
           </Typography>
         </Typography>
-        <IconButton aria-label="About positional value, with every value" onClick={() => setOpen(true)} sx={{ mr: -1.25 }}>
-          <InfoOutlinedIcon fontSize="small" />
-        </IconButton>
+        <InfoOutlinedIcon fontSize="small" aria-hidden sx={{ color: 'text.secondary' }} />
       </Stack>
 
       {error && !positions ? (
@@ -91,67 +91,70 @@ export function PositionalValuePanel({ positions, error, loading, note }: Positi
             },
           ]}
           grid={{ vertical: false }}
-          sx={{ '& .MuiChartsAxis-line': { stroke: viz.axis } }}
+          slotProps={{ tooltip: { trigger: 'none' } }}
+          sx={{ pointerEvents: 'none', '& .MuiChartsAxis-line': { stroke: viz.axis } }}
         />
       )}
+      </ButtonBase>
 
-      <Dialog open={open} onClose={() => setOpen(false)} aria-labelledby="vor-title" fullWidth>
-        <DialogTitle id="vor-title">Positional value over replacement</DialogTitle>
-        <DialogContent>
+      <DetailSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        content={{
+          title: 'Positional value over replacement',
+          subtitle: 'How much you lose by waiting at each position',
+          sections: [],
+        }}
+      >
+        <Box sx={{ px: 2, pb: 2 }}>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            For each position, how much better the best available player is than the replacement-level
-            player you could still get later, from the players left on the board and the starting slots
-            your team still has open. A long bar means waiting at that position costs you the most. The
-            engine computes these numbers; the bars only show its 0–1 scale. Tap
-            a bar for the best player still available there.
+            For each position: how much better the best player still available is than the replacement-level
+            player you could still get later, given the players left and the starting slots you still have open.
+            A longer bar means waiting at that position costs you more.
           </Typography>
-          {positions && (
-            <Table size="small" aria-label="Value over replacement by position">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Pos</TableCell>
-                  <TableCell>Best available</TableCell>
-                  <TableCell align="right">VOR</TableCell>
-                  {hasDrop && <TableCell align="right">If wait</TableCell>}
-                  <TableCell align="right">Open</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {POSITIONS.map((pos) => {
-                  const v = byPos.get(pos);
-                  return (
-                    <TableRow key={pos}>
-                      <TableCell>{pos}</TableCell>
-                      <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {v?.best_available?.name ?? '—'}
-                      </TableCell>
-                      <TableCell align="right" className="tabular">{fixed(v?.value_over_replacement, 2)}</TableCell>
-                      {hasDrop && <TableCell align="right" className="tabular">{v?.drop_if_wait == null ? '—' : `−${fixed(Math.abs(v.drop_if_wait), 2)}`}</TableCell>}
-                      <TableCell align="right" className="tabular">{v?.my_open_slots ?? '—'}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
+          <Stack component="ul" spacing={1.25} sx={{ m: 0, p: 0, listStyle: 'none' }} aria-label="Every position">
+            {POSITIONS.map((pos) => {
+              const v = byPos.get(pos);
+              const g = positionGroup(pos);
+              const color = g ? GROUP_COLORS[mode][g] : viz.neutral;
+              const s = v?.scale_0_1 == null ? null : Math.max(0, Math.min(1, v.scale_0_1));
+              return (
+                <Box component="li" key={pos} sx={{ pb: 1.25, borderBottom: 1, borderColor: 'divider', '&:last-of-type': { borderBottom: 0, pb: 0 } }}>
+                  <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800, width: 28 }}>
+                      {pos}
+                    </Typography>
+                    <Box sx={{ flex: 1, height: 10, borderRadius: 1, bgcolor: 'action.hover', overflow: 'hidden' }} aria-hidden>
+                      <Box sx={{ width: `${(s ?? 0) * 100}%`, height: '100%', bgcolor: color, borderRadius: 1 }} />
+                    </Box>
+                    <Typography variant="body2" className="tabular" sx={{ fontWeight: 700, width: 56, textAlign: 'right' }}>
+                      {s == null ? '—' : `${Math.round(s * 100)}/100`}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    Best available: <b>{v?.best_available?.name ?? 'none'}</b>
+                  </Typography>
+                  <Typography variant="caption" component="p" className="tabular" sx={{ color: 'text.secondary' }}>
+                    Value over replacement {fixed(v?.value_over_replacement, 2)}
+                    {' · '}your open {pos} slots: {v?.my_open_slots ?? '—'}
+                    {v?.drop_if_wait != null ? ` · waiting until your following pick costs about ${fixed(Math.abs(v.drop_if_wait), 2)}` : ''}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Stack>
           {note && (
-            <Typography variant="body2" sx={{ mt: 1 }}>
+            <Typography variant="body2" sx={{ mt: 1.5 }}>
               {note}
             </Typography>
           )}
-          {hasDrop && (
-            <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 1 }}>
-              If wait: value the engine expects you to lose at that position by waiting until your following pick.
-            </Typography>
-          )}
-          <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 1 }}>
-            Bar colors group positions (guards, forwards, centers); the label names the position.
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>
+            /100 is relative to this pick: the position with the most value over replacement scores 100.
+            Colors group positions: blue guards, orange forwards, green centers. Every number here comes
+            from the engine.
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </DetailSheet>
     </Box>
   );
 }
