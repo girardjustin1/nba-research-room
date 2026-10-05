@@ -196,6 +196,14 @@ class BaselineConfig(BaseModel):
     min_play_prob: float
 
 
+class BacktestConfig(BaseModel):
+    teams: int
+    roster_size: int
+    max_weeks: int
+    matchups_per_week: int
+    seed: int
+
+
 class OptimizerConfig(BaseModel):
     candidate_pool: int
     add_takes_effect_days: int
@@ -238,6 +246,7 @@ class Settings(BaseModel):
     bdl: BdlConfig
     x_feed: XFeedConfig
     optimizer: OptimizerConfig
+    backtest: BacktestConfig
     simulation: SimulationConfig
     system: SystemConfig
 

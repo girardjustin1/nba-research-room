@@ -299,3 +299,21 @@ are drawn from the top 180 players by projected points, one Monday–Sunday week
   cached so the Matchup and Moves screens share one solve.
 - Not yet validated on real past weeks (did the plans win more often?). That's the backtest
   harness.
+
+**Backtest harness (2026-10-05).** `backtest.py`, `make backtest` (about 4 min), results in
+`backtest_results`. It replays 2025-26 from the second Monday, 20 weeks × 4 sampled head-to-heads,
+in a simulated 14-team league (snake draft on first-week value, 12 per team, everyone else a
+free agent). Model and calibration are fitted on earlier seasons. Projections are made the live
+way: each player's Monday state onto every game his team plays that week.
+- **A leak, found and fixed.** The first version projected only games a player later appeared in,
+  so the optimizer "knew" injuries in advance. It reported predicted 80–100% winning 95% of the
+  time and plans winning 99%. Fixed and tested (`test_week_projections_..._ignore_the_future`).
+- **Results (80 team-weeks).** Do-nothing predictions have a Brier score of 0.200. The middle is
+  honest (predicted 50% → 44%), but the top end is overconfident: predicted 93% won 76% (21
+  weeks). Likely cause: the variance calibration is fitted on game rows that exist only when a
+  player was available, so unexpected absences aren't in it. Next: fit it the live way.
+- **Following the plan.** Win rate 48% → 90% (+43 pts, 80% bootstrap range +35 to +50), +1.9
+  categories a week. The predicted lift (+41 pts) matches. This is against an opponent who never
+  streams, so it's a ceiling, not the expected gain against active managers.
+- Also approximate: BallDontLie positions (G/F/C) mapped to Yahoo eligibility; one plan per week
+  (Monday); plans don't carry between weeks.

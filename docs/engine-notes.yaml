@@ -3,6 +3,20 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-backtest
+    date: 2026-10-05
+    kind: finding
+    title: Backtest of 2025-26 - plans help a lot, top-end odds run hot
+    body: >
+      Replayed 80 head-to-head weeks of last season in a simulated 14-team league, using only what
+      was known each Monday. Following the add/drop plan won 90% of weeks against 48% doing nothing,
+      but the opponent never streamed, so treat that as a ceiling. The engine's win chances are fair
+      in the middle (50% predicted, 44% won) but too confident at the top (93% predicted, 76% won).
+      Next fix: calibrate the weekly spreads the same live way, so injuries nobody saw coming are
+      counted. A first version of the backtest leaked who would be available; it is fixed and
+      tested.
+    refs: [DECISIONS.md, src/research_room/backtest.py]
+
   - id: 2026-10-05-optimizer
     date: 2026-10-05
     kind: update
