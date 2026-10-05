@@ -105,6 +105,8 @@ SCHEMA: dict[str, Table] = {
         "draft_id VARCHAR", "pick_no INTEGER", "round INTEGER", "team_id INTEGER",
         "player_id INTEGER", "player_name VARCHAR", "is_keeper BOOLEAN",
         "entry_source VARCHAR", "picked_at TIMESTAMPTZ", "undone BOOLEAN"),
+    "yahoo_teams": _t(("snapshot_at", "team_id"),
+        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "team_name VARCHAR", *_INGEST),
     "draft_teams": _t(("draft_id", "team_id"),
         "draft_id VARCHAR", "team_id INTEGER", "name VARCHAR", "updated_at TIMESTAMPTZ"),
     "projections": _t(("model", "run_at", "player_id", "date", "stat"),

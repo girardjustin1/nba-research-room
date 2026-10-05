@@ -141,6 +141,9 @@ class Draft(BaseModel):
     starts_at: datetime
     pick_clock_seconds: int
     my_slot: int | None = None
+    # Yahoo team ids in draft-slot order (slot 1 first), once Yahoo posts the order. Names each
+    # board column from teams.csv and, when my_slot is empty, sets it from my team's position.
+    order: list[int] = Field(default_factory=list)
     keepers: list[dict] = Field(default_factory=list)
     rounds: int
     pool_size: int
@@ -223,6 +226,19 @@ class Settings(BaseModel):
         override = os.environ.get("RESEARCH_ROOM_DB")      # tests and scratch runs only
         if override:
             self.paths.db = Path(override)
+        return self
+
+    @model_validator(mode="after")
+    def _draft_order_covers_every_team(self) -> Settings:
+        order, n = self.draft.order, self.league.teams
+        if order and sorted(order) != list(range(1, n + 1)):
+            raise ValueError(f"draft.order must list each Yahoo team id 1..{n} exactly once, got {order}")
+        if self.draft.my_slot is not None and not 1 <= self.draft.my_slot <= n:
+            raise ValueError(f"draft.my_slot must be 1..{n}, got {self.draft.my_slot}")
+        me, slot = self.league.my_team_id, self.draft.my_slot
+        if slot is not None and order and order[slot - 1] != me:
+            raise ValueError(f"draft.my_slot {slot} disagrees with draft.order "
+                             f"(team {me} is slot {order.index(me) + 1})")
         return self
 
 

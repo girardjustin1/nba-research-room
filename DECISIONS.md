@@ -178,6 +178,13 @@ preseason; Phase 2 checks when they list (likely game day) before relying on the
   not start: no projections, no schedule, or an unmatched keeper. Runbook: `docs/draft-night.md`.
 - `make nightly --schedule` never worked (make rejects the flag). It is now `make nightly-schedule`.
 
+**Team names and draft order (2026-10-04).** Team names arrive as `teams.csv` in the Yahoo inbox
+(table `yahoo_teams`, keyed by Yahoo team id) and live only in the local store: several include
+managers' first names, and the repo is public. `draft.order` (Yahoo team ids by slot, empty
+until Yahoo posts it) maps them onto board columns and sets my slot from my team's position.
+Names typed in the app still win. Settings refuse an order that misses or repeats a team, or that
+disagrees with `draft.my_slot`.
+
 **Draft room in two tabs (owner's call, 2026-10-04).** The local pick clock is gone: Yahoo's room
 has the real one. The draggable bottom sheet is gone too. **Board** is the grid of every team's
 picks. **Me vs league** compares me with the league side by side (my value, league average, best

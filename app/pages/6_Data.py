@@ -70,6 +70,7 @@ st.subheader("Yahoo inbox")
 backend = CsvBackend(cfg.paths.inbox_dir)
 present = backend.available()
 last = {
+    "teams": q("SELECT max(snapshot_at) AS t FROM yahoo_teams"),
     "roster": q("SELECT max(snapshot_at) AS t FROM yahoo_rosters"),
     "players": q("SELECT max(snapshot_at) AS t FROM yahoo_players"),
     "matchup": q("SELECT max(snapshot_at) AS t FROM yahoo_matchups"),

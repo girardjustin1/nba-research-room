@@ -1,10 +1,10 @@
 """Yahoo Fantasy ingest (read-only). CSV snapshots in data/inbox/ are the default backend;
 an OAuth `ApiBackend` will implement the same interface once API access is approved.
 
-Inputs: data/inbox/{roster,players,matchup,draft_results}.csv (column schemas in `SCHEMAS`
+Inputs: data/inbox/{teams,roster,players,matchup,draft_results}.csv (column schemas in `SCHEMAS`
 and the README), settings.league.
 Outputs: validated snapshot frames written to the store, names resolved to BDL ids.
-Tables: writes yahoo_league, yahoo_rosters, yahoo_players, yahoo_matchups, draft_picks,
+Tables: writes yahoo_league, yahoo_teams, yahoo_rosters, yahoo_players, yahoo_matchups, draft_picks,
 player_xref, unresolved_names, ingest_runs; reads players, teams.
 
 Nothing here performs any action inside Yahoo. Each file's snapshot time is its modification
@@ -38,6 +38,7 @@ class Column:
 
 
 SCHEMAS: dict[str, tuple[Column, ...]] = {
+    "teams": (Column("team_id", "int"), Column("team_name", "str")),
     "roster": (
         Column("team_id", "int"), Column("player_name", "str"), Column("selected_slot", "str"),
         Column("eligible_positions", "positions"), Column("status", "str", required=False),
@@ -203,7 +204,13 @@ def ingest_inbox(con: duckdb.DuckDBPyConnection, backend: YahooBackend | None = 
             if "yahoo_player_key" in df:
                 df["yahoo_player_key"] = _source_keys(df)
             df["source"], df["fetched_at"] = SOURCE, now
-            if name == "roster":
+            if name == "teams":
+                bad = df[(df["team_id"] < 1) | (df["team_id"] > cfg.league.teams)]
+                if not bad.empty:
+                    raise YahooCsvError(f"teams.csv: team_id must be 1..{cfg.league.teams}, "
+                                        f"got {bad['team_id'].tolist()}")
+                counts[name] = store.upsert(con, "yahoo_teams", df.drop(columns=["team_abbr"]))
+            elif name == "roster":
                 df["player_id"] = _resolve(con, df)
                 counts[name] = store.upsert(con, "yahoo_rosters", df.drop(columns=["team_abbr"]))
             elif name == "players":

@@ -1,6 +1,6 @@
 """Load Yahoo CSV snapshots from data/inbox/ into the store.
 
-Inputs: data/inbox/{roster,players,matchup,draft_results}.csv; with --from-downloads, any of
+Inputs: data/inbox/{teams,roster,players,matchup,draft_results}.csv; with --from-downloads, any of
 those files in ~/Downloads that are newer than the inbox copy are moved in first.
 Outputs: yahoo_* tables, draft_picks, player_xref, unresolved_names.
 Tables: see research_room.ingest.yahoo.ingest_inbox.
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = settings()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--from-downloads", action="store_true",
-                        help="first move newer roster/players/matchup/draft_results CSVs from ~/Downloads")
+                        help="first move newer inbox CSVs (teams, roster, ...) from ~/Downloads")
     args = parser.parse_args(argv)
     if args.from_downloads:
         moved = pull_from_downloads(cfg.paths.inbox_dir, Path.home() / "Downloads")

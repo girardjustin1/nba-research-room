@@ -51,7 +51,7 @@ and takes roughly 10 minutes on the BallDontLie GOAT plan.
 
 Yahoo API access is pending, so Yahoo data arrives as CSV files in `data/inbox/`, loaded by
 `make inbox`. Chrome saves downloads to `~/Downloads`, so `make inbox` first moves any newer
-`roster.csv`, `players.csv`, `matchup.csv` or `draft_results.csv` from there into the inbox. A file that doesn't match its schema is rejected with
+`teams.csv`, `roster.csv`, `players.csv`, `matchup.csv` or `draft_results.csv` from there into the inbox. A file that doesn't match its schema is rejected with
 the offending line numbers, and nothing from that batch is written.
 
 ### Claude in Chrome shortcut
@@ -79,6 +79,7 @@ Columns marked * are required. Unknown columns are rejected.
 
 | File | Columns | Notes |
 |---|---|---|
+| `teams.csv` | `team_id`\*, `team_name`\* | the league's 14 teams (Yahoo ids 1–14); with `draft.order` set, they name the draft board's columns |
 | `roster.csv` | `team_id`\*, `player_name`\*, `selected_slot`\*, `eligible_positions`\*, `status`, `team_abbr`, `yahoo_player_key` | slot ∈ PG SG G SF PF F C Util BN IL IL+ |
 | `players.csv` | `player_name`\*, `team_abbr`\*, `eligible_positions`\*, `pct_rostered`\*, `status`, `owner_team_id`, `yahoo_player_key` | `pct_rostered` 0–100; a trailing % is fine |
 | `matchup.csv` | `week`\*, `team_id`\*, `opponent_team_id`\*, `fg_pct`\*, `ft_pct`\*, `fg3m`\*, `pts`\*, `reb`\*, `ast`\*, `stl`\*, `blk`\*, `tov`\* | percentages as decimals (0.471) |

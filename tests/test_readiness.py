@@ -44,7 +44,11 @@ def test_no_projections_is_an_error(con, cfg):
 
 def test_draft_week_with_everything_confirmed_is_ok(loaded, cfg):
     _yahoo(loaded, [(i, "PG,SG") for i in range(1, 11)])
-    good = _with(cfg, my_slot=2, confirmed=cfg.draft.confirmed.model_copy(
+    store.upsert(loaded, "yahoo_teams", pd.DataFrame({
+        "snapshot_at": pd.Timestamp("2026-10-16T00:00:00Z"), "team_id": [1, 2, 3, 4],
+        "team_name": ["Invented A", "Invented B", "Invented C", "Invented D"], "source": "yahoo",
+        "fetched_at": pd.Timestamp("2026-10-16T00:00:00Z")}))
+    good = _with(cfg, my_slot=2, order=[3, 1, 4, 2], confirmed=cfg.draft.confirmed.model_copy(
         update={"rounds": True, "keepers": True, "listener": True}))
     weeks = good.season.model_copy(update={"week_boundaries_verified": True})
     good = good.model_copy(update={"season": weeks})
@@ -60,7 +64,7 @@ def test_gaps_are_warnings_with_actions(loaded, cfg):
         update={"rounds": False, "keepers": False, "listener": False}))
     r = readiness.readiness(loaded, cfg, now=pd.Timestamp("2026-10-17T12:00:00Z"), check_api=False)
     checks = by_key(r)
-    for key in ("eligibility", "slot", "rounds", "keepers", "listener"):
+    for key in ("eligibility", "team_names", "order", "slot", "rounds", "keepers", "listener"):
         assert checks[key]["status"] == "warn" and checks[key]["action"], key
     assert "0% of the top 10" in checks["eligibility"]["detail"]
 

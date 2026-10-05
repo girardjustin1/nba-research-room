@@ -58,7 +58,9 @@ draft:
   type: live_standard_snake
   starts_at: "2026-10-18T19:00:00-04:00"
   pick_clock_seconds: 60
-  my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order
+  my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order (or set order)
+  order: []                    # Yahoo team ids by draft slot, e.g. [7, 3, 11, ...]; names the
+                               # board's columns from teams.csv and sets my_slot (team 11's place)
   keepers: []                  # [{team_id, round, player_id | player}] once declared
   confirmed:                   # flip each to true once checked in Yahoo (make doctor flags the rest)
     rounds: false

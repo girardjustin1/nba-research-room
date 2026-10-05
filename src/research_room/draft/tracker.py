@@ -124,6 +124,23 @@ def team_names(con: duckdb.DuckDBPyConnection, state: DraftState) -> dict[int, s
             for t in range(1, state.teams + 1)}
 
 
+def league_team_names(con: duckdb.DuckDBPyConnection) -> dict[int, str]:
+    """Yahoo team id -> team name from the latest teams.csv snapshot (empty if none)."""
+    return dict(con.execute("""
+        SELECT team_id, team_name FROM yahoo_teams
+        WHERE snapshot_at = (SELECT max(snapshot_at) FROM yahoo_teams)
+    """).fetchall())
+
+
+def slot_names_from_order(order: list[int], league_names: dict[int, str]) -> dict[int, str]:
+    """Draft slot (1-based) -> team name, for slots whose Yahoo team has a name."""
+    return {slot: league_names[tid] for slot, tid in enumerate(order, start=1) if tid in league_names}
+
+
+def slot_from_order(order: list[int], my_team_id: int) -> int | None:
+    return order.index(my_team_id) + 1 if my_team_id in order else None
+
+
 def save_team_names(con: duckdb.DuckDBPyConnection, state: DraftState, names: dict[int, str]) -> None:
     bad = [t for t in names if not 1 <= int(t) <= state.teams]
     if bad:

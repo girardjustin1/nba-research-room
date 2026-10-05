@@ -137,3 +137,18 @@ def test_pull_from_downloads_moves_only_newer_files(tmp_path):
     os.utime(downloads / "matchup.csv", (1, 1))
     (inbox / "matchup.csv").write_text("fresh")
     assert pull_from_downloads(inbox, downloads) == []
+
+
+def test_teams_csv_loads_names_and_rejects_bad_ids(con, tmp_path):
+    from research_room.draft import tracker
+    from research_room.ingest import yahoo
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "teams.csv").write_text("team_id,team_name\n1,Invented Alpha\n2,Made-Up Beta 🤠\n")
+    counts = yahoo.ingest_inbox(con, yahoo.CsvBackend(inbox))
+    assert counts["teams"] == 2
+    assert tracker.league_team_names(con) == {1: "Invented Alpha", 2: "Made-Up Beta 🤠"}
+
+    (inbox / "teams.csv").write_text("team_id,team_name\n15,Too Many\n")
+    with pytest.raises(yahoo.YahooCsvError, match="team_id must be 1..14"):
+        yahoo.ingest_inbox(con, yahoo.CsvBackend(inbox))

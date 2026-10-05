@@ -57,3 +57,21 @@ def test_reload_and_export(con, state, tmp_path):
     assert again.picks["player_id"].tolist() == [1, 2, 3]
     out = tracker.export_results(state, tmp_path / "draft_results.csv")
     assert pd.read_csv(out).columns.tolist() == ["pick_no", "round", "team_id", "player_name"]
+
+
+def test_draft_order_names_slots_and_finds_my_slot():
+    names = {7: "Seven", 11: "Mine", 3: "Three"}
+    order = [7, 3, 11, 1]
+    assert tracker.slot_names_from_order(order, names) == {1: "Seven", 2: "Three", 3: "Mine"}
+    assert tracker.slot_from_order(order, 11) == 3
+    assert tracker.slot_from_order([], 11) is None
+
+
+def test_settings_reject_a_bad_draft_order():
+    s = settings()
+    with pytest.raises(ValueError, match="exactly once"):
+        type(s).model_validate({**s.model_dump(), "draft": {**s.draft.model_dump(), "order": [1, 1, 2]}})
+    full = list(range(1, 15))
+    with pytest.raises(ValueError, match="disagrees"):
+        draft = {**s.draft.model_dump(), "order": full, "my_slot": 2}
+        type(s).model_validate({**s.model_dump(), "draft": draft})

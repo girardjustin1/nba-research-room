@@ -163,11 +163,16 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         extras = load_extras(con, cfg)
         yahoo_elig = eligibility.load_yahoo(con)
         log = mock.con if mock else con
+        order = cfg.draft.order
+        if my_slot is None and not mock:
+            my_slot = cfg.draft.my_slot or tracker.slot_from_order(order, cfg.league.my_team_id)
         state = tracker.load_state(log, draft_id, cfg, my_slot)
         if cfg.draft.keepers:
             state = apply_configured_keepers(log, state, cfg, pool)
-        saved = dict(log.execute("SELECT team_id, name FROM draft_teams WHERE draft_id = ?",
-                                 [draft_id]).fetchall())
+        # Names typed in the app win; otherwise the draft order names each slot from teams.csv.
+        saved = {} if mock else tracker.slot_names_from_order(order, tracker.league_team_names(con))
+        saved.update(dict(log.execute("SELECT team_id, name FROM draft_teams WHERE draft_id = ?",
+                                      [draft_id]).fetchall()))
     finally:
         con.close()
     s = Session(draft_id, cfg, pool, gpw, set(punts), state, extras=extras, mock=mock, names=saved,
