@@ -685,3 +685,20 @@ day's lineups come from that version's projections that morning.
   rather than reshuffling every morning. Not built yet; the threshold needs a test of its own.
 - The replay's two parts (odds by day, add/drop) now share one setup (`_prepare`, `_weeks`), so
   both draw the weekly backtest's matchups.
+
+**Live scoreboard (2026-10-05).** `live_scores.py`, run in the nightly job after the box-score
+sync; `make scoreboard-live` prints it (season to date, or `ARGS="--days 7"`).
+- Each finished game is graded against the latest projection run stored before its tip (a run
+  after tip is never graded); a game he sat counts 0, as projected. Per day and stat: n, MAE,
+  RMSE, bias and 80% band coverage for the stored projection (`all`), his line if he plays on
+  games he played (`played`), and, on games the betting market set, the market's number and our
+  model's own number before it (`market`, `market_model`); plus the Brier score of P(plays).
+- News: how often players each source listed with a status that day played (X posts by date, the
+  last NBA report before tip, the last BallDontLie list within 36 hours before tip), next to the
+  P(plays) assumed for that status. This is the live check of the X reader and of the status
+  calibration, with the raw post text never stored.
+- Weekly odds: every stored P(win week) snapshot against the week's final result from the latest
+  Yahoo matchup file saved after the week ended (Brier over all snapshots and for the first).
+- Re-grades the last 3 days each night (stat corrections). A failure is recorded and never stops
+  the night. Tested on an invented store; the real store has nothing to grade until opening night
+  (`make scoreboard-live` reports that). Not on the System screen yet.

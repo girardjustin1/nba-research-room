@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-live-scoreboard
+    date: 2026-10-05
+    kind: update
+    title: A nightly report card starts on opening night
+    body: >
+      Every night the app grades what it said before each game against the box score: projection
+      errors by stat, whether the betting market kept beating our model, how often players marked
+      out or questionable actually played (by source), and, once weekly results arrive, how honest
+      the win-the-week odds were. Run make scoreboard-live to see it.
+    refs: [DECISIONS.md, src/research_room/live_scores.py]
+
   - id: 2026-10-05-moves-replay
     date: 2026-10-05
     kind: finding

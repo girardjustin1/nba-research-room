@@ -21,7 +21,17 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
-from research_room import calibration, features, lineup, matchup, overrides, schedule, scoreboard, store
+from research_room import (
+    calibration,
+    features,
+    lineup,
+    live_scores,
+    matchup,
+    overrides,
+    schedule,
+    scoreboard,
+    store,
+)
 from research_room.config import Settings, settings
 from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
@@ -153,15 +163,20 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
     return report
 
 
-def _guarded_report(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
-    """The NBA injury report, recorded in ingest_runs; an outage never stops the run."""
+def _guarded(con: duckdb.DuckDBPyConnection, source: str, fn) -> dict:
+    """Run one nightly step, recorded in ingest_runs; a failure never stops the run."""
     try:
-        with store.ingest_run(con, "nba_report", "nightly") as run:
-            out = nba_injury_report.sync(con, cfg)
+        with store.ingest_run(con, source, "nightly") as run:
+            out = fn()
             run["detail"] = json.dumps(out, default=str)[:2000]
         return out
     except Exception as exc:  # noqa: BLE001 - recorded above; the night goes on
         return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
+def _guarded_report(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
+    """The NBA injury report; an outage never stops the run."""
+    return _guarded(con, "nba_report", lambda: nba_injury_report.sync(con, cfg))
 
 
 def driver_model(cfg: Settings) -> BaselineModel:
@@ -217,6 +232,8 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             api = client or bdl.BdlClient.from_env()
             report["bdl"] = step("bdl sync", lambda: bdl.sync_daily(con, api, day))
             report["nba_report"] = step("nba injury report", lambda: _guarded_report(con, cfg))
+            report["live_scores"] = step("live scoreboard", lambda: _guarded(
+                con, "live_scores", lambda: live_scores.update(con, cfg, day - timedelta(days=1))))
             report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
         try:
             report["inbox"] = step("yahoo inbox", lambda: yahoo.ingest_inbox(con))
