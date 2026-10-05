@@ -5,7 +5,8 @@ Inputs: `injuries` snapshots (BallDontLie), `status_events` (X feed, Phase 3), c
 settings.overrides (status -> P(plays), how long a status lasts without a return date, authority).
 Outputs: DataFrame [player_id, date, play_prob, minutes_cap, status, authority, source, ts, note],
 one row per player-date that any source speaks to. Players with no row are unaffected (the
-baseline's own play rate applies).
+baseline's own play rate applies). `ts` is when the news was known: the post time for X, the first
+snapshot listing the current status for the injury report.
 Tables: reads injuries, status_events, players.
 
 Precedence: the most authoritative source wins (manual > official > insider > beat > aggregator >
@@ -48,6 +49,7 @@ def from_injuries(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of:
         WHERE fetched_at = (SELECT max(fetched_at) FROM injuries WHERE fetched_at <= ?)
     """, [as_of]).df()
     days_for = {k.lower(): v for k, v in cfg.overrides.no_return_date_days.items()}
+    since = _status_since(con, as_of)
     rows = []
     for r in snap.itertuples(index=False):
         p = _prob(r.status, cfg)
@@ -64,8 +66,30 @@ def from_injuries(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of:
         for d in _dates(max(start, reported), min(end, until)):
             rows.append({"player_id": int(r.player_id), "date": d, "play_prob": p, "minutes_cap": None,
                          "status": status, "authority": "bdl", "source": "BallDontLie injuries",
-                         "ts": r.fetched_at, "note": (r.description or "")[:200]})
+                         "ts": since.get(int(r.player_id), r.fetched_at),
+                         "note": (r.description or "")[:200]})
     return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def _status_since(con: duckdb.DuckDBPyConnection, as_of: datetime) -> dict[int, pd.Timestamp]:
+    """When each player's current injury status was first reported: the first snapshot of the
+    unbroken run ending at the latest one. This is the news time (every snapshot re-lists him, so
+    the snapshot's own time would make an old status look new)."""
+    df = con.execute("""
+        WITH snaps AS (SELECT DISTINCT fetched_at AS f FROM injuries WHERE fetched_at <= ?),
+        cur AS (SELECT player_id, status FROM injuries WHERE fetched_at = (SELECT max(f) FROM snaps)),
+        breaks AS (
+            SELECT c.player_id, max(s.f) AS last_break
+            FROM cur c CROSS JOIN snaps s
+            LEFT JOIN injuries i ON i.player_id = c.player_id AND i.fetched_at = s.f
+            WHERE i.status IS DISTINCT FROM c.status
+            GROUP BY 1)
+        SELECT c.player_id, min(s.f) AS since
+        FROM cur c LEFT JOIN breaks b USING (player_id)
+        JOIN snaps s ON b.last_break IS NULL OR s.f > b.last_break
+        GROUP BY 1
+    """, [as_of]).df()
+    return dict(zip(df["player_id"].astype(int), df["since"], strict=True))
 
 
 def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime,

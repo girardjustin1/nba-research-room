@@ -525,3 +525,26 @@ the nightly run after the markets step.
   why, with low confidence. An unknown player is a 404.
 - Example (real data, top projected scorer for opening week): 33.5-point average → 28.4
   projection, mostly from an 83% chance of playing (−5.7); minutes +0.1, per-minute +0.6.
+
+**Market vs news: props are lines if he plays (2026-10-05).** A bug in the market overlay, fixed
+before game days. The overlay replaced the whole projection with the market's mean, ignoring
+P(plays) and when the news arrived. A player ruled out on X after the props were priced went from
+0 back to a full market projection, and a Questionable player lost his 50% discount.
+- Props are conditional on playing: Kalshi's rules settle a prop at a fair price when the player
+  is inactive or never takes the court (rules text read from the live API), and sportsbooks void
+  it. So the ladder is fitted against the baseline's line if he plays, and the projection is
+  P(plays) × the market's line, with the variance of the same mixture the baseline uses. P(plays)
+  = 0 keeps the model's zero. This matches how the props test compared the two (DECISIONS above:
+  the baseline as P(plays) × P(stat > line | plays)).
+- News time: a source's ladder counts only if it was priced (quote time, else read time) after the
+  latest news limiting the player: a minutes cap, or any status except plain Available / Out
+  (those change P(plays) only, which the conditional line already handles). Older sources are
+  dropped; with none left the model's number stands, flagged `market_stale` (counted in the run
+  report). A manual override always counts as newer.
+- The injury report's news time was the snapshot time, so every re-listing looked like fresh
+  news. It is now the first snapshot of the player's unbroken run in his current status.
+- Explanations compare the market and the model on the same if-he-plays basis, and say when a
+  price predates the news or the player isn't expected to play.
+- Not checked on live data: the store has no archived prop prices yet (`make markets` hasn't run
+  against it). Covered by tests: the round trip, P(plays) scaling, Out after the price, a stale
+  source dropped while a newer one counts, a minutes cap, and the injury news time.

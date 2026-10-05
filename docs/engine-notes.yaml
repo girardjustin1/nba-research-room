@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-market-news
+    date: 2026-10-05
+    kind: finding
+    title: Late injury news now beats an older betting line
+    body: >
+      Fixed before game days: a player ruled out after his props were priced could get his full
+      market projection back. Props are lines if he plays (Kalshi settles them at a fair price when
+      a player sits, and sportsbooks void them), so the projection is now our chance of playing
+      times the market's line. A line priced before news that limits him (questionable, a minutes
+      cap) is set aside and our model's number stands.
+    refs: [DECISIONS.md, src/research_room/projections/market.py]
+
   - id: 2026-10-05-explain
     date: 2026-10-05
     kind: update

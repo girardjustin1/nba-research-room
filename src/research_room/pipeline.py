@@ -101,9 +101,11 @@ def refresh_projections(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date
     proj = step("projections", lambda: project_window(con, start, end, cfg, overrides=ov, prior=prior,
                                                      model=model))
     # Where a liquid prop ladder exists (archived first), the market sets that game's points /
-    # rebounds / assists (projections/market.py; tested in DECISIONS.md).
-    proj = market.overlay(con, proj, cfg)
+    # rebounds / assists if he plays (projections/market.py; tested in DECISIONS.md), unless every
+    # price predates news limiting him.
+    proj = market.overlay(con, proj, cfg, news=ov)
     report["market_overlay"] = int(proj["market"].sum())
+    report["market_stale"] = int(proj["market_stale"].sum())
     report["projections"] = step("store projections", lambda: write_projections(con, proj, model.name))
     return proj
 

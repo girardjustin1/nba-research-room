@@ -88,3 +88,18 @@ def test_ambiguous_manual_name_is_an_error(con, tmp_path):
     bad.write_text("overrides:\n  - {player: Same Name, status: Out}\n")
     with pytest.raises(ValueError, match="add player_id"):
         overrides.resolve(con, date(2026, 10, 20), date(2026, 10, 21), manual_path=bad, cfg=settings())
+
+
+def test_injury_news_time_is_when_the_status_first_appeared(con):
+    """Every snapshot re-lists a player; the news time is the start of his current status run."""
+    from datetime import timedelta
+    players(con)
+    t = [SNAP - timedelta(hours=h) for h in (8, 6, 4, 2, 0)]
+    for when, status in zip(t, ["Questionable", "Questionable", "Out", "Questionable", "Questionable"],
+                            strict=True):
+        injuries(con, [{"player_id": 1, "status": status, "return_date": None, "description": "x"},
+                       {"player_id": 2, "status": "Out", "return_date": None, "description": "y"}], when)
+    rows = overrides.from_injuries(con, date(2026, 10, 19), date(2026, 10, 19), SNAP, settings())
+    ts = {r.player_id: pd.Timestamp(r.ts) for r in rows.itertuples()}
+    assert ts[1] == pd.Timestamp(t[3])          # Questionable again since the 4th snapshot
+    assert ts[2] == pd.Timestamp(t[0])          # Out in every snapshot: since the first

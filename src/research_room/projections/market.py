@@ -16,6 +16,17 @@ With two or more thresholds, a normal is fitted through them on the probit scale
 z = Phi^-1(1 - p) = (threshold - mu) / sigma, which is a straight line in the threshold. With one,
 the baseline's sd is kept and mu is solved from that line. The market's sd stays within
 `sd_bounds` x the baseline's; a ladder that doesn't get harder as the line rises is ignored.
+
+If he plays: a prop is a line on the player's game if he plays. Kalshi settles a prop at a fair
+price when the player is inactive or never takes the court (its rules text, checked 2026-10-05),
+and sportsbooks void it. So the ladder is fitted against the baseline's line if he plays, and the
+projection is our P(plays) x the market's line: mean = p x mu, variance = p x (sd^2 + mu^2) -
+mean^2 (the baseline's own mixture). A player with P(plays) = 0 keeps the model's zero.
+
+News after the price: a source's ladder is used only if it was priced after the latest news that
+limits the player (a minutes cap, or a status other than plain Available / Out, from X, the injury
+report or a manual override; overrides.py `ts`). Older prices didn't know the news, so that
+source is dropped, and with no source left the model's number stands (`market_stale`).
 """
 
 from __future__ import annotations
@@ -40,28 +51,83 @@ def ladder_points(
 ) -> pd.DataFrame:
     """player_id, game_id, stat, threshold, p_over: each source's latest liquid snapshot, the median
     across sources and books at each threshold."""
+    return combine(ladder_rows(con, game_ids, stats, now, max_age_hours))
+
+
+LADDER_ROWS = ["player_id", "game_id", "stat", "threshold", "prob", "source", "priced_at"]
+
+
+def ladder_rows(
+    con: duckdb.DuckDBPyConnection,
+    game_ids: list[int],
+    stats: list[str],
+    now: datetime | None = None,
+    max_age_hours: float = 30,
+) -> pd.DataFrame:
+    """Each source's latest liquid snapshot, one row per book and threshold, with when it was
+    priced (the quote's own time, else when it was read)."""
     if not game_ids or not stats:
-        return pd.DataFrame(columns=["player_id", "game_id", "stat", "threshold", "p_over"])
+        return pd.DataFrame(columns=LADDER_ROWS)
     since = pd.Timestamp(now or store.utcnow()) - timedelta(hours=max_age_hours)
     df = con.execute(
         """
         WITH latest AS (
             SELECT source, game_id, max(fetched_at) AS f FROM props_ladder
             WHERE game_id IN (SELECT unnest(?)) AND fetched_at >= ? GROUP BY 1, 2)
-        SELECT l.player_id, l.game_id, l.stat, l.threshold, l.prob
+        SELECT l.player_id, l.game_id, l.stat, l.threshold, l.prob, l.source,
+               coalesce(l.ts, l.fetched_at) AS priced_at
         FROM props_ladder l
         JOIN latest t ON t.source = l.source AND t.game_id = l.game_id AND t.f = l.fetched_at
         WHERE l.side = 'over' AND l.prob IS NOT NULL AND l.stat IN (SELECT unnest(?))
     """,
         [list(map(int, game_ids)), since, stats],
     ).df()
-    if df.empty:
+    return df if not df.empty else pd.DataFrame(columns=LADDER_ROWS)
+
+
+def combine(rows: pd.DataFrame) -> pd.DataFrame:
+    """The median across sources and books at each threshold."""
+    if rows.empty:
         return pd.DataFrame(columns=["player_id", "game_id", "stat", "threshold", "p_over"])
     return (
-        df.groupby(["player_id", "game_id", "stat", "threshold"], as_index=False)["prob"]
+        rows.groupby(["player_id", "game_id", "stat", "threshold"], as_index=False)["prob"]
         .median()
         .rename(columns={"prob": "p_over"})
     )
+
+
+def conditional(mean: float, sd: float, p_play: float) -> tuple[float, float]:
+    """The baseline's line if he plays, (mean, sd), from its projection including P(plays)."""
+    if p_play <= 0:
+        return 0.0, 0.0
+    mu = mean / p_play
+    return mu, float(np.sqrt(max((sd**2 + mean**2) / p_play - mu**2, 0.0)))
+
+
+def unconditional(mu: float, sd: float, p_play: float) -> tuple[float, float]:
+    """A line if he plays, (mu, sd), turned into the projection: P(plays) x the line, with the
+    spread of maybe sitting."""
+    mean = p_play * mu
+    return mean, float(np.sqrt(max(p_play * (sd**2 + mu**2) - mean**2, 0.0)))
+
+
+LIMITING_EXEMPT = {"available", "out"}  # news that changes P(plays) only: the line if he plays holds
+
+
+def news_times(news: pd.DataFrame | None) -> dict[tuple[int, object], pd.Timestamp]:
+    """(player_id, date) -> when the latest news limiting him was known (overrides.resolve rows)."""
+    if news is None or news.empty:
+        return {}
+    cap = pd.to_numeric(news["minutes_cap"], errors="coerce").notna()
+    limiting = cap | ~news["status"].fillna("").str.strip().str.lower().isin(LIMITING_EXEMPT)
+    n = news[limiting]
+    return {
+        (int(r.player_id), pd.Timestamp(r.date).date()): pd.Timestamp(r.ts)
+        if pd.Timestamp(r.ts).tzinfo
+        else pd.Timestamp(r.ts).tz_localize("UTC")
+        for r in n.itertuples(index=False)
+        if pd.notna(r.ts)
+    }
 
 
 def fit(
@@ -90,29 +156,49 @@ def overlay(
     proj: pd.DataFrame,
     cfg: Settings | None = None,
     now: datetime | None = None,
+    news: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Projection rows (player_id, game_id, stat, mean, sd, ...) with the market setting mean and sd
-    where a recent liquid ladder exists. Adds a boolean `market` column."""
+    """Projection rows (player_id, game_id, date, stat, mean, sd, p_play, ...) with the market
+    setting mean and sd where a recent liquid ladder exists, priced after any news limiting the
+    player (`news`: overrides.resolve rows). Adds boolean `market` and `market_stale` columns
+    (stale: a ladder existed but every source was priced before the news)."""
     cfg = cfg or settings()
     ov = cfg.markets.overlay
     out = proj.copy()
     out["market"] = False
+    out["market_stale"] = False
     out["model_mean"] = out["mean"]                       # the model's number, kept for explanations
     if not ov.enabled or out.empty or "game_id" not in out:
         return out
-    pts = ladder_points(
+    rows = ladder_rows(
         con, out["game_id"].dropna().astype(int).unique().tolist(), ov.stats, now, ov.max_age_hours
     )
-    if pts.empty:
+    if rows.empty:
         return out
+    rows["priced_at"] = pd.to_datetime(rows["priced_at"], utc=True)
+    known = news_times(news)
+    p_play = out["p_play"] if "p_play" in out else pd.Series(1.0, index=out.index)
+    days = pd.to_datetime(out["date"]).dt.date if "date" in out else pd.Series(None, index=out.index)
     idx = out.set_index(["player_id", "game_id", "stat"]).index
     pos = {k: i for i, k in enumerate(idx)}
-    for (pid, gid, stat), g in pts.groupby(["player_id", "game_id", "stat"]):
+    col = {c: out.columns.get_loc(c) for c in ("mean", "sd", "market", "market_stale")}
+    for (pid, gid, stat), g in rows.groupby(["player_id", "game_id", "stat"]):
         i = pos.get((pid, gid, stat))
         if i is None:
             continue
-        res = fit(g["threshold"].to_numpy(), g["p_over"].to_numpy(), float(out["sd"].iat[i]), ov.sd_bounds)
+        p = float(p_play.iat[i]) if pd.notna(p_play.iat[i]) else 1.0
+        if p <= 0:
+            continue                                      # not playing: the model's zero stands
+        heard = known.get((int(pid), days.iat[i]))
+        if heard is not None:
+            g = g[g["priced_at"] > heard]                 # prices that knew the news
+            if g.empty:
+                out.iat[i, col["market_stale"]] = True
+                continue
+        pts = combine(g)
+        mu_c, sd_c = conditional(float(out.iat[i, col["mean"]]), float(out.iat[i, col["sd"]]), p)
+        res = fit(pts["threshold"].to_numpy(), pts["p_over"].to_numpy(), sd_c, ov.sd_bounds)
         if res is not None:
-            out.iat[i, out.columns.get_loc("mean")], out.iat[i, out.columns.get_loc("sd")] = res
-            out.iat[i, out.columns.get_loc("market")] = True
+            out.iat[i, col["mean"]], out.iat[i, col["sd"]] = unconditional(*res, p)
+            out.iat[i, col["market"]] = True
     return out

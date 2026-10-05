@@ -382,14 +382,18 @@ def player_analysis(
         if stat not in nxt.index:
             continue
         ours = nxt.loc[stat]
+        # Props are lines if he plays (market.py), so both sides are compared if he plays.
+        p = float(ours["p_play"]) if pd.notna(ours.get("p_play")) else 1.0
+        model_mu = float(ours["model_mean"]) if pd.notna(ours.get("model_mean")) else float(ours["mean"])
+        mu_c, sd_c = market_mod.conditional(model_mu, float(ours["sd"]), p) if p > 0 else (model_mu, 0.0)
         fit = market_mod.fit(
             g["threshold"].to_numpy(),
             g["p_over"].to_numpy(),
-            float(ours["sd"]),
+            sd_c,
             cfg.markets.overlay.sd_bounds,
-        )
-        model_mu = float(ours["model_mean"]) if pd.notna(ours.get("model_mean")) else float(ours["mean"])
-        gap = None if fit is None else (fit[0] - model_mu) / max(float(ours["sd"]), 1e-9)
+        ) if sd_c > 0 else None
+        model_mu = mu_c
+        gap = None if fit is None else (fit[0] - model_mu) / max(sd_c, 1e-9)
         line = float(g.iloc[(g["p_over"] - 0.5).abs().argmin()]["threshold"])
         lines.append(
             {
@@ -399,7 +403,7 @@ def player_analysis(
                 "game": None,
                 "line": line,
                 "implied_mean": None if fit is None else float(fit[0]),
-                "ours": _est(model_mu, float(ours["sd"])),
+                "ours": _est(model_mu, sd_c),
                 "gap_sd": None if gap is None else float(gap),
                 "agreement": "no_market"
                 if gap is None
@@ -419,10 +423,14 @@ def player_analysis(
                 "decimal",
                 f"{LABEL[big['stat']]}, market",
                 (
-                    f"The market expects {big['implied_mean']:.1f} {LABEL[big['stat']]} vs our model's "
-                    f"{big['ours']['mean']:.1f}"
+                    f"If he plays, the market expects {big['implied_mean']:.1f} {LABEL[big['stat']]} vs "
+                    f"our model's {big['ours']['mean']:.1f}"
                     + (
-                        "; the market sets that projection."
+                        "; the projection uses the market's line times his chance of playing."
+                        if bool(nxt.loc[big["stat"]].get("market", False))
+                        else "; he isn't expected to play, so the projection is zero."
+                        if float(nxt.loc[big["stat"]].get("p_play", 1.0) or 0.0) <= 0
+                        else "; it was priced before the latest news about him, so our number stands."
                         if big["stat"] in cfg.markets.overlay.stats
                         else "."
                     )
