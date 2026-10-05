@@ -203,6 +203,21 @@ class BaselineConfig(BaseModel):
     shrinkage: ShrinkageConfig = Field(default_factory=ShrinkageConfig)
 
 
+class LgbmConfig(BaseModel):
+    n_estimators: int
+    learning_rate: float
+    num_leaves: int
+    min_child_samples: int
+    subsample: float
+    colsample_bytree: float
+    min_rate_minutes: float
+
+
+class ModelsConfig(BaseModel):
+    driver: Literal["baseline", "lgbm"] = "baseline"
+    lgbm: LgbmConfig
+
+
 class BacktestConfig(BaseModel):
     teams: int
     roster_size: int
@@ -277,6 +292,7 @@ class Settings(BaseModel):
     bdl: BdlConfig
     markets: MarketsConfig
     x_feed: XFeedConfig
+    models: ModelsConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig
     simulation: SimulationConfig

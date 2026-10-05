@@ -398,3 +398,26 @@ first:
   build prompt says (Kalshi distributions where liquid, normal otherwise).
 - A market outage is recorded in `ingest_runs` and shown by the Jobs and Markets health checks,
   but never stops the nightly run.
+
+## Phase 3 — started 2026-10-05 (early, owner's call)
+
+**First challenger: LightGBM corrections (`projections/lgbm.py`). Not adopted.** Same structure
+as the baseline (P(plays) × minutes × per-minute rate, same variance and overrides), with
+gradient-boosted corrections to minutes when playing and to each per-minute rate. Its features
+are the player's own history plus home/away (`features.STATE_COLUMNS`, the same columns in live,
+calibration and backtest). Its variance is fitted on out-of-fold predictions, one season held out
+at a time. Fitted on 2023-24 and 2024-25, scored on 2025-26:
+- Games played: average error 0.4–2.4% worse than the baseline in 10 of 11 stats; squared error
+  about even (−0.1% to +0.5%).
+- Every scheduled game (missed = 0): the same picture, minutes +0.6% average error.
+- Ablation: minutes correction alone, rates alone, or heavier regularization all land within
+  ±0.7% of the baseline.
+- Conclusion: projections built only from a player's own history are at their limit; the
+  baseline's tuned moving averages already extract it. Gains will need information the baseline
+  doesn't have: opponent pace and defense, rest and back-to-backs, teammates out (injury
+  report), and betting lines (archived nightly from now on, `ingest/kalshi.py`,
+  `ingest/rundown.py`). That's the next experiment.
+- `settings.models.driver` chooses the nightly model (`baseline` stays); a challenger is switched
+  on only after it wins on the scoreboard and the 140-matchup backtest.
+- Plumbing: the state columns are defined once (`features.STATE_COLUMNS`), and the schedules carry
+  home/away.

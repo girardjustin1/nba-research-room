@@ -164,21 +164,18 @@ def build_and_store(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
 
 ET = "America/New_York"
 
+# A player's state as of a given moment: everything a projection model may use that does not
+# depend on the next game's opponent (so live, calibration and backtest projections agree).
+STATE_COLUMNS = ["min_played_ewma", "play_rate_ewma", "games_prior", "min_r3", "min_r5", "min_r10",
+                 "usage_r5", "fga_r5", *[f"{s}_pm_ewma" for s in RATE_STATS]]
+
 
 def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
     """Each player's feature state as of each Monday (00:00 Eastern, given in UTC), from the feature
     table: his first game at or after Monday carries the state after every game before Monday,
     exactly what the live system projects from. A player with no later game (out for the season)
     takes his last game's state, one game stale. Only players who have played before that Monday."""
-    keep = [
-        "player_id",
-        "team_id",
-        "tip_utc",
-        "games_prior",
-        "min_played_ewma",
-        "play_rate_ewma",
-        *[f"{s}_pm_ewma" for s in RATE_STATS],
-    ]
+    keep = ["player_id", "team_id", "tip_utc", *STATE_COLUMNS]
     right = built[keep].sort_values("tip_utc")
     first = right.groupby("player_id")["tip_utc"].min()
     pairs = pd.MultiIndex.from_product([first.index, mondays], names=["player_id", "monday"]).to_frame(

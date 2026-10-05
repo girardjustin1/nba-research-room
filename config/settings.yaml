@@ -137,6 +137,17 @@ baseline:
     enabled: false             # turned on only if it beats the unshrunk baseline (DECISIONS.md)
     k_grid_minutes: [0, 60, 120, 250, 500, 1000, 2000, 4000]   # prior strength searched per stat
 
+models:                        # Phase 3 challengers (projections/*.py); each must beat the baseline first
+  driver: baseline             # which model writes the nightly projections: baseline | lgbm
+  lgbm:                        # gradient-boosted corrections to minutes and per-minute rates
+    n_estimators: 300
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 200
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_rate_minutes: 8        # per-minute targets only from games with at least this many minutes
+
 optimizer:                     # weekly add/drop plan (research_room/optimizer.py)
   candidate_pool: 40           # free agents considered, the most valuable this week under the current weights
   add_takes_effect_days: 1     # an add made today counts from tomorrow (today's games may have tipped)

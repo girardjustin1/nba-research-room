@@ -84,7 +84,7 @@ def week_projections(
     for s in features.RATE_STATS:
         dummy[s] = 0.0
     built = features.build(pd.concat([pre, dummy], ignore_index=True), team_ctx, cfg)
-    keep = ["player_id", "min_played_ewma", "play_rate_ewma", "games_prior", *[f"{s}_pm_ewma" for s in STATS]]
+    keep = ["player_id", *features.STATE_COLUMNS]
     state = built[built["game_id"] < 0][keep].merge(last[["player_id", "team_id"]], on="player_id")
     week = schedule[schedule["date"].isin(days)]
     rows = week.merge(state, on="team_id")
@@ -99,8 +99,8 @@ def team_schedule(games: pd.DataFrame) -> pd.DataFrame:
     """Long form: one row per team per regular-season game (team_id, game_id, date)."""
     g = games[~games["postseason"].fillna(False).astype(bool)]
     d = pd.to_datetime(g["game_date"]).dt.date
-    home = pd.DataFrame({"team_id": g["home_team_id"], "game_id": g["game_id"], "date": d})
-    away = pd.DataFrame({"team_id": g["visitor_team_id"], "game_id": g["game_id"], "date": d})
+    home = pd.DataFrame({"team_id": g["home_team_id"], "game_id": g["game_id"], "date": d, "home": True})
+    away = pd.DataFrame({"team_id": g["visitor_team_id"], "game_id": g["game_id"], "date": d, "home": False})
     return pd.concat([home, away], ignore_index=True)
 
 

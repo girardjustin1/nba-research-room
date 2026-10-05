@@ -151,13 +151,14 @@ def games_per_week(games: pd.DataFrame, season: Season, playoffs: bool = False) 
 
 
 def season_schedule(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    """Regular-season games, one row per team per game: team_id, game_id, date, season."""
+    """Regular-season games, one row per team per game: team_id, game_id, date, season, home."""
     g = con.execute("""SELECT game_id, season, game_date, home_team_id, visitor_team_id FROM games
                        WHERE NOT postseason""").df()
     d = pd.to_datetime(g["game_date"]).dt.date
     return pd.concat(
         [
-            pd.DataFrame({"team_id": g[t], "game_id": g["game_id"], "date": d, "season": g["season"]})
+            pd.DataFrame({"team_id": g[t], "game_id": g["game_id"], "date": d, "season": g["season"],
+                          "home": t == "home_team_id"})
             for t in ("home_team_id", "visitor_team_id")
         ],
         ignore_index=True,

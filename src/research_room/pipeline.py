@@ -83,6 +83,15 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
     return payload
 
 
+def driver_model(cfg: Settings) -> BaselineModel:
+    """The model that writes the nightly projections (settings.models.driver). A challenger is
+    switched on only after it beats the baseline on the scoreboard and the backtest."""
+    if cfg.models.driver == "lgbm":
+        from research_room.projections.lgbm import LgbmModel  # heavy import, only when chosen
+        return LgbmModel(cfg)
+    return BaselineModel(cfg)
+
+
 def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None = None) -> dict:
     """Archive Kalshi and TheRundown lines. A market outage is recorded in ingest_runs (the Jobs
     health check shows it) and never stops the nightly run: markets are an input, not the core."""
@@ -135,7 +144,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         seasons = sorted(cfg.bdl.backfill_seasons)
         train = step("features (train)", lambda: features.build(
             features.load_logs(con, seasons), features.team_context(con, seasons), cfg))
-        model = BaselineModel(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
+        model = driver_model(cfg).fit(train).fit_minutes(train, schedule.season_schedule(con), seasons)
         start, end = projection_window(day, cfg)
         ov = step("overrides", lambda: overrides.resolve(con, start, end, cfg=cfg))
         try:

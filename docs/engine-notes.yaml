@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-phase3-lgbm
+    date: 2026-10-05
+    kind: finding
+    title: First challenger model didn't beat the baseline
+    body: >
+      A LightGBM model that learns corrections to each player's minutes and per-minute production
+      from his own recent history did not beat the simple baseline on last season (within about
+      1-2% either way). The baseline already squeezes what a player's own numbers say. The next
+      models need new information: who they play, rest and back-to-backs, teammates out, and the
+      betting lines now archived each night. The baseline keeps driving your projections.
+    refs: [DECISIONS.md, src/research_room/projections/lgbm.py]
+
   - id: 2026-10-05-markets
     date: 2026-10-05
     kind: update

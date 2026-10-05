@@ -236,8 +236,7 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
     games = upcoming_rows(con, start, end, cfg)
     games["date"] = pd.to_datetime(games["date"]).dt.date          # one date type for every join
     state = current_states(con, cfg)
-    keep = ["player_id", "min_played_ewma", "play_rate_ewma", "season_games", "games_prior",
-            *[f"{s}_pm_ewma" for s in STATS]]
+    keep = ["player_id", "season_games", *features.STATE_COLUMNS]
     # Current players only: played last season or this one, or in the preseason pool.
     recent_ids = set(state.loc[state["season_last"] >= cfg.season.nba_season - 1, "player_id"])
     if prior is not None:
