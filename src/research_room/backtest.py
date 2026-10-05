@@ -219,6 +219,8 @@ def run(
             league = draft_league(season_values(pw, days, cfg), bt.teams, bt.roster_size)
             owned = {p for r in league for p in r}
         aw = actual[actual["date"].isin(days)]
+        suited = aw.loc[aw["y_did_play"].astype(bool), ["player_id", "date"]].drop_duplicates()
+        played = pw.merge(suited, on=["player_id", "date"])
         pool = roster_frame(sorted(set(pw["player_id"]) - owned), elig, names)
         pairs = round_robin(bt.teams, w)
         for k in rng.choice(len(pairs), size=min(bt.matchups_per_week, len(pairs)), replace=False):
@@ -243,11 +245,18 @@ def run(
                 "corr": corr,
             }
             plan = optimizer.optimize(inp, pool, cfg.transactions.max_acquisitions_per_week, cfg)
-            plan_td = matchup.team_days(plan.rosters or [me_r] * len(days), pw, days, cfg)
-            opp_act = actual_totals(opp_td, aw, cfg)
-            cats_dn = categories_won(actual_totals(me_td, aw, cfg), opp_act, cfg)
-            cats_plan = categories_won(actual_totals(plan_td, aw, cfg), opp_act, cfg)
-            need = len(cfg.categories) // 2 + 1
+            plan_rosters = plan.rosters or [me_r] * len(days)
+            # What happened: each day's lineup set from the players who actually suited up (a manager
+            # sees the injury report before lock), or the Monday lineups as projected.
+            src = played if bt.react_to_absences else pw
+            opp_act = actual_totals(matchup.team_days(opp_r, src, days, cfg), aw, cfg)
+            me_act = actual_totals(matchup.team_days(me_r, src, days, cfg), aw, cfg)
+            plan_act = actual_totals(matchup.team_days(plan_rosters, src, days, cfg), aw, cfg)
+            cats_dn, opp_dn = categories_won(me_act, opp_act, cfg), categories_won(opp_act, me_act, cfg)
+            cats_plan, opp_plan = (
+                categories_won(plan_act, opp_act, cfg),
+                categories_won(opp_act, plan_act, cfg),
+            )
             rows.append(
                 {
                     "season": test_season,
@@ -258,8 +267,12 @@ def run(
                     "p_plan": plan.p_win_week,
                     "cats_dn": cats_dn,
                     "cats_plan": cats_plan,
-                    "won_dn": cats_dn >= need,
-                    "won_plan": cats_plan >= need,
+                    "cats_opp_dn": opp_dn,
+                    "cats_opp_plan": opp_plan,
+                    "won_dn": cats_dn > opp_dn,  # Yahoo one-win: more categories than the opponent
+                    "won_plan": cats_plan > opp_plan,
+                    "tie_dn": cats_dn == opp_dn,
+                    "tie_plan": cats_plan == opp_plan,
                     "n_moves": len(plan.moves),
                     "solve_ms": plan.solve_ms,
                 }
@@ -269,10 +282,12 @@ def run(
 
 
 def summarize(res: pd.DataFrame) -> dict:
-    """Calibration of the do-nothing predictions and the realized lift from the plans."""
+    """Calibration of the do-nothing predictions and the realized lift from the plans. A tied week
+    scores 0.5 (Yahoo counts it as a tie, not a win)."""
     if res.empty:
         return {}
-    y = res["won_dn"].astype(float)
+    y = res["won_dn"].astype(float) + 0.5 * res.get("tie_dn", False).astype(float)
+    y_plan = res["won_plan"].astype(float) + 0.5 * res.get("tie_plan", False).astype(float)
     brier = float(((res["p_dn"] - y) ** 2).mean())
     bins = pd.cut(res["p_dn"], [0, 0.2, 0.4, 0.6, 0.8, 1.0], include_lowest=True)
     rel = (
@@ -282,15 +297,21 @@ def summarize(res: pd.DataFrame) -> dict:
     )
     rel.index = rel.index.astype(str)
     rng = np.random.default_rng(0)
-    lift = (res["won_plan"].astype(float) - y).to_numpy()
+    lift = (y_plan - y).to_numpy()
     cats = (res["cats_plan"] - res["cats_dn"]).to_numpy(float)
     boot = [rng.choice(lift, len(lift)).mean() for _ in range(2000)]
+    top = res["p_dn"] >= 0.9
     return {
         "team_weeks": len(res),
         "brier_do_nothing": brier,
         "reliability": rel.rename_axis("predicted").reset_index().to_dict("records"),
+        "top_weeks": {
+            "n": int(top.sum()),
+            "predicted": float(res.loc[top, "p_dn"].mean()) if top.any() else None,
+            "won": float(y[top].mean()) if top.any() else None,
+        },
         "win_rate_do_nothing": float(y.mean()),
-        "win_rate_plan": float(res["won_plan"].mean()),
+        "win_rate_plan": float(y_plan.mean()),
         "lift_win_rate": float(lift.mean()),
         "lift_win_rate_80": [float(np.quantile(boot, 0.1)), float(np.quantile(boot, 0.9))],
         "lift_categories": float(cats.mean()),

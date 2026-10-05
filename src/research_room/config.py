@@ -208,6 +208,7 @@ class BacktestConfig(BaseModel):
     roster_size: int
     max_weeks: int
     matchups_per_week: int
+    react_to_absences: bool = True
     seed: int
 
 

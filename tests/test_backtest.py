@@ -61,3 +61,16 @@ def test_week_projections_cover_every_scheduled_game_and_ignore_the_future(cfg):
     key = ["player_id", "date", "stat"]
     pd.testing.assert_frame_equal(out.sort_values(key).reset_index(drop=True),
                                   past.sort_values(key).reset_index(drop=True))
+
+
+def test_a_bench_player_fills_in_when_a_starter_sits(cfg):
+    r = roster(11)
+    p = proj(r["player_id"], days=DAYS[:1])
+    act = pd.DataFrame([{"player_id": pid, "date": DAYS[0], "y_did_play": pid != 1,
+                         **{f"y_{s}": (0.0 if pid == 1 else 1.0) for s in features.RATE_STATS}}
+                        for pid in r["player_id"]])
+    fixed = backtest.actual_totals(matchup.team_days(r, p, DAYS[:1], cfg), act, cfg)
+    played = p.merge(act.loc[act["y_did_play"], ["player_id", "date"]], on=["player_id", "date"])
+    react = backtest.actual_totals(matchup.team_days(r, played, DAYS[:1], cfg), act, cfg)
+    assert react["pts"] == 10.0                     # the 11th man filled the empty slot
+    assert fixed["pts"] < react["pts"]

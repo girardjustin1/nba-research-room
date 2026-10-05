@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-backtest-realism
+    date: 2026-10-05
+    kind: finding
+    title: Win chances check out on a realistic replay of last season
+    body: >
+      The replay now scores weeks by Yahoo's rule (more categories wins; ties count as ties) and
+      swaps a bench player in when a starter sits, as you would. Across all 140 head-to-heads of
+      20 weeks, predicted win chances matched what happened through the 80s (50% predicted, 52%
+      won; 71%, 69%). Only the most lopsided weeks run a little hot (95% predicted, 83% won).
+      Following the weekly add/drop plan raised the win rate from 54% to 94% against an opponent
+      who never streams.
+    refs: [DECISIONS.md, src/research_room/backtest.py]
+
   - id: 2026-10-05-shrinkage
     date: 2026-10-05
     kind: finding

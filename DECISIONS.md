@@ -358,3 +358,18 @@ ties counted).
   starter who sits, which a real manager does.
 - Refactor: Monday states and live-way projection rows now live in `features.py`
   (`monday_states`, `live_rows`), and the season schedule loader in `schedule.py`.
+
+**Backtest realism (2026-10-05).** Two changes to how the backtest scores what happened:
+- **Yahoo's one-win rule:** the team with more categories wins the week, and tied weeks count as
+  ties (0.5). The earlier runs required 5+ categories.
+- **Daily lineups react:** each day's lineup is set from the players who actually suited up, the
+  way a manager uses the injury report before lock. Before, Monday's lineups were kept, and a
+  starter who sat left his slot empty. Predictions are still made Monday, as before.
+
+All 7 matchups a week, 20 weeks (140 team-weeks, about 8 min):
+- Do-nothing Brier **0.168** (was 0.180). Honest through the 80s: predicted 31% → 33% won,
+  50% → 52%, 71% → 69%, 91% → 85% (37 weeks). Only the most lopsided weeks still run hot: 95%
+  predicted won 83% (21 weeks).
+- Plans: 54% → 94% weekly win rate (+40 pts, 80% range +34 to +45), predicted +37, still against an
+  opponent who never streams.
+- So part of the top-end overconfidence was the backtest's fixed Monday lineups, not the engine.

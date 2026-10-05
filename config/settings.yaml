@@ -148,7 +148,8 @@ backtest:                      # replay of a past season (research_room/backtest
   teams: 14                    # simulated league: snake draft on season-start projected value
   roster_size: 12              # non-IL roster spots
   max_weeks: 20                # Monday-Sunday weeks from the season's first Monday
-  matchups_per_week: 4         # sampled head-to-heads per week (each runs the optimizer)
+  matchups_per_week: 7         # head-to-heads per week (7 = all of them; each runs the optimizer)
+  react_to_absences: true      # daily lineups swap in a bench player for a starter who sits (as a manager would)
   seed: 7
 
 simulation:                    # team-week variance calibration (research_room/calibration.py)
