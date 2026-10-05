@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-context
+    date: 2026-10-05
+    kind: finding
+    title: Opponent, pace and rest don't sharpen projections
+    body: >
+      Tested whether knowing the opponent's pace and defense, rest days and back-to-backs improves
+      game projections. Directionally yes (faster, weaker-defense opponents mean more stats), but
+      the effect is too small to show up against how much a single game swings: about 0.03% on
+      last season. The baseline keeps driving. Next candidates: same-day injury news and betting
+      lines.
+    refs: [DECISIONS.md, src/research_room/features.py]
+
   - id: 2026-10-05-phase3-lgbm
     date: 2026-10-05
     kind: finding

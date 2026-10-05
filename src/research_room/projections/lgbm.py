@@ -28,6 +28,7 @@ import pandas as pd
 from lightgbm import LGBMRegressor
 
 from research_room.config import Settings
+from research_room.features import CONTEXT_COLUMNS
 from research_room.projections.baseline import STATS, BaselineModel
 
 MIN_FEATURES = [
@@ -54,6 +55,8 @@ RATE_BASE = [
 
 class LgbmModel(BaselineModel):
     name = "lgbm"
+    MIN_FEATURES = MIN_FEATURES
+    RATE_BASE = RATE_BASE
 
     def __init__(self, cfg: Settings | None = None) -> None:
         super().__init__(cfg, shrink=False)
@@ -85,7 +88,7 @@ class LgbmModel(BaselineModel):
     def _train(self, played: pd.DataFrame) -> dict:
         models = {
             "minutes": LGBMRegressor(**self._params()).fit(
-                self._x(played, MIN_FEATURES), played["y_minutes"].astype(float)
+                self._x(played, self.MIN_FEATURES), played["y_minutes"].astype(float)
             )
         }
         enough = played[played["y_minutes"] >= self.cfg.models.lgbm.min_rate_minutes]
@@ -93,7 +96,7 @@ class LgbmModel(BaselineModel):
             target = enough[f"y_{s}"] / enough["y_minutes"] - enough[f"{s}_pm_ewma"]
             ok = target.notna()
             models[s] = LGBMRegressor(**self._params()).fit(
-                self._x(enough[ok], RATE_BASE), target[ok], sample_weight=enough.loc[ok, "y_minutes"]
+                self._x(enough[ok], self.RATE_BASE), target[ok], sample_weight=enough.loc[ok, "y_minutes"]
             )
         return models
 
@@ -105,9 +108,9 @@ class LgbmModel(BaselineModel):
             return out
         rows = out[has]
         out.loc[has, "min_played_ewma"] = np.clip(
-            models["minutes"].predict(cls._x(rows, MIN_FEATURES)), 0, 48
+            models["minutes"].predict(cls._x(rows, cls.MIN_FEATURES)), 0, 48
         )
-        x = cls._x(rows, RATE_BASE)
+        x = cls._x(rows, cls.RATE_BASE)
         for s in STATS:
             out.loc[has, f"{s}_pm_ewma"] = np.clip(
                 rows[f"{s}_pm_ewma"].astype(float) + models[s].predict(x), 0, None
@@ -137,3 +140,17 @@ class LgbmModel(BaselineModel):
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         return super().predict(self.corrected(df))
+
+
+class LgbmContextModel(LgbmModel):
+    """The same corrections plus the next game's context: rest days, back-to-back, and the
+    opponent's pace and defense over its previous 10 games (features.game_context; known before
+    the game). Projection rows must carry these columns (live, calibration and backtest add them)."""
+
+    name = "lgbm_ctx"
+    MIN_FEATURES = [*MIN_FEATURES, *CONTEXT_COLUMNS]
+    RATE_BASE = [*RATE_BASE, *CONTEXT_COLUMNS]
+
+    def __init__(self, cfg: Settings | None = None) -> None:
+        super().__init__(cfg)
+        self.name = "lgbm_ctx"

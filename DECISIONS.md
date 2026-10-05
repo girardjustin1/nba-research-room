@@ -421,3 +421,22 @@ at a time. Fitted on 2023-24 and 2024-25, scored on 2025-26:
   on only after it wins on the scoreboard and the 140-matchup backtest.
 - Plumbing: the state columns are defined once (`features.STATE_COLUMNS`), and the schedules carry
   home/away.
+
+**Game-context model (2026-10-05). Not adopted.** `features.game_context` adds the next game's
+context to projection rows: rest days and back-to-back from the schedule, and the opponent's pace
+and defense over its previous 10 games. Only games tipped before the cutoff count (the projection
+time: Monday in the backtests, tonight in the nightly run). It's tested against its definition and
+its cutoff, and it matches the feature table (opponent pace 100%, rest 99.2%: team versus player
+rest).
+- `LgbmContextModel` (the LightGBM corrections plus these four features), every scheduled game of
+  2025-26: average error 0.6–2.9% worse than the baseline, squared error within ±0.6%. The same as
+  without context.
+- A transparent check: scale the baseline by (opponent pace / league)^a × (opponent defense /
+  league)^b, with a and b fitted on 2024-25. The fitted strengths point the expected way (0.5–1
+  for points, rebounds, assists), but the 2025-26 change is −0.03% to +0.01%.
+- Conclusion: opponent and rest effects are real in direction but too small against single-game
+  noise to measure here. The baseline keeps driving. Two information sources remain untested:
+  same-day teammates out (from the injury report) and betting lines. Kalshi keeps hourly
+  candlesticks of past prop markets (`/historical/markets/{ticker}/candlesticks`), so last
+  season's pre-tip ladders can be backfilled to test whether props beat the baseline before this
+  season's archive builds up.

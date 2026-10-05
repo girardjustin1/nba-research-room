@@ -220,3 +220,48 @@ def live_rows(built: pd.DataFrame, schedule: pd.DataFrame, season: int) -> pd.Da
     y = act.reindex(pd.MultiIndex.from_frame(rows[["player_id", "game_id"]])).fillna(0.0).to_numpy()
     rows[ycols] = y
     return rows.assign(play_prob=rows["play_rate_ewma"], season_games=10_000)
+
+
+CONTEXT_COLUMNS = ["days_rest", "back_to_back", "opp_pace_r10", "opp_drtg_r10"]
+
+
+def game_context(rows: pd.DataFrame, schedule: pd.DataFrame, team_ctx: pd.DataFrame,
+                 cutoff: pd.Timestamp | pd.Series | None = None) -> pd.DataFrame:
+    """Add the next game's context to projection rows (team_id, game_id, date): opp_team_id,
+    days_rest and back_to_back from the team's schedule, and the opponent's pace / defense over its
+    previous 10 games, counting only games tipped before `cutoff` (when the projection is made;
+    without one, before each game, as the feature table does). Nothing after the cutoff is used."""
+    if rows.empty:
+        empty = {c: pd.Series(dtype=float) for c in ("opp_team_id", *CONTEXT_COLUMNS)}
+        return rows.assign(**empty)
+    s = schedule[["team_id", "game_id", "date"]].drop_duplicates()
+    s = s.assign(date=pd.to_datetime(s["date"])).sort_values(["team_id", "date"])
+    s["days_rest"] = s.groupby("team_id")["date"].diff().dt.days
+    opp = s[["game_id", "team_id"]].rename(columns={"team_id": "opp_team_id"})
+    pairs = s.merge(opp, on="game_id")
+    keep_cols = ["team_id", "game_id", "opp_team_id", "days_rest"]
+    pairs = pairs.loc[pairs["team_id"] != pairs["opp_team_id"], keep_cols]
+    out = rows.drop(columns=[c for c in ("opp_team_id", *CONTEXT_COLUMNS) if c in rows]).merge(
+        pairs, on=["team_id", "game_id"], how="left")
+    out["back_to_back"] = out["days_rest"] == 1
+    tc = team_ctx.sort_values(["team_id", "tip_utc"]).copy()
+    for col in ("pace", "def_rating"):                   # rolling mean including each finished game
+        tc[f"{col}_r10"] = tc.groupby("team_id")[col].transform(
+            lambda x: x.rolling(10, min_periods=3).mean())
+    game_tip = pd.to_datetime(out["date"]).dt.tz_localize(ET).dt.tz_convert("UTC")
+    if cutoff is None:
+        asof = game_tip
+    elif isinstance(cutoff, pd.Series):                  # a cutoff per row (e.g. each row's Monday)
+        asof = np.minimum(game_tip, pd.to_datetime(cutoff.reindex(rows.index).to_numpy(), utc=True))
+    else:
+        asof = np.minimum(game_tip, pd.Timestamp(cutoff).tz_convert("UTC"))
+    left = out.assign(_asof=asof - pd.Timedelta(seconds=1), _i=np.arange(len(out)))
+    left = left.dropna(subset=["opp_team_id"])
+    left = left.astype({"opp_team_id": tc["team_id"].dtype}).sort_values("_asof")
+    right = tc[["team_id", "tip_utc", "pace_r10", "def_rating_r10"]].rename(
+        columns={"team_id": "opp_team_id", "pace_r10": "opp_pace_r10", "def_rating_r10": "opp_drtg_r10"})
+    m = pd.merge_asof(left, right.sort_values("tip_utc"), left_on="_asof", right_on="tip_utc",
+                      by="opp_team_id", direction="backward")
+    for col in ("opp_pace_r10", "opp_drtg_r10"):
+        out[col] = pd.Series(m[col].to_numpy(), index=m["_i"].to_numpy()).reindex(range(len(out))).to_numpy()
+    return out
