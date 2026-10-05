@@ -32,6 +32,8 @@ export interface GameCenterProps {
   onTabChange?: (tab: SeasonTab) => void;
   initialChart?: 'probability' | 'moves';
   initialMetric?: CategoryKey | 'week';
+  /** The engine answered 409 for the win probability: its next step, shown instead of the chart. */
+  probabilityNotReady?: string | null;
 }
 
 /**
@@ -41,7 +43,7 @@ export interface GameCenterProps {
  * vs do nothing, per category), the latest event, the category linescore, key moments,
  * team comparison, week volume, both injury reports and pickups. Every number is the engine's.
  */
-export function GameCenter({ gc, probability, plan, loading, error, onRetry, onOpenPlayer, onTabChange, initialChart = 'probability', initialMetric = 'week' }: GameCenterProps) {
+export function GameCenter({ gc, probability, plan, loading, error, onRetry, onOpenPlayer, onTabChange, initialChart = 'probability', initialMetric = 'week', probabilityNotReady = null }: GameCenterProps) {
   const [chart, setChart] = useState<'probability' | 'moves'>(initialChart);
   const [metric, setMetric] = useState<CategoryKey | 'week'>(initialMetric);
   const [moment, setMoment] = useState<GameCenterMoment | null>(null);
@@ -106,7 +108,9 @@ export function GameCenter({ gc, probability, plan, loading, error, onRetry, onO
               </TextField>
             </Box>
           )}
-          {probability === undefined ? (
+          {probabilityNotReady ? (
+            <EmptyState title="Win probability isn't ready yet">{probabilityNotReady}</EmptyState>
+          ) : probability === undefined ? (
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Win probability arrives with GET /season/week/probability (Phase 2).
             </Typography>

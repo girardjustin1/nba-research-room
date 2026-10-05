@@ -4,7 +4,7 @@ Inputs: the feature table (features.py), a projection model with fit/predict (th
 settings.simulation, settings.categories.
 Outputs: one variance multiplier per category, so that a team's projected weekly total (10
 players, Monday-Sunday) has an 80% band that covers ~80% of real weeks; plus out-of-sample
-coverage before and after. Tables: writes sim_calibration and model_scores (model
+coverage before and after. Tables: writes sim_calibration, sim_correlation and model_scores (model
 "baseline_team_week"); reads nothing directly.
 
 Why: simulate.py treats games and players as independent, and the model's per-game spread is
@@ -112,7 +112,20 @@ def calibrate(built: pd.DataFrame, cfg: Settings | None = None, test_season: int
                      "train_seasons": ",".join(str(s) for s in sorted(train["season"].unique())),
                      "test_season": int(test_season)})
     dates = pd.to_datetime(test["game_date"])
-    return pd.DataFrame(rows).assign(window_start=dates.min().date(), window_end=dates.max().date())
+    out = pd.DataFrame(rows).assign(window_start=dates.min().date(), window_end=dates.max().date())
+    out.attrs["corr"] = correlation(z_train, cfg)
+    return out
+
+
+def correlation(z: pd.DataFrame, cfg: Settings) -> pd.DataFrame:
+    """Correlation of team-week residuals between categories, in the "good for me" direction
+    (TO flipped), so the simulator can draw the nine category edges together."""
+    zz = z.copy()
+    for c in cfg.categories:
+        if not c.higher_is_better:
+            zz[c.key] = -zz[c.key]
+    keys = [c.key for c in cfg.categories]
+    return zz[keys].dropna().corr()
 
 
 def run(con, cfg: Settings | None = None) -> pd.DataFrame:
@@ -127,10 +140,28 @@ def write(con, cal: pd.DataFrame) -> int:
     now = store.utcnow()
     store.upsert(con, "sim_calibration", cal.assign(model="baseline", fitted_at=now)[
         ["model", "category", "fitted_at", "multiplier", "raw_multiplier", "train_seasons", "n_teams"]])
+    corr = cal.attrs.get("corr")
+    if corr is not None:
+        long = corr.stack().rename("rho").rename_axis(["cat_a", "cat_b"]).reset_index()
+        store.upsert(con, "sim_correlation", long.assign(model="baseline", fitted_at=now))
     scores = pd.DataFrame({"model": MODEL, "stat": cal["category"], "window_start": cal["window_start"],
                            "window_end": cal["window_end"], "run_at": now, "mae": np.nan, "rmse": np.nan,
                            "coverage_80": cal["coverage_80"], "n": cal["n_teams"], "beats_baseline": None})
     return store.upsert(con, "model_scores", scores)
+
+
+def load_correlation(con, cfg: Settings | None = None, model: str = "baseline") -> np.ndarray | None:
+    """Latest category correlation as a matrix in settings order, or None if not fitted yet."""
+    cfg = cfg or settings()
+    df = con.execute("""
+        SELECT cat_a, cat_b, rho FROM sim_correlation
+        WHERE model = ? AND fitted_at = (SELECT max(fitted_at) FROM sim_correlation WHERE model = ?)
+    """, [model, model]).df()
+    if df.empty:
+        return None
+    keys = [c.key for c in cfg.categories]
+    m = df.pivot(index="cat_a", columns="cat_b", values="rho").reindex(index=keys, columns=keys)
+    return None if m.isna().any().any() else m.to_numpy(float)
 
 
 def load_multipliers(con, model: str = "baseline") -> dict[str, float]:

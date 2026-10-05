@@ -738,6 +738,19 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         finally:
             con.close()
 
+    @app.get("/season/week/probability")
+    def get_week_probability(now: str | None = None) -> dict:
+        """WinProbabilityResponse: this week's P(win) history and the do-nothing path.
+        `now` (ISO time) is for testing and replay only."""
+        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return season_api.probability_response(con, now=when)
+        except season_api.NotReady as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
+
     # ---------------------------------------------------------------- schedule (real 2026-27 data)
     sched_cache: dict = {}
 

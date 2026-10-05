@@ -39,7 +39,7 @@ export interface SeasonCategory {
   is_ratio: boolean;
 }
 
-/** Yahoo roster slots for this league (10 active + 3 BN + 1 IL). */
+/** Yahoo roster slots for this league (10 active + 2 BN + 1 IL). */
 export type RosterSlot = 'PG' | 'SG' | 'G' | 'SF' | 'PF' | 'F' | 'C' | 'Util' | 'BN' | 'IL';
 
 /** The Python module that produced a number. Names match `src/research_room/`. */
@@ -341,7 +341,7 @@ export interface WeekResponse extends Envelope {
   alerts: BreakingAlert[];
 }
 
-/* ------------------------------ GET /season/week/probability (proposed, Phase 2) */
+/* ------------------------- GET /season/week/probability (implemented: history + do nothing) */
 
 /** What moved P(win week) at a snapshot. */
 export type WinProbEventKind = 'nightly' | 'games_final' | 'news' | 'lineup' | 'transaction';

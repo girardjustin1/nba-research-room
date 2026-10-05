@@ -65,6 +65,17 @@ def player_value(day: pd.DataFrame, weights: dict[str, float], league_pct: dict[
     return v
 
 
+def fillable(eligible, cfg: Settings) -> set[str]:
+    """Slots a player can start in. Yahoo may list only positions ("PG,SG"); each one also
+    fills its combo slot and Util (settings.draft.position_eligibility: PG -> PG, G, Util)."""
+    mapping = cfg.draft.position_eligibility
+    out = {"Util"}
+    for pos in eligible or []:
+        out.add(pos)
+        out.update(mapping.get(pos, []))
+    return out
+
+
 def _slots(cfg: Settings) -> list[str]:
     """Starting slots with numbered duplicates: PG, SG, G, SF, PF, F, C#1, C#2, Util#1, Util#2."""
     raw = [s for s in cfg.roster.slots if s not in ("BN", "IL")]
@@ -92,12 +103,12 @@ def assign_day(roster: pd.DataFrame, values: pd.Series, has_game: pd.Series,
         if s not in slots:
             return DayLineup("infeasible", {}, [], il, 0.0,
                              reason=f"locked player {p} sits in unknown slot {s}")
-        if base[s] not in set(r.at[p, "eligible"]) | {"Util"}:
+        if base[s] not in fillable(r.at[p, "eligible"], cfg):
             return DayLineup("infeasible", {}, [], il, 0.0,
                              reason=f"{r.at[p, 'name']} is locked in {base[s]} but not eligible there")
     prob = pulp.LpProblem("day_lineup", pulp.LpMaximize)
-    pairs = [(p, s) for p in candidates for s in slots
-             if base[s] in set(r.at[p, "eligible"]) or base[s] == "Util"]
+    fills = {p: fillable(r.at[p, "eligible"], cfg) for p in candidates}
+    pairs = [(p, s) for p in candidates for s in slots if base[s] in fills[p]]
     x = {(p, s): prob.add_variable(f"x_{i}", 0, 1, cat=pulp.LpBinary) for i, (p, s) in enumerate(pairs)}
     val = {p: float(values.get(p, 0.0)) if bool(has_game.get(p, False)) else 0.0 for p in candidates}
     prob += pulp.lpSum(val[p] * x[(p, s)] for p, s in pairs)

@@ -22,6 +22,7 @@ export function LeagueMatchupScreen({ mode, apis, navigate }: RouteScreenProps) 
       <GameCenter
         gc={gc.data}
         probability={prob.loading ? null : prob.data}
+        probabilityNotReady={prob.notReady}
         loading={gc.loading}
         error={firstError([gc])}
         onRetry={() => {

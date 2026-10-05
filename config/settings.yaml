@@ -138,6 +138,8 @@ simulation:                    # team-week variance calibration (research_room/c
   team_pool: 180               # sampled from the top N players by projected points that week
   multiplier_bounds: [0.5, 3.0]   # a fitted multiplier outside this is clipped (and flagged)
   min_players_per_week: 200    # skip weeks with fewer projected players (season edges)
+  week_draws: 1000             # correlated category draws per P(win week) (shared across the path)
+  path_draws: 2000             # simulated weeks for the do-nothing path and its band
   seed: 1
 
 system:                        # health-check freshness budgets, in hours

@@ -202,6 +202,8 @@ class SimulationConfig(BaseModel):
     team_pool: int
     multiplier_bounds: tuple[float, float]
     min_players_per_week: int
+    week_draws: int
+    path_draws: int
     seed: int
 
 

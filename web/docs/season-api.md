@@ -7,8 +7,8 @@ page says where each number comes from.
 
 | Status | Endpoints |
 |---|---|
-| **Implemented** | `GET /season/lineup` (`season_api.py`), `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
-| **Proposed** | everything else on this page, including `GET /season/week/probability`, `GET /season/week/gamecenter` and `POST /season/scenario` (Phase 2) |
+| **Implemented** | `GET /season/lineup`, `GET /season/week/probability` (history + the do-nothing scenario; `season_api.py`, `matchup.py`), `GET /schedule/team_weeks`, `GET /schedule/team_days` (`api.py`) |
+| **Proposed** | everything else on this page, including the recommended and alternative scenarios of `/season/week/probability`, `GET /season/week/gamecenter` and `POST /season/scenario` (Phase 2, with the optimizer) |
 
 All endpoints are served by the local API on 127.0.0.1:8765. The app calls `/api/...` and the
 Vite proxy strips the `/api` prefix. The app reaches the season screens at `#/season/<tab>`,
@@ -67,7 +67,14 @@ labels only; the numbers are in the bottom sheet and the table view.
 | `acquisitions {used, max, pending, resets_on}` | `ingest/yahoo.py` transactions | max 4 per week |
 | `alerts[]` (`BreakingAlert`) | `ingest/x_feed.py` → `overrides.py` → `simulate.py` | `impact` = the simulation rerun with the news |
 
-### `GET /season/week/probability` → `WinProbabilityResponse` (proposed, Phase 2)
+### `GET /season/week/probability` → `WinProbabilityResponse` (**implemented**: history + do nothing)
+
+Implemented: `history[]` from `matchup_snapshots` (one per nightly run, plus a live "now" point;
+a snapshot's `lo`/`hi` equal its `p_win_week`, since a snapshot is a measurement, not a projection),
+the `do_nothing` scenario (its first point is now, then each remaining day's end at 11:59 pm ET,
+lo/hi = the 10th–90th percentile of P(win week) over simulated weeks), `current` and `cats_as_of`.
+`recommended_move_ids` is empty and `scenarios` holds only `do_nothing` until the optimizer
+lands. 409 when the week's matchup.csv, a roster or projections are missing.
 
 | Field | Produced by | Notes |
 |---|---|---|

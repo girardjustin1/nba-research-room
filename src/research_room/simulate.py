@@ -18,6 +18,10 @@ Model:
   as independent, so P(win week) is a Poisson-binomial tail, computed exactly.
 - Monte Carlo mode draws the same normal totals (5,000 by default) and counts wins; it is the
   hook for Kalshi implied distributions in Phase 2. Ties count as losses (conservative).
+- Categories are not independent (points, threes and makes rise together; turnovers rise with
+  volume). With `corr` (calibration.py, fitted on earlier seasons) P(win week) comes from shared
+  correlated normal draws of the nine category edges instead of the independent
+  Poisson-binomial; out of sample it is better calibrated (DECISIONS.md).
 - `var_mult` (per category, from calibration.py) scales each category's variance so team-week
   80% bands cover ~80% out of sample. Without it, games and players are treated as independent,
   which proved overconfident for team weekly totals.
@@ -149,6 +153,23 @@ def analytic(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None,
     stacked = np.vstack([np.atleast_1d(v) for v in p_cat.values()])
     need = cats_to_win(cfg)
     return Matchup(p_cat, stacked.sum(axis=0), poisson_binomial_at_least(stacked, need), need)
+
+
+def correlated_draws(corr: np.ndarray, n: int, seed: int | None = 0) -> np.ndarray:
+    """(n, cats) standard normal draws with correlation `corr` (category order of settings)."""
+    return np.random.default_rng(seed).standard_normal((n, corr.shape[0])) @ np.linalg.cholesky(corr).T
+
+
+def p_win_week_correlated(me: TeamWeek, opp: TeamWeek, z: np.ndarray, cfg: Settings | None = None,
+                          var_mult: dict[str, float] | None = None) -> np.ndarray:
+    """P(win week) using shared correlated draws `z` (n, cats). Batch-aware: returns (batch,)."""
+    cfg = cfg or settings()
+    diff, sd = zip(*(_edge(me, opp, c, var_mult) for c in cfg.categories), strict=True)
+    diff = np.vstack([np.atleast_1d(d) for d in diff])            # (cats, batch)
+    sd = np.vstack([np.atleast_1d(s) for s in sd])
+    diff, sd = np.broadcast_arrays(diff, sd)
+    wins = (diff[None, :, :] + sd[None, :, :] * z[:, :, None] > 0).sum(axis=1)   # (n, batch)
+    return (wins >= cats_to_win(cfg)).mean(axis=0)
 
 
 def monte_carlo(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None, n: int = 5000,

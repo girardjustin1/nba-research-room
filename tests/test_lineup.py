@@ -87,3 +87,19 @@ def test_empty_slots_when_too_few_players_play(n_bench_games):
     out = lineup.assign_day(r, values, has, cfg=CFG)
     assert out.status == "optimal"
     assert out.value == pytest.approx(2.0 + n_bench_games)
+
+
+def test_a_listed_position_also_fills_its_combo_slot_and_util():
+    from research_room.config import settings
+    cfg = settings()
+    assert lineup.fillable(["PG"], cfg) >= {"PG", "G", "Util"}
+    assert lineup.fillable(["SF", "PF"], cfg) >= {"SF", "PF", "F", "Util"}
+    assert "C" not in lineup.fillable(["PG"], cfg)
+    # Four PGs fit only if one takes the G slot (PG, G, Util, Util); before, one sat.
+    ids = [1, 2, 3, 4]
+    r = pd.DataFrame({"player_id": ids, "name": list("ABCD"), "eligible": [["PG"]] * 4,
+                      "status": None, "current_slot": "BN"})
+    res = lineup.assign_day(r, pd.Series({p: 5.0 - p for p in ids}), pd.Series({p: True for p in ids}),
+                            cfg=cfg)
+    assert sorted(p for p in res.starters.values() if p is not None) == ids
+    assert res.starters["G"] in ids

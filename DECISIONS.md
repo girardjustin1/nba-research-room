@@ -260,3 +260,23 @@ are drawn from the top 180 players by projected points, one Monday–Sunday week
 - Still open: team-level REB runs slightly over-projected (z bias −0.22), a target for the Phase 3
   models. 908 player-weeks in 2025-26 came from players the baseline gave no chance of playing
   (returning from injury). In season, overrides set that chance.
+
+**Weekly matchup engine (2026-10-05).** `matchup.py` and `GET /season/week/probability`.
+- Counted games: each remaining day, both lineups go through the daily assigner (10 active slots).
+  Only starters with a game count. The opponent is assumed to set its best lineup.
+- Week total = Yahoo's week-to-date totals + the projected remaining days. matchup.csv gives
+  FG%/FT% only as ratios, so attempts so far come from box scores of each roster's active
+  players, and makes = Yahoo % × those attempts. That's labeled as an estimate.
+- **Categories are drawn together.** A backtest on 2025-26 (5,000 random 10-v-10 weeks, fitted on
+  earlier seasons) showed category win probabilities were honest (calibration error 1.2 points),
+  but week win probabilities were overconfident under the independent-categories formula
+  (predicted 85% → 78% actual; calibration error 3.5 points). The residual correlation between
+  categories is now fitted on the training seasons (`sim_correlation`; PTS–3PTM 0.69,
+  PTS–REB 0.55, TO against volume −0.41). P(win week) uses correlated draws. Calibration error
+  drops to 2.1 points (predicted 85% → 82%), and the Brier score improves from 0.1982 to 0.1967.
+- The do-nothing path: P(win week) at each day's end, averaged over 2,000 simulated weeks, with
+  the 10th–90th percentile as the band. It stays near today's value and widens toward Sunday.
+- Fixed along the way: the daily assigner only started a player in a slot named in his Yahoo
+  eligibility, so a "PG" never filled G (or an "SF" never filled F). It now expands positions to
+  their combo slots and Util, using `draft.position_eligibility`.
+- Response time is about 320 ms on a 5-day week, mostly the 10 daily lineup solves.

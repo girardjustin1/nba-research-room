@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
-from research_room import calibration, features, lineup, overrides, schedule, scoreboard, store
+from research_room import calibration, features, lineup, matchup, overrides, schedule, scoreboard, store
 from research_room.config import Settings, settings
 from research_room.ingest import bdl, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
@@ -83,6 +83,14 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
     return payload
 
 
+def _snapshot(con, cfg: Settings) -> dict:
+    """This week's P(win) for the chart history; skipped (with the reason) before the season."""
+    try:
+        return matchup.snapshot(con, cfg)
+    except matchup.NoMatchup as exc:
+        return {"status": "skipped", "reason": str(exc)}
+
+
 def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day: date | None = None,
                 client: bdl.BdlClient | None = None, sync: bool = True,
                 echo=print) -> dict:
@@ -127,6 +135,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
                 con, scoreboard.score_baseline(con, cfg)))
             report["calibration"] = step("calibration", lambda: calibration.write(
                 con, calibration.run(con, cfg)))
+        report["matchup"] = step("matchup snapshot", lambda: _snapshot(con, cfg))
         report["parquet"] = step("parquet", lambda: len(store.export_parquet(con)))
         report["timings_s"] = timings
         run["rows"] = int(report["projections"])

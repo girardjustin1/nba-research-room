@@ -36,6 +36,10 @@ export const FinalWin: Story = { args: { gc: gcFinalWin, probability: probFinal 
 export const FinalLoss: Story = { args: { gc: gcFinalLoss, probability: probFinalLoss } };
 export const Empty: Story = { args: { gc: gcEmpty, probability: probEmpty } };
 export const NoProbabilityEndpoint: Story = { args: { probability: undefined } };
+/** The engine answers 409 before the week's matchup.csv is in: its next step shows in the chart card. */
+export const ProbabilityNotReady: Story = {
+  args: { probability: null, probabilityNotReady: 'No week 2 matchup yet: save matchup.csv to data/inbox and run `make inbox`.' },
+};
 export const Loading: Story = { args: { gc: null, probability: null, loading: true } };
 export const ApiError: Story = { args: { gc: null, probability: null, error: 'Request failed (HTTP 500)', onRetry: () => {} } };
 export const Dark: Story = { globals: { colorMode: 'dark' } };

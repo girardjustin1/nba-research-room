@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-matchup
+    date: 2026-10-05
+    kind: update
+    title: The matchup engine is built; it switches on with week 1
+    body: >
+      Your weekly win probability now comes from both real rosters, each player's games, the
+      10-active daily limit and Yahoo's live totals. Tested on 5,000 past head-to-head weeks:
+      treating the nine categories as independent made week odds too confident (85% predicted
+      won 78% of the time), so categories are now drawn together, as they really move (points,
+      threes and makes rise together). Predicted 85% now wins 82%. It needs the week's
+      matchup.csv and every team's roster.csv; until then the Matchup tab says so.
+    refs: [DECISIONS.md, src/research_room/matchup.py]
+
   - id: 2026-10-04-calibration
     date: 2026-10-04
     kind: finding

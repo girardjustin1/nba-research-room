@@ -12,6 +12,7 @@ optimizer), never a made-up default.
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -19,8 +20,9 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
-from research_room import images, lineup, overrides, schedule
+from research_room import images, lineup, matchup, overrides, schedule
 from research_room.config import Settings, settings
+from research_room.draft import tracker
 from research_room.pipeline import my_roster
 
 ET = ZoneInfo("America/New_York")
@@ -250,3 +252,81 @@ def _day_json(day: date, today: date, roster: pd.DataFrame, res: lineup.DayLineu
             "games_started_current": sum(1 for p in starting_current if p in mine_games),
             "games_started_optimal": sum(1 for p in res.starters.values() if p in mine_games),
             "delta_p_win": None, "first_lock_at": min(tips) if tips else None}
+
+
+# ------------------------------------------------------------------ win probability (Phase 2)
+
+def _team_ref(con, team_id: int) -> dict:
+    names = tracker.league_team_names(con)
+    return {"team_id": int(team_id), "name": names.get(team_id) or f"Team {team_id}", "manager": None,
+            "record": None, "logo_url": None}
+
+
+def probability_response(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
+                         now: datetime | None = None) -> dict:
+    """WinProbabilityResponse: snapshot history for this week plus the do-nothing path.
+    The recommended plan and alternatives arrive with the weekly optimizer."""
+    cfg = cfg or settings()
+    try:
+        inp = matchup.week_inputs(con, cfg, now)
+    except matchup.NoMatchup as exc:
+        raise NotReady(str(exc)) from exc
+    now = inp["now"]
+    m = matchup.matchup_now(inp["me"], inp["opp"], inp["me_done"], inp["opp_done"], inp["var_mult"], cfg,
+                            inp["corr"])
+    lead = matchup.cats_lead(inp["me_done"], inp["opp_done"], cfg)
+    snaps = con.execute("""SELECT ts, p_win_week, p_cats, cats_me, cats_opp, event_kind, event_label
+                           FROM matchup_snapshots WHERE week = ? AND opponent_team_id = ? ORDER BY ts""",
+                        [inp["week"], inp["opp_id"]]).df()
+    history, prev = [], None
+    for r in snaps.itertuples(index=False):
+        p = float(r.p_win_week)
+        history.append({"ts": _iso(r.ts), "p_win_week": p, "lo": p, "hi": p,
+                        "cats_lead": {"me": int(r.cats_me), "opp": int(r.cats_opp)},
+                        "event": {"kind": r.event_kind, "label": r.event_label,
+                                  "delta_p": 0.0 if prev is None else p - prev},
+                        "p_cats": json.loads(r.p_cats) if r.p_cats else None})
+        prev = p
+    history.append({"ts": now.isoformat(), "p_win_week": m.p_win_week, "lo": m.p_win_week,
+                    "hi": m.p_win_week, "cats_lead": lead, "event": None, "p_cats": m.p_cat})
+    today = now.date()
+    before = snaps
+    if not snaps.empty:
+        before = snaps[pd.to_datetime(snaps["ts"]).dt.tz_convert(ET).dt.date < today]
+    since = m.p_win_week - float(before["p_win_week"].iloc[-1]) if not before.empty else None
+
+    scenarios = []
+    if inp["days"]:
+        path = matchup.do_nothing_path(inp["me"], inp["opp"], inp["me_done"], inp["opp_done"],
+                                       inp["var_mult"], cfg, seed=cfg.simulation.seed, corr=inp["corr"])
+        pw = m.p_win_week
+        pts = [{"ts": now.isoformat(), "p_win_week": pw, "lo": pw, "hi": pw, "expected_cats": m.expected_cats,
+                "moves_applied": [], "cat_deltas": [], "p_cats": m.p_cat}]
+        pts += [{"ts": matchup.day_end_ts(p.day), "p_win_week": p.p_win_week, "lo": p.lo, "hi": p.hi,
+                 "expected_cats": p.expected_cats, "moves_applied": [], "cat_deltas": [], "p_cats": p.p_cats}
+                for p in path]
+        last = pts[-1]
+        scenarios.append({"scenario_id": "do_nothing", "label": "Do nothing", "kind": "do_nothing",
+                          "move_ids": [], "points": pts, "delta_vs_do_nothing": None,
+                          "final": {k: last[k] for k in ("p_win_week", "lo", "hi", "expected_cats")}})
+    run_iso = _iso(inp["run_at"])
+    stale = (pd.Timestamp(now) - pd.Timestamp(inp["run_at"])) > STALE_AFTER
+    sim = cfg.simulation
+    return {
+        "as_of": run_iso, "stale": bool(stale),
+        "stale_reason": f"Projections are from {run_iso}; the nightly run is overdue." if stale else None,
+        "provenance": [
+            {"module": "projections", "as_of": run_iso, "run_id": None,
+             "note": "baseline: EWMA per-minute rates x minutes x P(plays)"},
+            {"module": "simulate", "as_of": now.isoformat(), "run_id": None,
+             "note": (f"10 active slots per day; calibrated weekly spreads; categories drawn together "
+                      f"({sim.week_draws:,} draws); path from {sim.path_draws:,} simulated weeks")
+                     + ("" if inp["corr"] is not None else "; correlation not fitted yet (independent)")},
+            {"module": "yahoo", "as_of": _iso(inp["cats_as_of"]), "run_id": None,
+             "note": "matchup.csv totals; FG%/FT% attempts so far estimated from box scores"},
+        ],
+        "week": week_context(today, cfg), "opponent": _team_ref(con, inp["opp_id"]),
+        "history": history, "scenarios": scenarios, "recommended_move_ids": [],
+        "current": {"p_win_week": m.p_win_week, "delta_since_yesterday": since},
+        "cats_as_of": _iso(inp["cats_as_of"]),
+    }
