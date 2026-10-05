@@ -32,7 +32,7 @@ export interface ThisWeekProps {
   onOpenMove?: (moveId: string) => void;
   onSeeAllMoves?: () => void;
   onTabChange?: (tab: SeasonTab) => void;
-  initialChartView?: 'chart' | 'table' | 'compare';
+  initialChartView?: 'chart' | 'compare';
 }
 
 const PLAYOFF_LABEL = { quarterfinal: 'Playoffs · quarterfinal', semifinal: 'Playoffs · semifinal', final: 'Playoffs · final' } as const;

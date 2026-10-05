@@ -39,7 +39,6 @@ export const MondayOnePoint: Story = { args: { data: probMonday } };
 export const LastDay: Story = { args: { data: probLastDay } };
 export const FinalResult: Story = { args: { data: probFinal } };
 export const ComparePlans: Story = { args: { data: probCompare, initialView: 'compare' } };
-export const TableView: Story = { args: { initialView: 'table' } };
 export const PointSheetOpen: Story = { args: { openTs: probNormal.history[5]!.ts, onOpenTs: () => {} } };
 export const ProjectedSheetOpen: Story = { args: { openTs: probNormal.scenarios[0]!.points[2]!.ts, onOpenTs: () => {} } };
 export const Recomputing: Story = { args: { recomputing: true } };

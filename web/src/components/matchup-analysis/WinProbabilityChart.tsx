@@ -1,16 +1,10 @@
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import { useDrawingArea, useXScale, useYScale } from '@mui/x-charts/hooks';
@@ -49,7 +43,8 @@ export interface WinProbabilityChartProps {
   /** Move titles by id, for the projected-point sheet. */
   moveTitles?: Record<string, string>;
   categories?: SeasonCategory[];
-  initialView?: 'chart' | 'table' | 'compare';
+  /** 'compare' opens the alternative plans as small multiples (only when the engine sends some). */
+  initialView?: 'chart' | 'compare';
   /** 'week' = P(win week); a category key = that category's P(win) path (engine p_cats). */
   metric?: CategoryKey | 'week';
   /** False hides the "With moves" line (the plain Win probability view). */
@@ -243,7 +238,7 @@ export function WinProbabilityChart(props: WinProbabilityChartProps) {
   const viz = useVizColors();
   const fm = FOR_ME[mode];
   const planColor = PLAN[mode].rec;
-  const [view, setView] = useState<'chart' | 'table' | 'compare'>(initialView);
+  const [view, setView] = useState<'chart' | 'compare'>(initialView);
   const [innerOpen, setInnerOpen] = useState<string | null>(null);
   const openTs = props.openTs !== undefined ? props.openTs : innerOpen;
   const setOpen = (t: string | null) => (props.onOpenTs ? props.onOpenTs(t) : setInnerOpen(t));
@@ -339,22 +334,12 @@ export function WinProbabilityChart(props: WinProbabilityChartProps) {
 
   return (
     <Box>
-      <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-        <Box sx={{ minWidth: 0, flex: 1 }}>{header}</Box>
-        <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v: 'chart' | 'table' | 'compare' | null) => v && setView(v)} aria-label="Win probability view">
-          <ToggleButton value="chart" sx={{ px: 1.1 }}>
-            Chart
-          </ToggleButton>
-          {data.scenarios.some((s) => s.kind === 'custom') && (
-            <ToggleButton value="compare" sx={{ px: 1.1 }}>
-              Compare
-            </ToggleButton>
-          )}
-          <ToggleButton value="table" sx={{ px: 1.1 }}>
-            Table
-          </ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
+      {header}
+      {data.scenarios.some((s) => s.kind === 'custom') && (
+        <Button size="small" onClick={() => setView(view === 'chart' ? 'compare' : 'chart')} sx={{ mt: 0.25, ml: -0.75 }}>
+          {view === 'chart' ? 'Compare alternative plans' : 'Back to the chart'}
+        </Button>
+      )}
 
       {view === 'chart' && (
         <>
@@ -473,55 +458,12 @@ export function WinProbabilityChart(props: WinProbabilityChartProps) {
           )}
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.5 }}>
             {ended ? 'The week is over.' : 'Projected lines show P(win week) if the moves due by each day are made. Shaded = 80% band.'} Dots = news, games final, lineup or transactions. Tap
-            the chart for the nearest point.
+            the chart for the nearest point and its exact numbers.
           </Typography>
         </>
       )}
 
       {view === 'compare' && <Compare data={data} rec={rec} />}
-
-      {view === 'table' && (
-        <Table size="small" aria-label="Win probability" sx={{ mt: 0.5 }}>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ px: 0.5 }}>When</TableCell>
-              <TableCell align="right" sx={{ px: 0.5 }}>
-                {ended ? 'P(win)' : 'Actual / do nothing'}
-              </TableCell>
-              {!ended && (
-                <TableCell align="right" sx={{ px: 0.5 }}>
-                  With moves
-                </TableCell>
-              )}
-              <TableCell sx={{ px: 0.5 }}>Event</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {timeline.map((t) => {
-              const h = hist.find((x) => x.ts === t);
-              const d = dn?.points.find((x) => x.ts === t);
-              const w = wm?.points.find((x) => x.ts === t);
-              return (
-                <TableRow key={t}>
-                  <TableCell sx={{ px: 0.5 }} className="tabular">
-                    {weekdayOf(etDate(t))} {etClock(t)}
-                    {!h ? ' (proj.)' : ''}
-                  </TableCell>
-                  <TableCell align="right" className="tabular" sx={{ px: 0.5 }}>
-                    {pct(h?.p_win_week ?? d?.p_win_week ?? null)}
-                  </TableCell>
-                  {!ended && (
-                    <TableCell align="right" className="tabular" sx={{ px: 0.5 }}>
-                      {w ? `${pct(w.p_win_week)} (${pctRange(w.lo, w.hi)})` : '—'}
-                    </TableCell>
-                  )}
-                  <TableCell sx={{ px: 0.5 }}>{h?.event ? `${h.event.label} (${ptsDelta(h.event.delta_p)})` : '—'}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
 
       {now && (
         <Typography variant="body2" className="tabular" sx={{ mt: 1, fontWeight: 600 }}>

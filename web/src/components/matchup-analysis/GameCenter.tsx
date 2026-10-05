@@ -83,23 +83,19 @@ export function GameCenter({ gc, probability, plan, loading, error, onRetry, onO
         )}
 
         <Card sx={{ p: 1.5 }}>
-          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
-            <ToggleButtonGroup size="small" exclusive value={chart} onChange={(_, v: 'probability' | 'moves' | null) => v && setChart(v)} aria-label="Chart">
-              <ToggleButton value="probability" sx={{ px: 1.25 }}>
-                Win probability
-              </ToggleButton>
-              <ToggleButton value="moves" sx={{ px: 1.25 }}>
-                With moves
-              </ToggleButton>
-            </ToggleButtonGroup>
-            {chart === 'moves' && (
+          <ToggleButtonGroup size="small" exclusive fullWidth value={chart} onChange={(_, v: 'probability' | 'moves' | null) => v && setChart(v)} aria-label="Chart" sx={{ mb: 1 }}>
+            <ToggleButton value="probability">Win probability</ToggleButton>
+            <ToggleButton value="moves">With moves</ToggleButton>
+          </ToggleButtonGroup>
+          {chart === 'moves' && (
+            <Box sx={{ mb: 1 }}>
               <TextField
                 select
                 size="small"
                 label="Show"
                 value={metric}
                 onChange={(e) => setMetric(e.target.value as CategoryKey | 'week')}
-                sx={{ minWidth: 104 }}
+                fullWidth
               >
                 <MenuItem value="week">Week</MenuItem>
                 {cats.map((c) => (
@@ -108,8 +104,8 @@ export function GameCenter({ gc, probability, plan, loading, error, onRetry, onO
                   </MenuItem>
                 ))}
               </TextField>
-            )}
-          </Stack>
+            </Box>
+          )}
           {probability === undefined ? (
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Win probability arrives with GET /season/week/probability (Phase 2).
