@@ -6,10 +6,9 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import SearchIcon from '@mui/icons-material/Search';
@@ -45,6 +44,10 @@ export interface AvailableListProps {
   pendingId?: number | null;
   /** Favorites tab: only starred players. */
   favoritesOnly?: boolean;
+  /** Rendered at the top of the pinned toolbar (the room's Available / Favorites tabs). */
+  toolbarLead?: React.ReactNode;
+  /** Pin the toolbar to the top of the scrolling parent. */
+  stickyToolbar?: boolean;
 }
 
 const PAGE = 120;
@@ -57,7 +60,8 @@ function adpText(p: PoolPlayer): string {
 
 
 /**
- * The available-player list in the bottom sheet. Position chips, search, and a sort toggle:
+ * The available-player list. A compact toolbar (pinned while the list scrolls) with search and
+ * sort on one row and the position chips below. Sort:
  * ADP (the engine's expected pick, "~" when it falls back from Yahoo ADP) or Our Rank. In ADP
  * order a divider marks where my next pick falls. Each row: Draft (records the current pick
  * for the team on the clock), name, position, NBA team, fantasy-playoff games (weeks 20-22),
@@ -89,54 +93,82 @@ export function AvailableList(props: AvailableListProps) {
 
   return (
     <Box sx={{ pb: compare.length >= 2 ? 9 : 2 }}>
-      <Box sx={{ px: 2, pt: 1.25 }}>
-        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', pb: 1, mx: -2, px: 2, scrollbarWidth: 'none' }} role="group" aria-label="Position filter">
-          {POS_FILTERS.map((f) => (
-            <Chip
-              key={f}
-              label={f}
-              onClick={() => setFilter(f)}
-              color={filter === f ? 'primary' : 'default'}
-              variant={filter === f ? 'filled' : 'outlined'}
-              aria-pressed={filter === f}
-              disabled={f === 'ROOKIE' && !hasRookieFlag}
-              sx={{ height: 36, fontWeight: 700, flexShrink: 0 }}
-            />
-          ))}
-        </Box>
-        <Stack spacing={1}>
+      <Box
+        sx={[
+          { bgcolor: 'background.default', zIndex: 2 },
+          !!props.stickyToolbar && { position: 'sticky', top: 0, boxShadow: (t) => `0 1px 0 ${t.vars.palette.divider}` },
+        ]}
+      >
+        {props.toolbarLead}
+        <Stack direction="row" sx={{ gap: 1, px: 2, pt: 1 }}>
           <TextField
             size="small"
             placeholder="Search players"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            fullWidth
+            sx={{ flex: 1, minWidth: 0 }}
             slotProps={{
               input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> },
               htmlInput: { 'aria-label': 'Search players', autoCorrect: 'off', enterKeyHint: 'search' },
             }}
           />
-          <ToggleButtonGroup size="small" exclusive fullWidth value={sort} onChange={(_, v: SortKey | null) => v && setSort(v)} aria-label="Sort">
-            <ToggleButton value="adp">ADP</ToggleButton>
-            <ToggleButton value="rank">Our Rank</ToggleButton>
-            <ToggleButton value="playoff" disabled={!players.some((p) => p.playoff_games != null)}>Playoff games</ToggleButton>
-          </ToggleButtonGroup>
+          <TextField
+            select
+            size="small"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            sx={{ width: 128, flexShrink: 0 }}
+            slotProps={{ select: { SelectDisplayProps: { 'aria-label': 'Sort players' } as React.HTMLAttributes<HTMLDivElement> } }}
+          >
+            <MenuItem value="adp">ADP</MenuItem>
+            <MenuItem value="rank">Our rank</MenuItem>
+            <MenuItem value="playoff" disabled={!players.some((p) => p.playoff_games != null)}>
+              Playoff games
+            </MenuItem>
+          </TextField>
         </Stack>
-        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.75 }}>
-          {props.currentPick == null
-            ? 'The draft is complete.'
-            : `Draft records ${roundPick(props.currentPick, teams)} for ${props.onTheClockLabel}.`}{' '}
-          ( ) = games in fantasy playoff weeks 20–22.
-        </Typography>
-      </Box>
-
-      <Stack direction="row" sx={{ pl: 1.5, pr: 0.25, py: 0.25, gap: 0.75, color: 'text.secondary', borderBottom: 1, borderColor: 'divider' }} aria-hidden>
+        <Box
+          role="group"
+          aria-label="Position filter"
+          sx={{
+            display: 'flex',
+            gap: 0.75,
+            overflowX: 'auto',
+            px: 2,
+            py: 1,
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+            maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+          }}
+        >
+          {POS_FILTERS.map((f) => (
+            <Chip
+              key={f}
+              label={f === 'ROOKIE' ? 'Rookies' : f}
+              size="small"
+              onClick={() => setFilter(f)}
+              color={filter === f ? 'primary' : 'default'}
+              variant={filter === f ? 'filled' : 'outlined'}
+              aria-pressed={filter === f}
+              disabled={f === 'ROOKIE' && !hasRookieFlag}
+              sx={{ height: 32, minWidth: 44, fontWeight: 700, flexShrink: 0 }}
+            />
+          ))}
+        </Box>
+      <Stack direction="row" sx={{ pl: 1.5, pr: 0.25, py: 0.25, gap: 0.75, color: 'text.secondary', borderTop: 1, borderColor: 'divider' }} aria-hidden>
         <Box sx={{ width: 52, flexShrink: 0 }} />
         <Typography variant="overline" sx={{ flex: 1 }}>Player</Typography>
         <Typography variant="overline" sx={{ width: 56, textAlign: 'right', flexShrink: 0 }}>ADP</Typography>
         <Typography variant="overline" sx={{ width: 42, textAlign: 'right', flexShrink: 0 }}>Rank</Typography>
         <Typography variant="overline" sx={{ width: 76, textAlign: 'center', flexShrink: 0 }}>Cmp · ★</Typography>
       </Stack>
+      </Box>
+      <Typography variant="caption" component="p" sx={{ color: 'text.secondary', px: 2, py: 0.75, borderBottom: 1, borderColor: 'divider' }}>
+        {props.currentPick == null
+          ? 'The draft is complete.'
+          : `Draft records ${roundPick(props.currentPick, teams)} for ${props.onTheClockLabel}.`}{' '}
+        ( ) = games in fantasy playoff weeks 20–22.
+      </Typography>
 
       {list.length === 0 ? (
         <Typography variant="body2" sx={{ color: 'text.secondary', p: 2 }}>

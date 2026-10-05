@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -38,6 +39,9 @@ export interface StatusBarProps {
   /** Demo build: shown in place of the Yahoo listener status. */
   demoBadge?: React.ReactNode;
   now?: () => number;
+  /** Scrolled down: one slim row (status + pick, Enter pick as an icon); the listener line
+   * and the full-size Enter pick button fold away. */
+  compact?: boolean;
 }
 
 /**
@@ -45,7 +49,7 @@ export interface StatusBarProps {
  * and the listener status (no local pick clock: Yahoo's room has the real one): picks arrive
  * from the Tampermonkey listener in the Yahoo draft room; manual entry is the fallback.
  */
-export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, demoBadge, now }: StatusBarProps) {
+export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, demoBadge, now, compact = false }: StatusBarProps) {
   const mode = useResolvedMode();
   const t = useNow(1000, now);
   const current = session.current_pick;
@@ -58,7 +62,7 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
     <Box
       component="header"
       sx={[
-        { position: 'relative', zIndex: 'appBar', pt: SAFE_TOP, px: 2, pb: 1, flexShrink: 0 },
+        { position: 'relative', zIndex: 'appBar', pt: SAFE_TOP, px: 2, pb: compact ? 0.25 : 1, flexShrink: 0, transition: 'padding 160ms ease' },
         complete
           ? { bgcolor: 'background.paper', color: 'text.primary', borderBottom: 1, borderColor: 'divider' }
           : mine
@@ -66,12 +70,12 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
             : { bgcolor: BAR[mode].waiting, color: '#fff' },
       ]}
     >
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minHeight: 48 }}>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minHeight: compact ? 44 : 48 }}>
         {leading}
         <Box sx={{ flex: 1, minWidth: 0 }} role="status" aria-live="assertive">
           <Typography
             component="p"
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontWeight: 800, fontSize: mine ? 22 : 19, lineHeight: 1.15 }}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontWeight: 800, fontSize: compact ? 16 : mine ? 22 : 19, lineHeight: 1.15, transition: 'font-size 160ms ease' }}
           >
             {complete ? null : mine ? <AlarmOutlinedIcon aria-hidden /> : <HourglassBottomOutlinedIcon aria-hidden fontSize="small" />}
             {complete
@@ -83,15 +87,21 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
                   : 'No picks left for you'}
           </Typography>
           {!complete && (
-            <Typography variant="body2" component="p" className="tabular" sx={{ opacity: 0.92, mt: 0.25 }} noWrap>
+            <Typography variant="body2" component="p" className="tabular" sx={{ opacity: 0.92, mt: compact ? 0 : 0.25, fontSize: compact ? 12.5 : undefined }} noWrap>
               Pick {roundPickLong(current ?? 0, session.teams)} · {mine ? 'your pick' : `${teamName(session, session.on_the_clock ?? 0)} on the clock`}
             </Typography>
           )}
         </Box>
+        {compact && !complete && (
+          <IconButton aria-label="Enter pick" onClick={onEnterPick} sx={{ color: 'inherit' }}>
+            <EditNoteOutlinedIcon />
+          </IconButton>
+        )}
         <IconButton aria-label="Draft tools" onClick={onMenu} sx={{ color: 'inherit', mr: -1.5 }}>
           <MoreVertIcon />
         </IconButton>
       </Stack>
+      <Collapse in={!compact} timeout={160}>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 0.5 }}>
         {demoBadge ? (
           <Box sx={{ flex: 1, minWidth: 0 }}>{demoBadge}</Box>
@@ -117,6 +127,7 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
           Enter pick
         </Button>
       </Stack>
+      </Collapse>
     </Box>
   );
 }

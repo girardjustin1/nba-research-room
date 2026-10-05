@@ -12,7 +12,7 @@ import GpsFixedIcon from '@mui/icons-material/GpsFixed';
 import WestIcon from '@mui/icons-material/West';
 import type { PickRecord, PoolPlayer, Session } from '../../../api/types';
 import { gridMatchesApi, roundOf, roundPick, snakePick, snakeSlot, teamName } from '../../../lib/picks';
-import { GROUP_COLORS, positionGroup } from '../../../lib/positions';
+import { GROUP_COLORS, GROUP_LABEL, positionGroup, type PositionGroup } from '../../../lib/positions';
 import { useResolvedMode } from '../../../theme/viz';
 
 export interface GridCell {
@@ -41,19 +41,26 @@ export interface DraftBoardGridProps {
   /** Cell size, px. */
   cellWidth?: number;
   cellHeight?: number;
+  /** The grid's own scroll position (the room collapses its header once you scroll). */
+  onScroll?: (scrollTop: number) => void;
 }
+
+/** Text on a filled cell. Black on every group fill measures >= 4.76:1 (light blue, the
+ * lowest; white would be 4.42) in both modes, so the fills can stay the exact bar colors. */
+const FILL_INK = '#000';
 
 const ROUND_COL = 40;
 const HEADER_H = 62;
 
 /**
  * The draft board: columns are teams (draft slots), rows are rounds, in snake order (the
- * arrow shows each round's direction). Made picks are colored by position group and print
+ * arrow shows each round's direction). Made picks are filled with their position group's
+ * color (the positional value bars' blue / orange / green, legend above) and print
  * position, NBA team, the player's name and round.pick; empty cells show the overall pick and
  * round.pick. Every cell is a button: empty cells assign a player, made ones change or remove.
  * The grid scrolls inside its own box (both ways); the page never scrolls sideways.
  */
-export function DraftBoardGrid({ session, pool, onCellTap, onEditNames, teamMeta, cellWidth = 96, cellHeight = 80 }: DraftBoardGridProps) {
+export function DraftBoardGrid({ session, pool, onCellTap, onEditNames, teamMeta, cellWidth = 96, cellHeight = 80, onScroll }: DraftBoardGridProps) {
   const mode = useResolvedMode();
   const scroller = useRef<HTMLDivElement>(null);
   const { teams, rounds, current_pick: current, my_slot: mySlot } = session;
@@ -87,9 +94,19 @@ export function DraftBoardGrid({ session, pool, onCellTap, onEditNames, teamMeta
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
       <Stack direction="row" sx={{ alignItems: 'center', px: 2, gap: 0.5 }}>
-        <Typography variant="subtitle2" component="h2" sx={{ flex: 1 }}>
+        <Typography variant="subtitle2" component="h2">
           Draft board
         </Typography>
+        <Stack direction="row" component="ul" aria-label="Cell colors" sx={{ flex: 1, m: 0, pl: 1.5, gap: 1.25, listStyle: 'none', minWidth: 0 }}>
+          {(['G', 'F', 'C'] as PositionGroup[]).map((g) => (
+            <Stack key={g} component="li" direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+              <Box aria-hidden sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: GROUP_COLORS[mode][g] }} />
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {GROUP_LABEL[g]}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
         {onEditNames && (
           <Tooltip title="Edit team names">
             <IconButton aria-label="Edit team names" onClick={onEditNames}>
@@ -112,6 +129,7 @@ export function DraftBoardGrid({ session, pool, onCellTap, onEditNames, teamMeta
       )}
       <Box
         ref={scroller}
+        onScroll={onScroll ? (e) => onScroll(e.currentTarget.scrollTop) : undefined}
         role="grid"
         aria-label="Draft board"
         aria-rowcount={rounds + 1}
@@ -305,7 +323,7 @@ function Cell({
           overflow: 'hidden',
         },
         mine && ((theme) => ({ bgcolor: `rgba(${theme.vars.palette.primary.mainChannel} / 0.08)` })),
-        hue != null && { bgcolor: `${hue}2e`, borderTop: `3px solid ${hue}` },
+        hue != null && { bgcolor: hue, color: FILL_INK, borderColor: 'background.paper' },
         made != null && hue == null && { borderTop: '3px solid', borderTopColor: 'text.disabled' },
         isCurrent && ((theme) => ({ outline: `3px solid ${theme.vars.palette.primary.main}`, outlineOffset: -3, zIndex: 0 })),
       ]}
@@ -321,7 +339,7 @@ function Cell({
           >
             {made.player_name}
           </Typography>
-          <Typography variant="caption" className="tabular" sx={{ color: 'text.secondary', lineHeight: 1.1 }} noWrap>
+          <Typography variant="caption" className="tabular" sx={{ color: hue != null ? FILL_INK : 'text.secondary', lineHeight: 1.1 }} noWrap>
             {label}
             {otherTeam != null ? ` · by ${teamName(session, otherTeam)}` : ''}
             {made.is_keeper ? ' · K' : ''}

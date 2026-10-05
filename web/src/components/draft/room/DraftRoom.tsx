@@ -41,8 +41,11 @@ import { SuggestedPicks } from '../panels/SuggestedPicks';
 import { TeamNamesEditor } from '../tools/TeamNamesEditor';
 import { TeamsTab } from '../sheet/TeamsTab';
 
-/** Board: where every team drafted. League: my strength vs the league and the market. */
-export type RoomTab = 'board' | 'league';
+/** Board: where every team drafted. League: me vs the league per category. Players: the
+ * market (positional value, suggested picks) and Available / Favorites. */
+export type RoomTab = 'board' | 'league' | 'players';
+/** Scrolled past this many px, the status bar collapses to one row. */
+const COLLAPSE_AT = 24;
 export type PlayersFilter = 'available' | 'favorites';
 const LATEST_MS = 12_000;
 
@@ -54,7 +57,7 @@ export interface DraftRoomViewProps {
   /** GET /schedule/team_days (cached by the container). */
   loadTeamDays?: (team: string, start: string, end: string) => Promise<TeamDay[]>;
   initialTab?: RoomTab;
-  /** League tab: start on Available or Favorites. */
+  /** Players tab: start on Available or Favorites. */
   initialPlayers?: PlayersFilter;
   initialPanel?: MenuPanel | null;
   /** Stories: show the latest-pick card on first render instead of waiting for a new pick. */
@@ -73,10 +76,11 @@ function lastLivePick(picks: PickRecord[]): PickRecord | null {
 }
 
 /**
- * The live draft room for the league's real Yahoo draft, in two tabs under the status bar:
- * Board (the grid of every team's picks; tap any cell to record or fix a pick) and Me vs league
- * (my standing per category against the league, the market left by position, suggested picks,
- * then Available / Favorites). Picks arrive from the Yahoo listener. My roster and every team's
+ * The live draft room for the league's real Yahoo draft, in three tabs under the status bar:
+ * Board (the grid of every team's picks; tap any cell to record or fix a pick), Me vs league
+ * (my standing per category against the league) and Players (the market left by position,
+ * suggested picks, then Available / Favorites under a pinned toolbar). Scrolling any tab
+ * collapses the status bar to one row. Picks arrive from the Yahoo listener. My roster and every team's
  * roster are in the tools menu. Every number comes from the draft API.
  */
 export function DraftRoomView({
@@ -93,6 +97,8 @@ export function DraftRoomView({
   const { session, board, connection } = state;
   const [tab, setTab] = useState<RoomTab>(initialTab);
   const [playersFilter, setPlayersFilter] = useState<PlayersFilter>(initialPlayers);
+  const [compact, setCompact] = useState(false);
+  const onScrollTop = (top: number) => setCompact((c) => (c ? top > COLLAPSE_AT / 2 : top > COLLAPSE_AT));
   const [cell, setCell] = useState<GridCell | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState<MenuPanel | null>(initialPanel);
@@ -195,18 +201,23 @@ export function DraftRoomView({
           leading={shell?.menuButton}
           demoBadge={shell?.demoBadge}
           now={now}
+          compact={compact}
         />
       </Box>
 
       <Tabs
         value={tab}
-        onChange={(_, v: RoomTab) => setTab(v)}
+        onChange={(_, v: RoomTab) => {
+          setTab(v);
+          setCompact(false);
+        }}
         variant="fullWidth"
         aria-label="Draft views"
         sx={{ flexShrink: 0, minHeight: 44, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 44, fontWeight: 700 } }}
       >
         <Tab value="board" label="Board" />
         <Tab value="league" label="Me vs league" />
+        <Tab value="players" label="Players" />
       </Tabs>
 
       {state.boardError && !state.boardError.isNoSlot && (
@@ -222,7 +233,7 @@ export function DraftRoomView({
               <DriftAlert drift={live.drift} categories={s.categories} />
             </Box>
           )}
-          <DraftBoardGrid session={s} pool={state.pool} onCellTap={setCell} onEditNames={() => setPanel('names')} teamMeta={teamMeta} />
+          <DraftBoardGrid session={s} pool={state.pool} onCellTap={setCell} onEditNames={() => setPanel('names')} teamMeta={teamMeta} onScroll={onScrollTop} />
 
           <Slide direction="down" in={showLatest} mountOnEnter unmountOnExit>
             <Box sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 4 }}>
@@ -244,7 +255,7 @@ export function DraftRoomView({
       )}
 
       {tab === 'league' && (
-        <Box component="main" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: SAFE_BOTTOM }}>
+        <Box component="main" onScroll={(e) => onScrollTop(e.currentTarget.scrollTop)} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: `calc(${SAFE_BOTTOM} + 16px)` }}>
           {live && live.drift.length > 0 && (
             <Box sx={{ px: 2, pt: 1 }}>
               <DriftAlert drift={live.drift} categories={s.categories} />
@@ -253,7 +264,12 @@ export function DraftRoomView({
           <Box sx={{ px: 2, pt: 1.5 }}>
             <StrengthTable strength={state.strength.data} error={state.strength.error} loading={state.boardLoading} />
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1.5 }}>
+        </Box>
+      )}
+
+      {tab === 'players' && (
+        <Box component="main" onScroll={(e) => onScrollTop(e.currentTarget.scrollTop)} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: SAFE_BOTTOM }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1.5, pb: 1.5 }}>
             <PositionalValuePanel positions={state.positional.data} error={state.positional.error} loading={state.boardLoading} note={state.positionalNote} />
             <SuggestedPicks
               recommendations={recs}
@@ -263,16 +279,19 @@ export function DraftRoomView({
               onDraft={(r: Recommendation) => void draftCurrent(r)}
             />
           </Box>
-          <Tabs
-            value={playersFilter}
-            onChange={(_, v: PlayersFilter) => setPlayersFilter(v)}
-            aria-label="Player lists"
-            sx={{ mt: 1.5, px: 1, minHeight: 40, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 40, fontWeight: 700 } }}
-          >
-            <Tab value="available" label="Available" />
-            <Tab value="favorites" label={favorites.size ? `Favorites · ${favorites.size}` : 'Favorites'} />
-          </Tabs>
           <AvailableList
+            stickyToolbar
+            toolbarLead={
+              <Tabs
+                value={playersFilter}
+                onChange={(_, v: PlayersFilter) => setPlayersFilter(v)}
+                aria-label="Player lists"
+                sx={{ px: 1, minHeight: 40, borderTop: 1, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 40, fontWeight: 700 } }}
+              >
+                <Tab value="available" label="Available" />
+                <Tab value="favorites" label={favorites.size ? `Favorites · ${favorites.size}` : 'Favorites'} />
+              </Tabs>
+            }
             players={state.players}
             teams={s.teams}
             currentPick={current}

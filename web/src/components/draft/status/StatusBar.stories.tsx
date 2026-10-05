@@ -16,3 +16,6 @@ export const OnTheClock: Story = { args: { session: onTheClockSession, decisionP
 export const WaitingForListener: Story = { args: { lastPickSeenAt: null } };
 export const ApiDown: Story = { args: { connection: 'down' } };
 export const Complete: Story = { args: { session: completeSession } };
+/** Scrolled down in the room: one slim row. */
+export const Collapsed: Story = { args: { compact: true } };
+export const CollapsedOnTheClock: Story = { args: { session: onTheClockSession, decisionPick: 5, compact: true } };

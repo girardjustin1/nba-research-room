@@ -43,12 +43,14 @@ export const OnTheClock: Story = { args: { state: mockRoomState(onTheClockSessio
 /** The live read after the newest pick slides in (tap it for that team). */
 export const LatestPick: Story = { args: { state: mockRoomState(midSession, midBoard), showLatestOnLoad: true } };
 export const PuntDrift: Story = { args: { state: mockRoomState(driftSession, driftBoard) } };
-/** Me vs league: my standing per category against the league, the market by position,
- * suggested picks, then the available players (ADP sort, PROJ. PICK divider at my next pick). */
+/** Me vs league: my standing per category against the league (its own tab). */
 export const MeVsLeague: Story = { args: { initialTab: 'league' } };
-export const MeVsLeagueOnTheClock: Story = { args: { state: mockRoomState(onTheClockSession, onTheClockBoard), initialTab: 'league' } };
 export const MeVsLeaguePunting: Story = { args: { state: mockRoomState(puntSession, puntBoard), initialTab: 'league' } };
-export const Favorites: Story = { args: { initialTab: 'league', initialPlayers: 'favorites' } };
+/** Players: the market by position and suggested picks, then the available players under a
+ * pinned toolbar (ADP sort, PROJ. PICK divider at my next pick). Scroll to collapse the header. */
+export const Players: Story = { args: { initialTab: 'players' } };
+export const PlayersOnTheClock: Story = { args: { state: mockRoomState(onTheClockSession, onTheClockBoard), initialTab: 'players' } };
+export const Favorites: Story = { args: { initialTab: 'players', initialPlayers: 'favorites' } };
 export const MyTeam: Story = { args: { state: mockRoomState(driftSession, driftBoard), initialPanel: 'myteam' } };
 /** Strategize: teams picking before my next pick come first. */
 export const Teams: Story = { args: { state: mockRoomState(midSession, midBoard), initialPanel: 'teams' } };

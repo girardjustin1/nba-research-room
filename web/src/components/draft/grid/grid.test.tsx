@@ -89,7 +89,8 @@ describe('AvailableList playoff sort', () => {
         onDraft={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Playoff games' }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Sort players' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Playoff games' }));
     const names = screen.getAllByRole('button', { name: /: details$/ }).map((b) => b.getAttribute('aria-label')!.replace(': details', ''));
     const games = names.map((n) => players.find((p) => p.name === n)!.playoff_games ?? -1);
     expect(games).toEqual([...games].sort((a, b) => b - a));
