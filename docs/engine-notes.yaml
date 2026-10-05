@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-04-calibration
+    date: 2026-10-04
+    kind: finding
+    title: Weekly win probabilities were too confident; fixed
+    body: >
+      Checked on all of 2025-26 out of sample, a 10-player team's weekly totals landed inside the
+      80% range only 66-81% of the time (points 66%), so category win chances were too sure of
+      themselves. Two fixes: projections now include uncertainty in minutes, and each category's
+      weekly spread is calibrated on earlier seasons. All nine categories now land at 78-81%.
+      The Models tab shows it as baseline_team_week.
+    refs: [DECISIONS.md, src/research_room/calibration.py]
+
   - id: 2026-10-04-readiness
     date: 2026-10-04
     kind: recommendation

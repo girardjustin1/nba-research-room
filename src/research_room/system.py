@@ -152,15 +152,20 @@ def models(con: duckdb.DuckDBPyConnection) -> dict:
     df = scoreboard.latest(con)
     out = []
     for r in df.itertuples():
-        out.append({"model": r.model, "stat": r.stat, "window_start": str(r.window_start),
-                    "window_end": str(r.window_end), "mae": float(r.mae), "rmse": float(r.rmse),
+        num = lambda v: None if v is None or pd.isna(v) else float(v)  # noqa: E731
+        day = lambda v: pd.Timestamp(v).date().isoformat()  # noqa: E731
+        out.append({"model": r.model, "stat": r.stat, "window_start": day(r.window_start),
+                    "window_end": day(r.window_end), "mae": num(r.mae), "rmse": num(r.rmse),
                     "coverage_80": float(r.coverage_80), "n": int(r.n),
                     "beats_baseline": None if pd.isna(r.beats_baseline) else bool(r.beats_baseline)})
     as_of = con.execute("SELECT max(run_at) FROM model_scores").fetchone()[0]
     return {"as_of": _iso(as_of), "models": out,
-            "note": ("Out of sample: each model is fit on earlier seasons and scored game by game on a "
-                     "later one. coverage_80 should be near 0.80. Only the baseline exists so far; new "
-                     "models must beat it before they drive recommendations.")}
+            "note": ("Out of sample: each model is fit on earlier seasons and scored on a later one. "
+                     "baseline_team_week is what drives win probabilities: a 10-player team's weekly "
+                     "total per category, where coverage_80 should be near 0.80. Per-game coverage of "
+                     "small whole-number stats (blocks, steals) reads high by nature and is not the "
+                     "target. Only the baseline exists so far; new models must beat it before they "
+                     "drive recommendations.")}
 
 
 def notes(path: Path | None = None) -> dict:

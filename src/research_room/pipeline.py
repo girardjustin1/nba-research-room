@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
-from research_room import features, lineup, overrides, schedule, scoreboard, store
+from research_room import calibration, features, lineup, overrides, schedule, scoreboard, store
 from research_room.config import Settings, settings
 from research_room.ingest import bdl, yahoo
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
@@ -125,6 +125,8 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         if len(seasons) > 1:                                   # needs an earlier season to fit on
             report["scoreboard"] = step("scoreboard", lambda: scoreboard.write_scores(
                 con, scoreboard.score_baseline(con, cfg)))
+            report["calibration"] = step("calibration", lambda: calibration.write(
+                con, calibration.run(con, cfg)))
         report["parquet"] = step("parquet", lambda: len(store.export_parquet(con)))
         report["timings_s"] = timings
         run["rows"] = int(report["projections"])

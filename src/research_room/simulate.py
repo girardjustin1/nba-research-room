@@ -18,6 +18,9 @@ Model:
   as independent, so P(win week) is a Poisson-binomial tail, computed exactly.
 - Monte Carlo mode draws the same normal totals (5,000 by default) and counts wins; it is the
   hook for Kalshi implied distributions in Phase 2. Ties count as losses (conservative).
+- `var_mult` (per category, from calibration.py) scales each category's variance so team-week
+  80% bands cover ~80% out of sample. Without it, games and players are treated as independent,
+  which proved overconfident for team weekly totals.
 
 The simulator never takes a point estimate alone: every input has a mean and an sd.
 """
@@ -99,7 +102,8 @@ def add(base: TeamWeek, extra: pd.DataFrame) -> TeamWeek:
     )
 
 
-def _edge(me: TeamWeek, opp: TeamWeek, cat: Category) -> tuple[np.ndarray, np.ndarray]:
+def _edge(me: TeamWeek, opp: TeamWeek, cat: Category,
+          var_mult: dict[str, float] | None = None) -> tuple[np.ndarray, np.ndarray]:
     """(mean difference, sd of difference) for one category, me minus opponent."""
     if cat.kind == "pct":
         k = cat.key
@@ -112,6 +116,8 @@ def _edge(me: TeamWeek, opp: TeamWeek, cat: Category) -> tuple[np.ndarray, np.nd
         var = me.var[cat.key] + opp.var[cat.key]
     if not cat.higher_is_better:
         diff = -diff
+    if var_mult:
+        var = var * var_mult.get(cat.key, 1.0)
     return np.asarray(diff, dtype=float), np.sqrt(np.asarray(var, dtype=float))
 
 
@@ -133,11 +139,12 @@ def poisson_binomial_at_least(p: np.ndarray, k: int) -> np.ndarray:
     return dist[k:].sum(axis=0)
 
 
-def analytic(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None) -> Matchup:
+def analytic(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None,
+             var_mult: dict[str, float] | None = None) -> Matchup:
     cfg = cfg or settings()
     p_cat = {}
     for cat in cfg.categories:
-        diff, sd = _edge(me, opp, cat)
+        diff, sd = _edge(me, opp, cat, var_mult)
         p_cat[cat.key] = np.where(sd > 0, norm.cdf(diff / np.where(sd > 0, sd, 1.0)), (diff > 0) * 1.0)
     stacked = np.vstack([np.atleast_1d(v) for v in p_cat.values()])
     need = cats_to_win(cfg)
@@ -145,13 +152,13 @@ def analytic(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None) -> Matchu
 
 
 def monte_carlo(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None, n: int = 5000,
-                seed: int | None = 0) -> Matchup:
+                seed: int | None = 0, var_mult: dict[str, float] | None = None) -> Matchup:
     """Same model by simulation. Batch-aware: every array entry gets its own n draws."""
     cfg = cfg or settings()
     rng = np.random.default_rng(seed)
     wins = []
     for cat in cfg.categories:
-        diff, sd = _edge(me, opp, cat)
+        diff, sd = _edge(me, opp, cat, var_mult)
         diff, sd = np.atleast_1d(diff), np.atleast_1d(sd)
         draws = diff[None, :] + sd[None, :] * rng.standard_normal((n, diff.size))
         wins.append(draws > 0)

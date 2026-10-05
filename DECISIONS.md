@@ -238,3 +238,25 @@ still compare fairly. The ▲/▼ cut-off (1 point, 0.05 categories) is display 
   so extra plans get small separate charts); in add/drop strips a dropped player's games before the
   move still count for the week (as in Yahoo) and show gray; invented readable names in fixtures;
   dashed gridlines kept on the win-probability chart; inside the app shell the shell's nav is used.
+
+## Phase 2 — started 2026-10-04: calibration of weekly win probabilities
+
+Measured out of sample (fit on 2023-24 and 2024-25, scored on 2025-26). Random 10-player teams
+are drawn from the top 180 players by projected points, one Monday–Sunday week at a time.
+- **The simulator was overconfident about team weekly totals.** Only 66–81% of real team weeks fell
+  inside the 80% band (PTS 66%, REB 69%, AST 72%), so P(win category) was too sure. The game-level
+  scoreboard hid this: its "too wide" readings for blocks and steals come from small whole numbers.
+  Weekly totals are what decide a matchup.
+- Cause 1: the per-game spread was fitted against actual minutes, which left out minutes
+  uncertainty. The baseline now fits it against projected minutes (phi PTS 2.35 → 3.39). Team-week
+  coverage alone rose about 5 points.
+- Cause 2: games and players aren't independent within a week. `calibration.py` fits one variance
+  multiplier per category on the training seasons (PTS 1.25, REB 1.26, AST 1.23, TO 1.15, FT% 1.19;
+  FG%, STL and BLK about 1.0–1.06). It's stored in `sim_calibration` and passed to the simulator
+  as `var_mult`. Calibrated team-week coverage on 2025-26 is 78–81% in all nine categories,
+  reported as `baseline_team_week` on the Models screen. The nightly job refits it (about 13 s).
+- The draft board doesn't use these multipliers: its spreads come from Basketball Monster's
+  preseason projections, a different model.
+- Still open: team-level REB runs slightly over-projected (z bias −0.22), a target for the Phase 3
+  models. 908 player-weeks in 2025-26 came from players the baseline gave no chance of playing
+  (returning from injury). In season, overrides set that chance.

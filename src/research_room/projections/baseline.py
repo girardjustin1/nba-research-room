@@ -7,7 +7,8 @@ Outputs: long rows [player_id, game_id, date, stat, mean, sd, p_play, minutes_me
 Tables: reads game_logs/games/advanced_stats (via features), players, games; writes projections.
 
 Per game, for stat s with per-minute EWMA rate r_s and minutes-when-playing m:
-  if played:  mean_s = r_s x m, variance = phi_s x mean_s   (over-dispersed counts; phi fitted)
+  if played:  mean_s = r_s x m, variance = phi_s x mean_s   (over-dispersed counts; phi fitted
+              against projected minutes, so it includes minutes uncertainty)
   P(plays) = p (play-rate EWMA, or an override)
   unconditional mean = p x mean_s; variance = p (phi_s mean_s + mean_s^2) - (p mean_s)^2
 Early season, the in-season line is shrunk toward the preseason projection with weight
@@ -41,14 +42,16 @@ class BaselineModel:
         self.phi: dict[str, float] = {}
 
     def fit(self, train: pd.DataFrame) -> BaselineModel:
-        """phi_s = sum((y - pred)^2) / sum(pred) over played games with a prediction (given the
-        actual minutes, so phi measures per-minute noise, not minutes error)."""
+        """phi_s = sum((y - pred)^2) / sum(pred) over played games with a prediction, where pred
+        uses the projected minutes (not the actual ones): the spread then includes minutes
+        uncertainty, which the per-minute-only fit left out (weekly bands came out too narrow;
+        DECISIONS.md, calibration)."""
         played = train[train["y_did_play"].astype(bool) & train["min_played_ewma"].notna()]
         for s in (*STATS, "minutes"):
             if s == "minutes":
                 pred, y = played["min_played_ewma"], played["y_minutes"]
             else:
-                pred, y = played[f"{s}_pm_ewma"] * played["y_minutes"], played[f"y_{s}"]
+                pred, y = played[f"{s}_pm_ewma"] * played["min_played_ewma"], played[f"y_{s}"]
             ok = pred.notna() & (pred > 0)
             self.phi[s] = float(((y[ok] - pred[ok]) ** 2).sum() / pred[ok].sum()) if ok.any() else 1.0
         return self

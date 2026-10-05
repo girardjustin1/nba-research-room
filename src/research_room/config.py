@@ -196,6 +196,15 @@ class BaselineConfig(BaseModel):
     min_play_prob: float
 
 
+class SimulationConfig(BaseModel):
+    calibration_teams: int
+    team_size: int
+    team_pool: int
+    multiplier_bounds: tuple[float, float]
+    min_players_per_week: int
+    seed: int
+
+
 class SystemConfig(BaseModel):
     freshness_hours: dict[str, float]
     failed_job_lookback_days: int
@@ -218,6 +227,7 @@ class Settings(BaseModel):
     paths: Paths
     bdl: BdlConfig
     x_feed: XFeedConfig
+    simulation: SimulationConfig
     system: SystemConfig
 
     @model_validator(mode="after")
