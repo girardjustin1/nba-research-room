@@ -157,3 +157,17 @@ def test_budget_is_hard_and_no_games_means_no_reads(seeded):
         seeded, cfg, client=FakeX(_posts()), parser=FakeParser(), now=datetime(2026, 11, 6, 21, tzinfo=UTC)
     )
     assert off == {"status": "skipped", "reason": "no games today"}
+
+
+class TimeFrameParser(FakeParser):
+    def parse(self, posts):
+        self.seen += posts
+        return [{"post_id": posts[0]["id"], "player": "Invented Wing", "team": "BOS", "status": "Out",
+                 "out_days_min": 14, "out_days_max": "21", "confidence": 0.9}]
+
+
+def test_a_stated_time_frame_is_stored_in_days(seeded):
+    x_feed.poll(seeded, settings(), client=FakeX(_posts()), parser=TimeFrameParser(), now=NOW)
+    ev = seeded.execute("SELECT status, out_days_min, out_days_max FROM status_events").fetchall()
+    assert ev == [("Out", 14.0, 21.0)]
+    assert x_feed._days("soon") is None and x_feed._days(0) is None

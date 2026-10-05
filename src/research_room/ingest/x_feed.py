@@ -2,7 +2,8 @@
 
 Inputs: config/x_accounts.yaml (verified handles, team, tier), today's games, X API v2 recent search
 (X_BEARER_TOKEN), a small Anthropic model (LLM_API_KEY), settings.x_feed.
-Outputs: status_events rows {player, team, status, minutes_cap, starting, confidence, account,
+Outputs: status_events rows {player, team, status, minutes_cap, starting, out_days_min/max (a stated
+time frame, in days from the post), confidence, account,
 authority_rank, ts}; x_feed_log (posts read per query, for the daily budget and to read only newer
 posts next time). Tables: writes status_events, x_feed_log, player_xref, unresolved_names; reads
 games, teams, players.
@@ -39,7 +40,7 @@ from research_room.ingest.names import load_team_aliases, resolve_and_record
 
 SOURCE = "x"
 RANK = {"official": 1, "insider": 2, "beat": 3, "aggregator": 4}
-STATUSES = ["Out", "Doubtful", "Questionable", "Day-To-Day", "Probable", "Available"]
+STATUSES = ["Out For Season", "Out", "Doubtful", "Questionable", "Day-To-Day", "Probable", "Available"]
 NEWS = re.compile(
     r"\b(out|questionable|probable|doubtful|available|starting|start|starts|lineup|minutes|"
     r"injur\w*|sidelined|sprain\w*|strain\w*|soreness|illness|rest\w*|return\w*|ruled|"
@@ -66,6 +67,17 @@ TOOL = {
                         "status": {"type": "string", "enum": STATUSES},
                         "minutes_cap": {"type": ["number", "null"]},
                         "starting": {"type": ["boolean", "null"]},
+                        "out_days_min": {
+                            "type": ["number", "null"],
+                            "description": "When the post says how long he'll be out: the fewest days "
+                            "from the post ('2-3 weeks' -> 14, 'at least a week' -> 7, 're-evaluated "
+                            "in two weeks' -> 14). Null when no time frame is stated.",
+                        },
+                        "out_days_max": {
+                            "type": ["number", "null"],
+                            "description": "The most days from the post ('2-3 weeks' -> 21). Null when "
+                            "only a minimum or no time frame is stated.",
+                        },
                         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     },
                     "required": ["post_id", "player", "status", "confidence"],
@@ -78,7 +90,8 @@ TOOL = {
 SYSTEM = (
     "You extract NBA player availability from posts by team accounts and reporters. Record only "
     "statuses the post states as fact for the player's next game (ruled out, questionable, "
-    "available, starting, a minutes limit). Ignore rumors, opinions, trades, stats and highlights. "
+    "available, starting, a minutes limit). When the post gives a time frame for an absence, record it "
+    "in days; never infer one that isn't stated. Ignore rumors, opinions, trades, stats and highlights. "
     "One event per player per post. If a post states nothing usable, record nothing for it."
 )
 
@@ -116,6 +129,15 @@ class LlmParser:
                 if getattr(block, "type", None) == "tool_use":
                     out += list((block.input or {}).get("events", []))
         return out
+
+
+def _days(v) -> float | None:
+    """A stated time frame in days, or None (not a positive number)."""
+    try:
+        d = float(v)
+    except (TypeError, ValueError):
+        return None
+    return d if d > 0 else None
 
 
 def load_accounts(path=None) -> pd.DataFrame:
@@ -255,6 +277,8 @@ def poll(
                 "status": e["status"],
                 "minutes_cap": e.get("minutes_cap"),
                 "starting": e.get("starting"),
+                "out_days_min": _days(e.get("out_days_min")),
+                "out_days_max": _days(e.get("out_days_max")),
                 "confidence": float(e.get("confidence") or 0),
                 "account": post["handle"],
                 "authority_rank": RANK.get(handle_tier.get(post["handle"].lower(), "aggregator"), 4),
@@ -297,6 +321,8 @@ def poll(
                         "status",
                         "minutes_cap",
                         "starting",
+                        "out_days_min",
+                        "out_days_max",
                         "confidence",
                         "account",
                         "authority_rank",

@@ -12,6 +12,19 @@ from research_room.projections import explain
 from tests.test_week_probability import NOW, _free_agents, _seed
 
 
+def test_teammates_out_is_its_own_step_and_it_still_adds_up():
+    avg = {"pts": 20.0, "minutes": 30.0}
+    # stored: 34 min when playing (x1.10 from teammates out), points mean 24 (x1.20 from it)
+    wf = explain.waterfall("pts", avg, 0.9, 34.0, 24.0, 24.0, False, 1.10, 1.20, ["A One", "B Two"])
+    steps = {d["feature"]: d for d in wf["drivers"]}
+    assert sum(d["contribution"] for d in wf["drivers"]) + wf["base_value"] == pytest.approx(24.0)
+    assert steps["teammates"]["contribution"] == pytest.approx(24.0 - 24.0 / 1.2)
+    assert steps["minutes"]["value_label"].startswith(f"{34.0 / 1.1:.1f}")      # his own minutes
+    assert "out: A One, B Two" in steps["teammates"]["value_label"]
+    plain = explain.waterfall("pts", avg, 0.9, 34.0, 24.0, 24.0, False)
+    assert "teammates" not in {d["feature"] for d in plain["drivers"]}
+
+
 def test_waterfall_adds_up_exactly():
     avg = {"pts": 30.0, "minutes": 35.0}
     wf = explain.waterfall(

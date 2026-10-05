@@ -204,6 +204,7 @@ class OverridesConfig(BaseModel):
     no_return_date_days: dict[str, int]
     authority: list[str]
     unlisted: UnlistedConfig = Field(default_factory=UnlistedConfig)
+    max_carry_days: int = 60          # a stated absence is carried at most this many days
 
 
 class NbaReportConfig(BaseModel):

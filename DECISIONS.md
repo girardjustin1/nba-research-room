@@ -644,3 +644,23 @@ pre-game and nightly runs.
   version changed the result instead of a win rate. Game-day news pays off in the odds and in
   adds and drops, which this replay leaves out (rosters as drafted). A news-aware replay of the
   optimizer's streaming adds is the open test.
+
+**Multi-day news, and teammates out in "Why this number" (2026-10-05).**
+- The X reader now records a stated time frame, in days from the post ("2-3 weeks" → 14 and 21,
+  "re-evaluated in two weeks" → 14), and never infers one; "Out For Season" is a status. Live
+  check on three invented posts: 14–21, none for "out tonight", 14–14 for "re-evaluated in two
+  weeks".
+- Overrides carry it: P(plays) 0 through the fewest days, then rising in equal steps through the
+  most days, then the model's own rate; at most `overrides.max_carry_days` (60). Out For Season
+  runs to the end of the window.
+- Which news wins on a date: same-day news first. Rows carried from an earlier day (an X
+  time frame on later days, BallDontLie's daily list) yield to any same-day row (an X post that
+  day, the NBA report, a manual entry), then authority, then recency. Newer same-day news that
+  says he's likely to play (not listed on a filed report, or P(plays) ≥ 0.5) ends an older
+  carried absence from that date on; a newer "out" keeps it. One existing test changed with this:
+  a team's "probable" on Oct 21 now ends BallDontLie's Oct 19 "out until Oct 30" instead of
+  letting it resume the next day.
+- Every projection now stores the factor teammates out applied to it (`projections.teammates`),
+  and "Why this number" shows it as its own step ("+2.9 min, +8% per minute; out: …", naming
+  teammates the overrides rule out that day). His own minutes and rate steps exclude it, and the
+  steps still add up exactly (tested).

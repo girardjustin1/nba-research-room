@@ -3,7 +3,8 @@ must beat this out of sample before it drives recommendations.
 
 Inputs: the feature table (features.py), the preseason pool (ingest.external_proj) as a prior,
 optional play probability / minutes caps (overrides.py), settings.baseline.
-Outputs: long rows [player_id, game_id, date, stat, mean, sd, p_play, minutes_mean, source].
+Outputs: long rows [player_id, game_id, date, stat, mean, sd, p_play, minutes_mean, source,
+teammates] (teammates: the factor teammates out applied to that number, 1 when none).
 Tables: reads game_logs/games/advanced_stats (via features), players, games; writes projections.
 
 Per game, for stat s with per-minute EWMA rate r_s and minutes-when-playing m:
@@ -186,6 +187,7 @@ class BaselineModel:
         base = df.loc[usable, ["player_id", "game_id", "date"]].reset_index(drop=True)
         pu, mu_min = p[usable].to_numpy(float), m[usable]
         for s in (*STATS, "minutes"):
+            tm = tm_scale[usable] * (rate_f[s][usable] if s in rate_f else 1.0)   # teammates out's share
             if s == "minutes":
                 cond = mu_min
             else:
@@ -199,7 +201,7 @@ class BaselineModel:
             mean = pu * cond
             var = pu * (phi * cond + cond ** 2) - mean ** 2
             rows.append(base.assign(stat=s, mean=mean, sd=np.sqrt(np.clip(var, 0, None)), p_play=pu,
-                                    minutes_mean=pu * mu_min, source=source[usable]))
+                                    minutes_mean=pu * mu_min, source=source[usable], teammates=tm))
         return pd.concat(rows, ignore_index=True)
 
 
@@ -281,8 +283,9 @@ def write_projections(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, model_
                       run_at: datetime | None = None) -> int:
     """Store mean and sd (never a point estimate alone) in `projections`, with the pieces behind
     them when present (P(plays), expected minutes, the model's mean before the market overlay,
-    whether the market set it) so explain.py can show where each number came from."""
+    whether the market set it, the teammates-out factor) so explain.py can show where each number
+    came from."""
     cols = ["player_id", "date", "stat", "mean", "sd",
-            *[c for c in ("p_play", "minutes_mean", "model_mean", "market") if c in proj]]
+            *[c for c in ("p_play", "minutes_mean", "model_mean", "market", "teammates") if c in proj]]
     rows = proj[cols].assign(model=model_name, run_at=run_at or store.utcnow())
     return store.upsert(con, "projections", rows)

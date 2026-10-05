@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-multi-day-news
+    date: 2026-10-05
+    kind: update
+    title: "\"Out 2-3 weeks\" now lasts 2-3 weeks"
+    body: >
+      When a post gives a time frame, the player stays out for the shortest stated time and then
+      eases back over the rest, so the week view and the add/drop plan see it. Newer news that
+      says he's playing ends it early. "Why this number" also shows teammates out as its own step,
+      naming who is out.
+    refs: [DECISIONS.md, src/research_room/overrides.py, src/research_room/projections/explain.py]
+
   - id: 2026-10-05-news-backtest
     date: 2026-10-05
     kind: finding

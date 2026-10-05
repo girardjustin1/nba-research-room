@@ -118,23 +118,42 @@ def waterfall(
     model_mean: float,
     final_mean: float,
     market: bool,
+    tm_minutes: float = 1.0,
+    tm_stat: float = 1.0,
+    out_names: list[str] | None = None,
 ) -> dict | None:
-    """drivers detail: exact step contributions from his average to the stored projection."""
+    """drivers detail: exact step contributions from his average to the stored projection.
+    `tm_minutes` / `tm_stat`: the factors teammates out applied to his minutes and to this stat
+    (stored with the projection); they become their own step."""
     a, a_min = avg.get(stat), avg.get("minutes")
     if not a or not a_min:
         return None
+    tm_minutes = tm_minutes if tm_minutes and tm_minutes > 0 else 1.0
+    tm_stat = tm_stat if tm_stat and tm_stat > 0 else 1.0
+    own_min = minutes_cond / tm_minutes                     # his minutes without teammates out
+    before_tm = model_mean / tm_stat
     after_avail = a * p_play
-    after_min = after_avail * (minutes_cond / a_min) if a_min else after_avail
+    after_min = after_avail * (own_min / a_min) if a_min else after_avail
     steps = [
         ("availability", "Chance of playing", f"{p_play:.0%}", after_avail - a),
-        ("minutes", "Minutes when playing", f"{minutes_cond:.1f} (avg {a_min:.1f})", after_min - after_avail),
+        ("minutes", "Minutes when playing", f"{own_min:.1f} (avg {a_min:.1f})", after_min - after_avail),
         (
             "rate",
             f"{LABEL[stat].capitalize()} per minute",
-            f"{(model_mean / max(p_play * minutes_cond, 1e-9)):.3f} (avg {a / a_min:.3f})",
-            model_mean - after_min,
+            f"{(before_tm / max(p_play * own_min, 1e-9)):.3f} (avg {a / a_min:.3f})",
+            before_tm - after_min,
         ),
     ]
+    if abs(tm_stat - 1.0) > 1e-6 or abs(tm_minutes - 1.0) > 1e-6:
+        who = f"; out: {', '.join(out_names)}" if out_names else ""
+        steps.append(
+            (
+                "teammates",
+                "Teammates out",
+                f"{minutes_cond - own_min:+.1f} min, {tm_stat / tm_minutes - 1:+.0%} per minute{who}",
+                model_mean - before_tm,
+            )
+        )
     if market:
         steps.append(
             (
@@ -153,6 +172,21 @@ def waterfall(
             {"feature": f, "label": lab, "value_label": v, "contribution": float(c)} for f, lab, v, c in steps
         ],
     }
+
+
+def teammates_out(con: duckdb.DuckDBPyConnection, ov: pd.DataFrame, player_id: int, day) -> list[str]:
+    """Teammates the overrides rule out (or nearly) on `day`, for the teammates step's label."""
+    if ov.empty:
+        return []
+    team = con.execute("SELECT team_id FROM players WHERE player_id = ?", [player_id]).fetchone()
+    if not team or team[0] is None:
+        return []
+    mates = con.execute("SELECT player_id, full_name FROM players WHERE team_id = ? AND player_id <> ?",
+                        [team[0], player_id]).df()
+    o = ov[(pd.to_datetime(ov["date"]).dt.date == day) & ov["player_id"].isin(mates["player_id"])]
+    o = o[pd.to_numeric(o["play_prob"], errors="coerce") <= 0.25]
+    names = dict(zip(mates["player_id"], mates["full_name"], strict=True))
+    return sorted(names[int(p)] for p in o["player_id"].unique())[:3]
 
 
 def player_analysis(
@@ -175,7 +209,7 @@ def player_analysis(
     if run is None:
         raise NotReady("No projections yet: run `make nightly`.")
     proj = con.execute(
-        """SELECT date, stat, mean, sd, p_play, minutes_mean, model_mean, market FROM projections
+        """SELECT date, stat, mean, sd, p_play, minutes_mean, model_mean, market, teammates FROM projections
                           WHERE model = 'baseline' AND run_at = ? AND player_id = ? AND date >= ?
                           ORDER BY date""",
         [run, player_id, now.tz_convert(ET).date()],
@@ -316,9 +350,9 @@ def player_analysis(
 
     # ---- news (overrides: X posts, the NBA injury report and BallDontLie's list)
     start = now.tz_convert(ET).date()
-    ov = overrides.resolve(con, start, start + timedelta(days=7), as_of=now.to_pydatetime(), cfg=cfg)
-    ov = ov[(ov["player_id"] == player_id) & (ov["status"] != overrides.NOT_LISTED)].sort_values(
-        "ts", ascending=False)
+    ov_all = overrides.resolve(con, start, start + timedelta(days=7), as_of=now.to_pydatetime(), cfg=cfg)
+    ov = ov_all[(ov_all["player_id"] == player_id) & (ov_all["status"] != overrides.NOT_LISTED)]
+    ov = ov.sort_values("ts", ascending=False)
     tier = {"official": "official", "insider": "insider", "beat": "beat", "aggregator": "aggregator"}
     events = []
     for r in ov.drop_duplicates(["source", "status"]).head(5).itertuples(index=False):
@@ -332,7 +366,11 @@ def player_analysis(
             "x" if str(r.source).startswith("X @")
             else {"manual": "manual", "nba_report": "nba_report"}.get(r.authority, "bdl")
         )
-        summary = f"{r.status}" + (f", minutes limit {r.minutes_cap:.0f}" if pd.notna(r.minutes_cap) else "")
+        summary = (
+            f"{r.status}"
+            + (f" ({r.note})" if kind == "x" and r.note else "")              # a stated time frame
+            + (f", minutes limit {r.minutes_cap:.0f}" if pd.notna(r.minutes_cap) else "")
+        )
         events.append(
             {
                 "at": pd.Timestamp(r.ts).isoformat(),
@@ -449,6 +487,10 @@ def player_analysis(
 
     # ---- drivers: the exact waterfall for points
     if pts is not None and p_play and m_cond:
+        def tm(row) -> float:
+            v = row.get("teammates") if row is not None else None
+            return float(v) if v is not None and pd.notna(v) else 1.0
+
         wf = waterfall(
             "pts",
             avg,
@@ -457,6 +499,9 @@ def player_analysis(
             float(pts["model_mean"]) if pd.notna(pts.get("model_mean")) else float(pts["mean"]),
             float(pts["mean"]),
             bool(pts.get("market") or False),
+            tm(m_row),
+            tm(pts),
+            teammates_out(con, ov_all, player_id, first),
         )
         if wf:
             biggest = max(wf["drivers"], key=lambda d: abs(d["contribution"]))

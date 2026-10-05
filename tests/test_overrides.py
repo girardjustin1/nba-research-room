@@ -63,7 +63,7 @@ def test_manual_beats_x_beats_bdl_and_recency_breaks_ties(con, tmp_path):
     official = ov[(1, date(2026, 10, 21))]
     probable = settings().overrides.status_play_prob["Probable"]
     assert (official.authority, official.play_prob, official.minutes_cap) == ("official", probable, 24.0)
-    assert ov[(1, date(2026, 10, 22))].authority == "bdl"           # the X event only covers its game day
+    assert (1, date(2026, 10, 22)) not in ov       # the team's newer "probable" ends BallDontLie's older out
     assert ov[(1, date(2026, 10, 24))].authority == "manual"
     assert ov[(2, date(2026, 10, 21))].status == "Out"              # later report from the same tier wins
 
@@ -104,3 +104,42 @@ def test_injury_news_time_is_when_the_status_first_appeared(con):
     ts = {r.player_id: pd.Timestamp(r.ts) for r in rows.itertuples()}
     assert ts[1] == pd.Timestamp(t[3])          # Questionable again since the 4th snapshot
     assert ts[2] == pd.Timestamp(t[0])          # Out in every snapshot: since the first
+
+
+def _xevent(eid, pid, status, lo, hi, day, hour=20, rank=2):
+    return {"event_id": eid, "player_id": pid, "status": status, "minutes_cap": None,
+            "account": "insider", "authority_rank": rank,
+            "ts": datetime(2026, 10, day, hour, 0, tzinfo=UTC), "source": "x",
+            "fetched_at": SNAP, "out_days_min": lo, "out_days_max": hi}
+
+
+def test_a_stated_absence_carries_then_ramps_back(con, tmp_path):
+    players(con)
+    empty = tmp_path / "o.yaml"
+    empty.write_text("overrides: []\n")
+    store.upsert(con, "status_events", pd.DataFrame([_xevent("e1", 1, "Out", 14, 21, 20)]))
+    ov = by(overrides.resolve(con, date(2026, 10, 20), date(2026, 11, 20),
+                              as_of=datetime(2026, 10, 21, tzinfo=UTC), manual_path=empty))
+    assert ov[(1, date(2026, 10, 20))].play_prob == 0.0 and not ov[(1, date(2026, 10, 20))].carried
+    assert ov[(1, date(2026, 11, 2))].play_prob == 0.0 and ov[(1, date(2026, 11, 2))].carried   # day 13
+    ramp = [ov[(1, date(2026, 11, 3) + pd.Timedelta(days=k).to_pytimedelta())].play_prob for k in range(8)]
+    assert ramp == sorted(ramp) and 0 < ramp[0] < ramp[-1] < 1                                  # days 14-21
+    assert (1, date(2026, 11, 11)) not in ov                                    # back to the model
+    assert ov[(1, date(2026, 10, 25))].note == "out 14-21 days"
+
+
+def test_newer_news_beats_and_ends_a_carried_absence(con, tmp_path):
+    players(con)
+    empty = tmp_path / "o.yaml"
+    empty.write_text("overrides: []\n")
+    store.upsert(con, "status_events", pd.DataFrame([
+        _xevent("e1", 1, "Out", 14, 21, 20),
+        _xevent("e2", 1, "Probable", None, None, 25, rank=3),        # a beat writer, five days later
+    ]))
+    injuries(con, [{"player_id": 1, "status": "Day-To-Day", "return_date": None, "description": "x"}],
+             fetched_at=datetime(2026, 10, 22, 16, 0, tzinfo=UTC))
+    ov = by(overrides.resolve(con, date(2026, 10, 22), date(2026, 10, 26),
+                              as_of=datetime(2026, 10, 26, tzinfo=UTC), manual_path=empty))
+    assert ov[(1, date(2026, 10, 22))].status == "Out"           # carried insider beats BallDontLie
+    assert ov[(1, date(2026, 10, 25))].status == "Probable"      # same-day post beats the forecast
+    assert (1, date(2026, 10, 26)) not in ov                     # newer good news ends the forecast
