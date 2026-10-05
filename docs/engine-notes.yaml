@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-props-test
+    date: 2026-10-05
+    kind: finding
+    title: Betting markets beat our projections on game day
+    body: >
+      Pulled last season's pre-game Kalshi prices for 1,265 player prop lines across 24 games and
+      scored them against our projections on the same yes/no questions (did he score 25+?). The
+      market was clearly more accurate on points, rebounds and assists (about even on threes), and
+      its probabilities were honest, while ours were too timid at the top. The likely reason: the
+      market knows tonight's injury and lineup news. Next: use the market's number for any game
+      where a liquid prop exists, keeping our projection for the rest.
+    refs: [DECISIONS.md, src/research_room/ingest/kalshi.py]
+
   - id: 2026-10-05-context
     date: 2026-10-05
     kind: finding

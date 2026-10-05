@@ -440,3 +440,25 @@ rest).
   candlesticks of past prop markets (`/historical/markets/{ticker}/candlesticks`), so last
   season's pre-tip ladders can be backfilled to test whether props beat the baseline before this
   season's archive builds up.
+
+**Do betting markets beat the baseline? Yes, clearly, where a liquid prop exists (2026-10-05).**
+Last season's pre-tip Kalshi prices were backfilled for 40 randomly sampled regular-season games:
+points, rebounds, assists and threes; 2,448 rungs. Each rung's price is the last hourly
+candlestick before tip, from `/historical/markets/{ticker}/candlesticks`, kept only when liquid
+(the live rule: both quotes, spread ≤ 10¢). Each rung is a yes/no question ("did he score 25+?"):
+the market's mid against the baseline's P(plays) × P(stat > line | plays), from its pre-game mean
+and over-dispersed spread, fitted on 2023-24 and 2024-25.
+- 1,265 rungs scored (24 games: 68% of rungs liquid pre-tip, 68% of Kalshi names matched).
+- Brier: market 0.164, baseline 0.179, 50/50 blend 0.169. Log loss: 0.498, 0.538, 0.511. Market
+  minus baseline, 80% range over games by bootstrap: −0.021 to −0.010.
+- By stat (Brier, market vs baseline): points 0.169 vs 0.197, rebounds 0.157 vs 0.170, assists
+  0.175 vs 0.190, threes 0.155 vs 0.153 (even).
+- Calibration: the market is close to honest (80% priced → 83% happened). The baseline is too
+  timid at the top (69% where 83% happened), consistent with it not seeing same-day injury and
+  lineup news.
+- Decision: where a liquid ladder exists for a player-game, the market should lead that game's
+  projection; the blend is worse than the market alone. Props post mostly on game day, so this
+  sharpens today's lineup and the current matchup day, not the rest of the week. To do before
+  relying on it: work out why only 68% of Kalshi names matched (TheRundown matched 100%), then
+  build market-informed projections and judge them on the same test.
+- The scripts were scratch research; the method is above.
