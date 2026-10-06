@@ -108,8 +108,15 @@ def seeded(con):
                 proj(before, 2, "minutes", 12.0, 10.0, 0.5),
                 proj(after, 1, "pts", 30.0, 5.0, 1.0, 30.0),
                 proj(after, 1, "minutes", 40.0, 6.0, 1.0),  # after tip
+                proj(before, 3, "pts", 9.0, 4.0, 0.8),  # projected, but no box-score row
+                proj(before, 3, "minutes", 20.0, 6.0, 0.8),
             ]
         ),
+    )
+    store.upsert(
+        con,
+        "players",
+        pd.DataFrame([{"player_id": i, "full_name": f"P{i}", "team_id": 1, **META} for i in (1, 2, 3)]),
     )
     return con
 
@@ -124,8 +131,32 @@ def test_grades_the_last_pre_tip_run_by_segment(seeded):
     assert s.loc[("pts", "played"), "bias"] == pytest.approx(18 / 0.9 - 20)
     assert s.loc[("pts", "market"), "mae"] == pytest.approx(2.0)
     assert s.loc[("pts", "market_model"), "mae"] == pytest.approx(4.0)
-    assert s.loc[("p_play", "brier"), "rmse"] == pytest.approx(((0.9 - 1) ** 2 + 0.5**2) / 2)
+    assert s.loc[("p_play", "brier"), "rmse"] ** 2 == pytest.approx(((0.9 - 1) ** 2 + 0.5**2) / 2)
+    assert s.loc[("_coverage", "no_box_score"), "n"] == 1  # player 3: counted, not dropped (F16)
     assert live_scores.update(seeded, cfg, through=DAY)["status"] == "ok"  # idempotent
+
+
+def test_pooled_brier_is_the_weighted_mean(con):
+    """Audit F13: two equal days with Brier 0.1 and 0.4 pool to 0.25."""
+    import numpy as np
+
+    rows = [
+        {
+            "day": date(2026, 11, d),
+            "stat": "p_play",
+            "segment": "brier",
+            "n": 10,
+            "mae": 0.0,
+            "rmse": float(np.sqrt(b)),
+            "bias": 0.0,
+            "coverage_80": None,
+            "graded_at": pd.Timestamp.now(tz="UTC"),
+        }
+        for d, b in ((4, 0.1), (5, 0.4))
+    ]
+    store.upsert(con, "live_scores", pd.DataFrame(rows))
+    recs = live_scores.summary(con, settings(), since=date(2026, 11, 1))["projections"]
+    assert next(r for r in recs if r["segment"] == "brier")["brier"] == pytest.approx(0.25)
 
 
 def test_news_and_weekly_odds(seeded):

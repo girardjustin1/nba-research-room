@@ -183,6 +183,7 @@ simulation:                    # team-week variance calibration (research_room/c
   calibration_teams: 6000      # random teams sampled per season to fit / score the multipliers
   team_size: 10                # players per sampled team (one active lineup)
   team_pool: 180               # sampled from the top N players by projected points that week
+  game_final_hours: 3          # a day's Yahoo totals are complete this long after its last tip
   multiplier_bounds: [0.5, 3.0]   # a fitted multiplier outside this is clipped (and flagged)
   min_players_per_week: 200    # skip weeks with fewer projected players (season edges)
   week_draws: 1000             # correlated category draws per P(win week) (shared across the path)

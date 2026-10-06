@@ -145,3 +145,20 @@ def test_a_reader_on_an_older_store_sees_no_report(tmp_path):
     r = store.connect(path, read_only=True)
     assert overrides.from_nba_report(r, DAY, DAY, NOW, settings()).empty
     r.close()
+
+
+def test_a_filed_report_without_him_breaks_the_news_run(seeded, monkeypatch):
+    """Audit F10: Questionable at 5 PM, missing from a filed 5:30 report, Questionable again at
+    6 PM: the news time is 6 PM, not 5 PM."""
+    cfg = settings()
+    gone = TEXT.replace("05:00 PM", "05:30 PM").replace(
+        "Guard Jr., Invented Questionable Injury/Illness - Left\nAnkle; Sprain\n", "")
+    back = TEXT.replace("05:00 PM", "06:00 PM")
+    for text, when, utc_hour, minute in ((TEXT, "05_00PM", 22, 0), (gone, "05_30PM", 22, 30),
+                                         (back, "06_00PM", 23, 0)):
+        monkeypatch.setattr(nr, "pdf_text", lambda content, t=text: t)
+        nr.sync(seeded, cfg, FakeClient({f"Injury-Report_2026-11-04_{when}.pdf": b"%PDF"}),
+                now=datetime(2026, 11, 4, utc_hour, minute + 5, tzinfo=UTC))
+    later = datetime(2026, 11, 5, tzinfo=UTC)
+    rows = overrides.from_nba_report(seeded, DAY, DAY, later, cfg).set_index("player_id")
+    assert pd.Timestamp(rows.at[501, "ts"]) == pd.Timestamp("2026-11-04 23:00", tz="UTC")

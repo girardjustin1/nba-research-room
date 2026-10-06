@@ -36,25 +36,33 @@ Z80 = 1.2815515655446004
 
 
 def graded_rows(con: duckdb.DuckDBPyConnection, start: date, end: date) -> pd.DataFrame:
-    """Per player-game-stat in [start, end]: the last pre-tip projection and the real line."""
+    """Per projected player-game-stat in [start, end] whose game is final: the last pre-tip
+    projection and the real line. Starts from what was projected (audit F16): a projected player
+    with no box-score row is kept, with `no_log`, so he is counted as ungraded, not dropped.
+    His game is his current team's game that day (live grading runs nightly on recent days)."""
     return con.execute(
         """
-        WITH g AS (
-            SELECT l.player_id, l.game_id, l.game_date, l.did_play, l.minutes,
-                   l.pts, l.reb, l.ast, l.stl, l.blk, l.fg3m, l.tov, l.fgm, l.fga, l.ftm, l.fta, gm.tip_utc
-            FROM game_logs l JOIN games gm USING (game_id)
-            WHERE l.game_date BETWEEN ? AND ? AND gm.tip_utc IS NOT NULL
-              AND coalesce(gm.status_state, '') = 'final'),
+        WITH pg AS (
+            SELECT DISTINCT player_id, date FROM projections
+            WHERE model = 'baseline' AND date BETWEEN ? AND ?),
+        gm AS (
+            SELECT pg.player_id, pg.date AS game_date, g.game_id, g.tip_utc
+            FROM pg JOIN players pl USING (player_id)
+            JOIN games g ON g.game_date = pg.date AND pl.team_id IN (g.home_team_id, g.visitor_team_id)
+            WHERE g.tip_utc IS NOT NULL AND coalesce(g.status_state, '') = 'final'),
         runs AS (
-            SELECT g.player_id, g.game_id, max(p.run_at) AS run_at
-            FROM g JOIN projections p ON p.player_id = g.player_id AND p.date = g.game_date
-            WHERE p.model = 'baseline' AND p.run_at < g.tip_utc
+            SELECT gm.player_id, gm.game_id, max(p.run_at) AS run_at
+            FROM gm JOIN projections p ON p.player_id = gm.player_id AND p.date = gm.game_date
+            WHERE p.model = 'baseline' AND p.run_at < gm.tip_utc
             GROUP BY 1, 2)
-        SELECT g.*, p.stat, p.mean, p.sd, p.p_play, p.model_mean, coalesce(p.market, false) AS market,
-               r.run_at
-        FROM g JOIN runs r USING (player_id, game_id)
-        JOIN projections p ON p.model = 'baseline' AND p.run_at = r.run_at AND p.player_id = g.player_id
-                          AND p.date = g.game_date
+        SELECT gm.player_id, gm.game_id, gm.game_date, gm.tip_utc, l.player_id IS NULL AS no_log,
+               coalesce(l.did_play, false) AS did_play, l.minutes,
+               l.pts, l.reb, l.ast, l.stl, l.blk, l.fg3m, l.tov, l.fgm, l.fga, l.ftm, l.fta,
+               p.stat, p.mean, p.sd, p.p_play, p.model_mean, coalesce(p.market, false) AS market, r.run_at
+        FROM gm JOIN runs r USING (player_id, game_id)
+        JOIN projections p ON p.model = 'baseline' AND p.run_at = r.run_at AND p.player_id = gm.player_id
+                          AND p.date = gm.game_date
+        LEFT JOIN game_logs l ON l.game_id = gm.game_id AND l.player_id = gm.player_id
     """,
         [start, end],
     ).df()
@@ -76,6 +84,22 @@ def score_days(rows: pd.DataFrame) -> pd.DataFrame:
     if rows.empty:
         return pd.DataFrame(columns=["day", "stat", "segment", "n", "mae", "rmse", "bias", "coverage_80"])
     rows = rows.assign(day=pd.to_datetime(rows["game_date"]).dt.date)
+    if "no_log" in rows:
+        missing = rows[rows["no_log"].astype(bool) & (rows["stat"] == "minutes")]
+        for day, g in missing.groupby("day"):
+            out.append(
+                {
+                    "day": day,
+                    "stat": "_coverage",
+                    "segment": "no_box_score",
+                    "n": int(len(g)),
+                    "mae": None,
+                    "rmse": None,
+                    "bias": None,
+                    "coverage_80": None,
+                }
+            )
+        rows = rows[~rows["no_log"].astype(bool)]
     for (day, stat), g in rows.groupby(["day", "stat"]):
         col = "minutes" if stat == "minutes" else stat
         if col not in g:
@@ -103,7 +127,7 @@ def score_days(rows: pd.DataFrame) -> pd.DataFrame:
                     "segment": "brier",
                     "n": int(len(p)),
                     "mae": float(np.abs(p - did).mean()),
-                    "rmse": float(((p - did) ** 2).mean()),
+                    "rmse": float(np.sqrt(((p - did) ** 2).mean())),  # sqrt(Brier), pools like RMSE
                     "bias": float(p.mean() - did.mean()),
                     "coverage_80": None,
                 }
@@ -242,25 +266,24 @@ def summary(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, since: 
     sc = con.execute("SELECT * FROM live_scores WHERE day >= ?", [since]).df()
     out: dict = {"since": str(since), "days": int(sc["day"].nunique()) if not sc.empty else 0}
     if not sc.empty:
-        sc["sq"] = sc["rmse"] ** 2 * sc["n"]
-        g = sc.groupby(["stat", "segment"])
-        agg = pd.DataFrame(
-            {
-                "n": g["n"].sum(),
-                "mae": g.apply(lambda d: (d["mae"] * d["n"]).sum() / d["n"].sum(), include_groups=False),
-                "rmse": np.sqrt(g["sq"].sum() / g["n"].sum()),
-                "bias": g.apply(lambda d: (d["bias"] * d["n"]).sum() / d["n"].sum(), include_groups=False),
-                "coverage_80": g.apply(
-                    lambda d: (
-                        (d["coverage_80"] * d["n"]).sum() / d["n"].sum()
-                        if d["coverage_80"].notna().all()
-                        else None
-                    ),
-                    include_groups=False,
-                ),
-            }
-        ).reset_index()
-        out["projections"] = agg.to_dict("records")
+        recs = []
+        for (stat, seg), d in sc.groupby(["stat", "segment"]):
+            n = int(d["n"].sum())
+            rec = {"stat": stat, "segment": seg, "n": n}
+            if stat != "_coverage":  # counts only: projected, no box score
+                w = d["n"] / n
+                rec |= {
+                    "mae": float((d["mae"] * w).sum()),
+                    "rmse": float(np.sqrt((d["rmse"] ** 2 * w).sum())),
+                    "bias": float((d["bias"] * w).sum()),
+                    "coverage_80": float((d["coverage_80"] * w).sum())
+                    if d["coverage_80"].notna().all()
+                    else None,
+                }
+                if seg == "brier":  # pooled Brier: the n-weighted mean (audit F13)
+                    rec["brier"] = rec["rmse"] ** 2
+            recs.append(rec)
+        out["projections"] = recs
     if "live_news_scores" in have:
         ns = con.execute("SELECT * FROM live_news_scores WHERE day >= ?", [since]).df()
         if not ns.empty:

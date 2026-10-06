@@ -346,6 +346,7 @@ def run_moves(
                     rosters, n_moves = sunday_plan.rosters or [me_r] * len(days), len(sunday_plan.moves)
                 else:
                     first = [m for m in sunday_plan.moves if m.effective == days[0]]
+                    released = {m.drop for m in first if m.drop is not None}
                     roster, left, n_moves = _commit(me_r, pool, first, days[0]), acq, len(first)
                     left -= sum(m.add is not None for m in first)
                     rosters = [roster]
@@ -367,9 +368,10 @@ def run_moves(
                             "var_mult": var_mult,
                             "corr": corr,
                         }
-                        taken = set(roster["player_id"]) | owned
+                        taken = set(roster["player_id"]) | owned | released  # dropped: on waivers
                         plan = optimizer.optimize(step, pool[~pool["player_id"].isin(taken)], left, cfg)
                         now_moves = [m for m in plan.moves if m.effective == days[k + 1]]
+                        released |= {m.drop for m in now_moves if m.drop is not None}
                         roster = _commit(roster, pool, now_moves, days[k + 1])
                         left -= sum(m.add is not None for m in now_moves)
                         n_moves += len(now_moves)

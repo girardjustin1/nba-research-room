@@ -275,6 +275,7 @@ class SimulationConfig(BaseModel):
     week_draws: int
     path_draws: int
     seed: int
+    game_final_hours: float = 3.0     # tip to final: a day counts as played this long after its last tip
 
 
 class SystemConfig(BaseModel):

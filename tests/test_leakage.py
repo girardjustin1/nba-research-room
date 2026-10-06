@@ -91,3 +91,24 @@ def test_first_game_has_no_rest_value_and_b2b_is_flagged():
     firsts = f.groupby("player_id").head(1)
     assert firsts["days_rest"].isna().all()
     assert (f.loc[f["days_rest"] == 1, "back_to_back"]).all()
+
+
+def test_who_sits_in_this_game_never_reaches_its_features():
+    """Audit F11: changing only whether a teammate played in a game must not change any feature
+    of that game (it may change later games, which is what 'used to' means)."""
+    logs, ctx = synthetic(seed=2)
+    cfg = settings()
+    full = features.build(logs, ctx, cfg)
+    gid = 1020
+    mate = logs[(logs["game_id"] == gid) & (logs["team_id"] == 1) & logs["did_play"]].iloc[0]
+    tampered = logs.copy()
+    hit = (tampered["game_id"] == gid) & (tampered["player_id"] == mate["player_id"])
+    tampered.loc[hit, ["minutes", "did_play"]] = [0.0, False]
+    for s in STATS:
+        tampered.loc[hit, s] = 0.0
+    other = features.build(tampered, ctx, cfg)
+    cols = features.feature_columns(full)
+    key = ["player_id", "game_id"]
+    a = full[full["game_id"] == gid].set_index(key).sort_index()[cols]
+    b = other[other["game_id"] == gid].set_index(key).sort_index()[cols]
+    pd.testing.assert_frame_equal(a, b, check_exact=False, rtol=1e-12, atol=1e-12)

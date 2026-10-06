@@ -702,3 +702,35 @@ sync; `make scoreboard-live` prints it (season to date, or `ARGS="--days 7"`).
 - Re-grades the last 3 days each night (stat corrections). A failure is recorded and never stops
   the night. Tested on an invented store; the real store has nothing to grade until opening night
   (`make scoreboard-live` reports that). Not on the System screen yet.
+
+**Codex audit, part 1: live-app fixes (2026-10-05).** An independent review by OpenAI's Codex CLI
+(model gpt-6-astra) on a fresh clone of the public repo plus a cleaned copy of the store; report in
+`docs/audits/2026-10-05-codex-astra.md`. It reproduced every benchmark headline to rounding, and
+found real defects. Each was re-checked against the code; these are fixed, with tests:
+- F04: the add/drop planner could return a 13-player roster. A drop made on one day for an add on
+  a later day was thrown away when the solution became moves. Drops are now held and paired with
+  the next add; every plan is checked against the roster rules before it is scored or returned.
+  Codex's real-data check: 0 of 63 solves and 0 of 21 plans invalid (was 4 and 2).
+- F05: the planner could re-add a player it had dropped that week, which Yahoo's waivers forbid;
+  each free agent is now added at most once a week, and the add/drop replay keeps dropped players
+  off the board.
+- F18: teammates out gave makes and attempts separate slopes, so free throws made could exceed
+  attempts (234 of 40,919 rows, impossible percentages). Makes now move with attempts, keeping the
+  shooting percentage; 0 invalid rows.
+- F08: a Yahoo file read after a day's first tip counted the whole day as played. A day now counts
+  once its last game is final (`simulation.game_final_hours` after the last tip); read during the
+  day, only games not yet tipped are projected.
+- F07: the do-nothing path drew each category independently, so it could end far from the
+  correlated headline (0.96 vs 0.78 in Codex's probe); its daily draws now use the same correlation.
+- F06: an exactly tied, already-decided category counted as a loss; the week is now won on more
+  categories won than lost, as Yahoo scores it, in all three simulator modes.
+- F09: market quotes must have been read by the time asked about and priced within the age limit.
+- F10: a filed NBA report without the player now breaks his "news since" run.
+- F13, F16 (live scoreboard): the P(plays) Brier now pools as a weighted mean, and grading starts
+  from what was projected, counting a projected player with no box score as ungraded.
+- F11: the same-game `teammates_out_usage` column is now `y_teammates_out_usage` (an outcome, not a
+  feature), with a test that who sits in a game never reaches that game's features.
+- Found while setting up the audit: a market-ingest test only passed because it read the real
+  TheRundown key from `.env`; the key is now only needed for the real API.
+Not yet handled (part 2): the backtest and replay timing (F01-F03), separately drafted leagues
+(F12), and how strongly DECISIONS.md states its results (F14, F15, F17).

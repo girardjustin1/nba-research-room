@@ -136,3 +136,44 @@ def test_correlation_round_trip(con, cfg):
     calibration.write(con, cal)
     m = calibration.load_correlation(con, cfg)
     assert m.shape == (9, 9) and m[0, 0] == 1.0 and m[0, 1] == 0.5
+
+
+def test_totals_read_during_games_keep_the_day_and_its_late_games(con, cfg):
+    """Audit F08: a Yahoo file read after the day's first tip but before its last game ends keeps
+    the day; only the games already tipped are in the totals."""
+    start, end = date(2026, 11, 2), date(2026, 11, 8)
+    for gid, tip, home, away in ((1, "2026-11-05 00:00:00+00", 1, 2), (2, "2026-11-05 03:00:00+00", 3, 4)):
+        con.execute("INSERT INTO games (game_id, season, game_date, tip_utc, home_team_id, "
+                    "visitor_team_id, postseason, source, fetched_at) "
+                    "VALUES (?, 2026, '2026-11-04', ?, ?, ?, false, 'bdl', now())", [gid, tip, home, away])
+    now = datetime(2026, 11, 4, 19, 5, tzinfo=matchup.ET)
+    during = datetime(2026, 11, 4, 19, 1, tzinfo=matchup.ET)            # 7 pm game on, 10 pm game not yet
+    after = datetime(2026, 11, 5, 1, 30, tzinfo=matchup.ET)            # past 10 pm tip + 3 h
+    assert matchup.remaining_days(con, start, end, during, now, cfg)[0] == date(2026, 11, 4)
+    assert matchup.started_teams(con, date(2026, 11, 4), during) == {1, 2}
+    assert matchup.remaining_days(con, start, end, after, after, cfg)[0] == date(2026, 11, 5)
+
+
+def test_the_path_ends_where_the_correlated_headline_says(cfg):
+    """Audit F07: with linked categories the path's daily draws use the same correlation, so its
+    last point matches the headline instead of the independent odds."""
+    import numpy as np
+    cc = cfg.model_copy(deep=True)
+    cc.simulation.week_draws = 4000
+    corr = np.full((9, 9), 0.8)
+    np.fill_diagonal(corr, 1.0)
+    day = date(2025, 11, 3)
+    cnt = [c.key for c in cfg.categories if c.kind == "count"]
+    pct = [c.key for c in cfg.categories if c.kind == "pct"]
+
+    def td(edge):
+        mean = {k: np.array([10.0 + (0.7 if k != "tov" else -0.7) * edge]) for k in cnt}
+        made = {k: np.array([5.0 + 0.7 * edge]) for k in pct}
+        return matchup.TeamDays([day], mean, {k: np.array([0.5]) for k in cnt}, made,
+                                {k: np.array([10.0]) for k in pct}, {k: np.array([0.5]) for k in pct})
+
+    one, two, zero = td(1), td(0), matchup.zero_to_date(cc)
+    head = matchup.matchup_now(one, two, zero, zero, cfg=cc, corr=corr).p_win_week
+    alone = matchup.matchup_now(one, two, zero, zero, cfg=cc).p_win_week
+    last = matchup.do_nothing_path(one, two, zero, zero, cfg=cc, corr=corr, draws=4000)[-1].p_win_week
+    assert abs(last - head) < 0.03 and abs(last - alone) > 0.1

@@ -198,17 +198,22 @@ def do_nothing_path(me: TeamDays, opp: TeamDays, me_done: ToDate, opp_done: ToDa
     k = var_mult or {}
     rng = np.random.default_rng(seed)
     days = me.days
-    # Daily draws, shape (n, days), per side and category.
+    # Daily draws, shape (n, days), per side and category: linked across categories by the same
+    # correlation as the headline, so the path ends where the headline odds say (audit F07).
     sims = {}
+    cats = cfg.categories
+    chol = np.linalg.cholesky(corr) if corr is not None else np.eye(len(cats))
+    sign = np.array([1.0 if c.higher_is_better else -1.0 for c in cats])   # corr is "good for me"
     for side, td in (("me", me), ("opp", opp)):
-        for c in cfg.categories:
+        e = (rng.standard_normal((n, len(days), len(cats))) @ chol.T) * sign      # raw-total residuals
+        for i, c in enumerate(cats):
             mult = k.get(c.key, 1.0)
             if c.kind == "pct":
                 mu, var = td.made[c.key], td.bin_var[c.key]
-                sims[(side, "made", c.key)] = mu + np.sqrt(var * mult) * rng.standard_normal((n, len(days)))
+                sims[(side, "made", c.key)] = mu + np.sqrt(var * mult) * e[:, :, i]
             else:
                 mu, var = td.mean[c.key], td.var[c.key]
-                sims[(side, "mean", c.key)] = mu + np.sqrt(var * mult) * rng.standard_normal((n, len(days)))
+                sims[(side, "mean", c.key)] = mu + np.sqrt(var * mult) * e[:, :, i]
     points = []
     for t, day in enumerate(days):
         teams = {}
@@ -256,20 +261,32 @@ def opponent_for(con, week: int, my_team_id: int) -> tuple[int, pd.DataFrame | N
     return int(mine["opponent_team_id"].iloc[0]), rows
 
 
-def _first_tip_et(con, day: date) -> datetime | None:
-    v = con.execute("SELECT min(tip_utc) FROM games WHERE game_date = ?", [day]).fetchone()[0]
+def _last_tip_et(con, day: date) -> datetime | None:
+    v = con.execute("SELECT max(tip_utc) FROM games WHERE game_date = ?", [day]).fetchone()[0]
     return pd.Timestamp(v).tz_convert(ET).to_pydatetime() if v is not None else None
 
 
-def remaining_days(con, start: date, end: date, cats_as_of: datetime | None, now: datetime) -> list[date]:
-    """Days still to project. Yahoo totals read on day D after its first tip count D as played."""
+def remaining_days(con, start: date, end: date, cats_as_of: datetime | None, now: datetime,
+                   cfg: Settings | None = None) -> list[date]:
+    """Days still to project. Yahoo totals read on day D count D as played only once its last game
+    is final (`simulation.game_final_hours` after the last tip); read during D's games, D stays,
+    and week_inputs projects only its games not yet tipped (started_teams)."""
+    cfg = cfg or settings()
     first = max(start, now.astimezone(ET).date())
     if cats_as_of is not None:
         seen = cats_as_of.astimezone(ET)
-        tip = _first_tip_et(con, seen.date())
-        last_done = seen.date() if tip is not None and seen >= tip else seen.date() - timedelta(days=1)
+        last = _last_tip_et(con, seen.date())
+        final = last is not None and seen >= last + timedelta(hours=cfg.simulation.game_final_hours)
+        last_done = seen.date() if final else seen.date() - timedelta(days=1)
         first = max(first, last_done + timedelta(days=1))
     return [first + timedelta(days=i) for i in range((end - first).days + 1)] if first <= end else []
+
+
+def started_teams(con, day: date, ts: datetime) -> set[int]:
+    """Teams whose game on `day` had tipped by `ts`: their stats are already in Yahoo's totals."""
+    rows = con.execute("""SELECT home_team_id, visitor_team_id FROM games
+                          WHERE game_date = ? AND tip_utc <= ?""", [day, ts]).fetchall()
+    return {int(t) for r in rows for t in r if t is not None}
 
 
 def to_date(con, rows: pd.DataFrame | None, team_id: int, roster: pd.DataFrame, start: date,
@@ -324,12 +341,18 @@ def week_inputs(con, cfg: Settings | None = None, now: datetime | None = None) -
     cats_as_of = con.execute("SELECT max(snapshot_at) FROM yahoo_matchups WHERE week = ?",
                              [week_no]).fetchone()[0]
     cats_as_of = pd.Timestamp(cats_as_of).to_pydatetime() if cats_as_of is not None else None
-    days = remaining_days(con, start, end, cats_as_of, now)
+    days = remaining_days(con, start, end, cats_as_of, now, cfg)
     proj = con.execute("""SELECT player_id, date, stat, mean, sd FROM projections
                           WHERE model = 'baseline' AND run_at = ? AND date BETWEEN ? AND ?""",
                        [run, days[0] if days else end, end]).df()
     proj["date"] = pd.to_datetime(proj["date"]).dt.date
     through = (days[0] - timedelta(days=1)) if days else end
+    if days and cats_as_of is not None and cats_as_of.astimezone(ET).date() == days[0]:
+        # Totals read during the day's games: those already tipped are in them, the rest projected.
+        gone = started_teams(con, days[0], cats_as_of)
+        team_of = dict(con.execute("SELECT player_id, team_id FROM players").fetchall())
+        tipped = (proj["date"] == days[0]) & proj["player_id"].map(team_of).isin(gone)
+        proj, through = proj[~tipped], days[0]
     me_done, miss = to_date(con, rows, me_id, me_roster, start, through, cfg)
     opp_done, _ = to_date(con, rows, opp_id, opp_roster, start, through, cfg)
     return {"week": week_no, "start": start, "end": end, "days": days, "now": now, "run_at": run,

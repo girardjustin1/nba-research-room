@@ -85,3 +85,24 @@ def test_fit_recovers_a_planted_minutes_shift_and_predict_moves_minutes():
     pts0 = healthy.query("stat == 'pts'").set_index("player_id")
     gained = (pts.at[3, "mean"] / pts.at[3, "p_play"]) / (pts0.at[3, "mean"] / pts0.at[3, "p_play"])
     assert gained > 1.25                                           # his points follow his extra minutes
+
+
+def test_makes_never_exceed_attempts_when_teammates_sit():
+    """Audit F18: makes follow attempts, so the shooting percentage holds."""
+    cfg = settings()
+    on = cfg.model_copy(update={"baseline": cfg.baseline.model_copy(
+        update={"teammates": cfg.baseline.teammates.model_copy(update={"enabled": True})})})
+    adj = teammates.TeammatesAdjust(on)
+    adj.coef = np.array([0.1, 0.0, 0.0])
+    adj.b = {s: 0.0 for s in STATS} | {"ftm": 0.9, "fta": 0.1, "fgm": 0.9, "fga": 0.1}  # deliberately unequal
+    model = BaselineModel(on)
+    model.phi = {s: 1.0 for s in (*STATS, "minutes")}
+    model.teammates = adj
+    live = _team().assign(date="2025-11-05", play_rate_ewma=0.95, play_prob=0.95, games_prior=50,
+                          season_games=10_000, tmo_prior_min=0.0,
+                          **{f"tmo_prior_sh_{s}": 0.0 for s in STATS})
+    live["fta_pm_ewma"] = live["ftm_pm_ewma"] = 0.2             # a 100% free-throw shooter
+    live["play_prob_override"] = [0.0, np.nan, np.nan, np.nan]
+    out = model.predict(live).pivot_table(index="player_id", columns="stat", values="mean")
+    assert (out["ftm"] <= out["fta"] + 1e-12).all() and (out["fgm"] <= out["fga"] + 1e-12).all()
+    assert out.loc[3, "fta"] > out.loc[3, "fta"] * 0 and out.loc[3, "ftm"] == pytest.approx(out.loc[3, "fta"])

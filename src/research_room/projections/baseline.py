@@ -168,6 +168,9 @@ class BaselineModel:
             m = moved
             rate_f = {s: np.where(has_ewma, self.teammates.rate_factor(s, dl[f"dsh_{s}"].to_numpy(float)),
                                   1.0) for s in STATS}
+            # Makes move with attempts, so his shooting percentages hold and makes never exceed
+            # attempts (independent slopes put FTM above FTA in 234 of 40,919 rows; audit F18).
+            rate_f["fgm"], rate_f["ftm"] = rate_f["fga"], rate_f["fta"]
         cap = df.get("minutes_cap")
         scale = np.ones(len(df))
         if cap is not None:

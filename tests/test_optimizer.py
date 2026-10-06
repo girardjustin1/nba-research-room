@@ -84,3 +84,23 @@ def test_apply_moves_changes_the_roster_from_the_effective_day(cfg):
     assert all(len(r) == 12 for r in rosters)
     same = matchup.matchup_now(inp["me"], inp["opp"], inp["me_done"], inp["opp_done"], cfg=cfg)
     assert np.isclose(optimizer.evaluate(inp, inp["me_roster"], fa, [], cfg).p_win_week, same.p_win_week)
+
+
+def test_a_plan_the_roster_rules_reject_is_never_returned(cfg, monkeypatch):
+    """Audit F04: an add without the drop that frees its spot (a 13th player) must not be scored
+    or returned, even when the solver reports it optimal."""
+    inp, fa = week(cfg)
+    first = optimizer.first_add_index(DAYS, DAYS[0], cfg)
+    bad = [optimizer.Move("add-201", 201, None, DAYS[first])]
+    monkeypatch.setattr(optimizer, "_solve", lambda *a, **k: (bad, "optimal"))
+    plan = optimizer.optimize(inp, fa, 4, cfg)
+    assert plan.moves == [] and plan.status == "invalid"
+    assert optimizer.check(inp["me_roster"], bad, 4, cfg, DAYS, DAYS[first]) is not None
+
+
+def test_every_returned_roster_fits_the_limit(cfg):
+    inp, fa = week(cfg)
+    plan = optimizer.optimize(inp, fa, acquisitions_left=4, cfg=cfg)
+    assert all(len(r) <= optimizer.roster_cap(cfg) for r in plan.rosters)
+    adds = [m.add for m in plan.moves if m.add is not None]
+    assert len(adds) == len(set(adds))                       # no one is added twice in a week

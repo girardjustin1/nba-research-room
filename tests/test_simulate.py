@@ -94,3 +94,34 @@ def test_twelve_team_evaluation_is_fast(cfg):
             if i != j:
                 simulate.monte_carlo(teams[i], teams[j], cfg, n=5000, seed=i * 12 + j)
     assert time.perf_counter() - t0 < 2.0                 # build-prompt requirement
+
+
+def test_a_locked_tie_counts_for_nobody():
+    """Audit F06: a finished week won 4-3 with two exact ties is a win (Yahoo: more categories
+    won than lost), in every mode."""
+    import numpy as np
+
+    from research_room import simulate
+    from research_room.config import settings
+
+    cfg = settings()
+    keys = [c.key for c in cfg.categories]
+    win, lose = keys[:4], keys[4:7]                     # the last two are exact ties
+
+    def team(me: bool):
+        mean, var, made, att, bvar = {}, {}, {}, {}, {}
+        for c in cfg.categories:
+            sgn = 1 if c.higher_is_better else -1
+            edge = 1 if c.key in win else -1 if c.key in lose else 0
+            if c.kind == "pct":
+                made[c.key] = np.array([50.0 + (5 * edge if me else 0)])
+                att[c.key], bvar[c.key] = np.array([100.0]), np.array([0.0])
+            else:
+                mean[c.key], var[c.key] = np.array([100.0 + (sgn * 10 * edge if me else 0)]), np.array([0.0])
+        return simulate.TeamWeek(mean, var, made, att, bvar)
+
+    a, b = team(True), team(False)
+    assert simulate.analytic(a, b, cfg).summary()["p_win_week"] == 1.0
+    z = simulate.correlated_draws(np.eye(len(keys)), 200)
+    assert float(simulate.p_win_week_correlated(a, b, z, cfg)[0]) == 1.0
+    assert float(simulate.monte_carlo(a, b, cfg, n=200).p_win_week[0]) == 1.0

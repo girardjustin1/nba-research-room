@@ -134,3 +134,16 @@ def test_news_after_the_price_keeps_the_model(con):
                            news=_news("Questionable", later))
     assert bool(mixed.at[0, "market"])
     assert mixed.at[0, "mean"] == pytest.approx(29.5, abs=0.01)          # only the newer price
+
+
+def test_only_quotes_known_and_fresh_at_the_time_count(con):
+    """Audit F09: a quote read after `now`, or read now but priced days ago, isn't used."""
+    ladder = [(19.5, 0.80), (24.5, 0.50), (29.5, 0.20)]
+    _ladder(con, "kalshi", "pts", ladder, fetched=NOW + timedelta(hours=2))
+    assert market.ladder_points(con, [77], ["pts"], NOW, 30).empty                       # from the future
+    store.upsert(con, "props_ladder", pd.DataFrame([{
+        "source": "rundown", "game_id": 77, "player_id": 501, "stat": "pts", "threshold": 24.5,
+        "side": "over",
+        "prob": 0.5, "ts": pd.Timestamp(NOW - timedelta(days=5)), "vendor": "rundown:3",
+        "fetched_at": pd.Timestamp(NOW - timedelta(hours=1))}]))
+    assert market.ladder_points(con, [77], ["pts"], NOW, 30).empty                       # priced days ago

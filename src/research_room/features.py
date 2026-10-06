@@ -4,7 +4,7 @@ Inputs: game_logs, games (tip_utc), advanced_stats, settings.features.
 Outputs: a DataFrame (and the derived DuckDB table `features`, rebuilt each run) with one row
 per player-game: rolling and EWMA minutes, play rate, EWMA per-minute rates for every stat,
 usage and FGA trends, days of rest, back-to-back, home/away, opponent pace and defensive rating,
-teammates-out usage share, and how many prior games the numbers rest on.
+what teammates-out the player is used to, and how many prior games the numbers rest on.
 Tables: reads game_logs, games, advanced_stats; writes features (derived, replace-on-build).
 
 No leakage, by construction: every player-level number is first computed as the state *after*
@@ -129,7 +129,9 @@ def build(logs: pd.DataFrame, team_ctx: pd.DataFrame, cfg: Settings | None = Non
     rot = (out["min_played_ewma"] >= f.rotation_minutes) & ~played.to_numpy()
     out["_out_usage"] = np.where(rot, out["usage_r5"].fillna(0), 0.0)
     team_out = out.groupby(["game_id", "team_id"])["_out_usage"].transform("sum")
-    out["teammates_out_usage"] = team_out - out["_out_usage"]
+    # Same-game (who actually sat), so it's an outcome, named `y_` to keep it out of the features
+    # (audit F11); teammates.py builds the pre-game version from P(plays).
+    out["y_teammates_out_usage"] = team_out - out["_out_usage"]
     out = out.drop(columns="_out_usage")
 
     # What each player is used to: teammates missing in his previous games (teammates.py).

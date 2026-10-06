@@ -117,8 +117,9 @@ def sync(
     """Archive game lines and player props for today and the next `days_ahead` days."""
     cfg = cfg or settings()
     rd = cfg.markets.rundown
-    key = Secrets().require("rundown_api_key")
-    client = client or RateLimited(rd.requests_per_second, headers={"X-TheRundown-Key": key})
+    if client is None:  # the key is only needed for the real API (tests pass their own client)
+        key = Secrets().require("rundown_api_key")
+        client = RateLimited(rd.requests_per_second, headers={"X-TheRundown-Key": key})
     now = now or store.utcnow()
     today = today or datetime.now(ET).date()
     ids = ",".join(str(i) for i in [*rd.game_markets, *rd.prop_markets])

@@ -68,19 +68,23 @@ def ladder_rows(
     priced (the quote's own time, else when it was read)."""
     if not game_ids or not stats:
         return pd.DataFrame(columns=LADDER_ROWS)
-    since = pd.Timestamp(now or store.utcnow()) - timedelta(hours=max_age_hours)
+    as_of = pd.Timestamp(now or store.utcnow())
+    since = as_of - timedelta(hours=max_age_hours)
+    # Only what was known at `as_of` (read by then) and still fresh (priced within the age limit):
+    # a quote read today but last updated days ago is as stale as it looks (audit F09).
     df = con.execute(
         """
         WITH latest AS (
             SELECT source, game_id, max(fetched_at) AS f FROM props_ladder
-            WHERE game_id IN (SELECT unnest(?)) AND fetched_at >= ? GROUP BY 1, 2)
+            WHERE game_id IN (SELECT unnest(?)) AND fetched_at >= ? AND fetched_at <= ? GROUP BY 1, 2)
         SELECT l.player_id, l.game_id, l.stat, l.threshold, l.prob, l.source,
                coalesce(l.ts, l.fetched_at) AS priced_at
         FROM props_ladder l
         JOIN latest t ON t.source = l.source AND t.game_id = l.game_id AND t.f = l.fetched_at
         WHERE l.side = 'over' AND l.prob IS NOT NULL AND l.stat IN (SELECT unnest(?))
+          AND coalesce(l.ts, l.fetched_at) BETWEEN ? AND ?
     """,
-        [list(map(int, game_ids)), since, stats],
+        [list(map(int, game_ids)), since, as_of, stats, since, as_of],
     ).df()
     return df if not df.empty else pd.DataFrame(columns=LADDER_ROWS)
 

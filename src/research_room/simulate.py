@@ -65,7 +65,8 @@ class Matchup:
 
 
 def cats_to_win(cfg: Settings) -> int:
-    """Categories needed to win the week: a strict majority."""
+    """Categories needed to win the week when none is tied: a strict majority (with locked ties,
+    win_week compares wins against losses instead, as Yahoo does)."""
     return len(cfg.categories) // 2 + 1
 
 
@@ -132,6 +133,25 @@ def _pct(made, att, bin_var) -> tuple[np.ndarray, np.ndarray]:
     return np.where(att > 0, made / safe, 0.0), np.where(att > 0, bin_var / safe ** 2, 0.0)
 
 
+def win_week(p: np.ndarray, ties: np.ndarray) -> np.ndarray:
+    """P(more categories won than lost), Yahoo's rule: a category already locked as an exact tie
+    (`ties`, no spread left) counts for nobody. p and ties have shape (n_cats, batch)."""
+    p, ties = np.atleast_2d(p), np.atleast_2d(ties)
+    p = np.where(ties, 0.0, p)
+    dist = np.zeros((p.shape[0] + 1, p.shape[1]))
+    dist[0] = 1.0
+    for row in p:
+        dist[1:] = dist[1:] * (1 - row) + dist[:-1] * row
+        dist[0] = dist[0] * (1 - row)
+    need = (p.shape[0] - ties.sum(axis=0)) // 2 + 1          # wins > losses among the rest
+    k = np.arange(p.shape[0] + 1)[:, None]
+    return (dist * (k >= need[None, :])).sum(axis=0)
+
+
+def _tied(diff, sd) -> np.ndarray:
+    return (np.asarray(sd) <= 0) & np.isclose(np.asarray(diff, dtype=float), 0.0, atol=1e-12)
+
+
 def poisson_binomial_at_least(p: np.ndarray, k: int) -> np.ndarray:
     """P(at least k successes) for independent Bernoullis; p has shape (n_cats, batch)."""
     p = np.atleast_2d(p)
@@ -146,13 +166,14 @@ def poisson_binomial_at_least(p: np.ndarray, k: int) -> np.ndarray:
 def analytic(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None,
              var_mult: dict[str, float] | None = None) -> Matchup:
     cfg = cfg or settings()
-    p_cat = {}
+    p_cat, ties = {}, []
     for cat in cfg.categories:
         diff, sd = _edge(me, opp, cat, var_mult)
         p_cat[cat.key] = np.where(sd > 0, norm.cdf(diff / np.where(sd > 0, sd, 1.0)), (diff > 0) * 1.0)
+        ties.append(np.atleast_1d(_tied(diff, sd)))
     stacked = np.vstack([np.atleast_1d(v) for v in p_cat.values()])
-    need = cats_to_win(cfg)
-    return Matchup(p_cat, stacked.sum(axis=0), poisson_binomial_at_least(stacked, need), need)
+    tied = np.broadcast_to(np.vstack(ties), stacked.shape)
+    return Matchup(p_cat, stacked.sum(axis=0), win_week(stacked, tied), cats_to_win(cfg))
 
 
 def correlated_draws(corr: np.ndarray, n: int, seed: int | None = 0) -> np.ndarray:
@@ -168,8 +189,9 @@ def p_win_week_correlated(me: TeamWeek, opp: TeamWeek, z: np.ndarray, cfg: Setti
     diff = np.vstack([np.atleast_1d(d) for d in diff])            # (cats, batch)
     sd = np.vstack([np.atleast_1d(s) for s in sd])
     diff, sd = np.broadcast_arrays(diff, sd)
-    wins = (diff[None, :, :] + sd[None, :, :] * z[:, :, None] > 0).sum(axis=1)   # (n, batch)
-    return (wins >= cats_to_win(cfg)).mean(axis=0)
+    edge = diff[None, :, :] + sd[None, :, :] * z[:, :, None]                      # (n, cats, batch)
+    wins, losses = (edge > 0).sum(axis=1), (edge < 0).sum(axis=1)                 # exact ties: nobody
+    return (wins > losses).mean(axis=0)
 
 
 def monte_carlo(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None, n: int = 5000,
@@ -177,13 +199,14 @@ def monte_carlo(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None, n: int
     """Same model by simulation. Batch-aware: every array entry gets its own n draws."""
     cfg = cfg or settings()
     rng = np.random.default_rng(seed)
-    wins = []
+    wins, losses = [], []
     for cat in cfg.categories:
         diff, sd = _edge(me, opp, cat, var_mult)
         diff, sd = np.atleast_1d(diff), np.atleast_1d(sd)
         draws = diff[None, :] + sd[None, :] * rng.standard_normal((n, diff.size))
         wins.append(draws > 0)
-    w = np.stack(wins)                                   # (cats, n, batch)
-    need = cats_to_win(cfg)
+        losses.append(draws < 0)
+    w, lo = np.stack(wins), np.stack(losses)             # (cats, n, batch)
     p_cat = {c.key: w[i].mean(axis=0) for i, c in enumerate(cfg.categories)}
-    return Matchup(p_cat, w.sum(axis=0).mean(axis=0), (w.sum(axis=0) >= need).mean(axis=0), need)
+    won = (w.sum(axis=0) > lo.sum(axis=0)).mean(axis=0)
+    return Matchup(p_cat, w.sum(axis=0).mean(axis=0), won, cats_to_win(cfg))

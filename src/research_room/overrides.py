@@ -156,19 +156,27 @@ def from_nba_report(con: duckdb.DuckDBPyConnection, start: date, end: date, as_o
     ts = latest_report_ts(con, as_of)
     if ts is None:
         return pd.DataFrame(columns=COLUMNS)
+    # News time: the first report of the unbroken run showing this status. A filed report that
+    # lists him differently, or doesn't list him at all, breaks the run (audit F10).
     listed = con.execute("""
         WITH cur AS (
             SELECT r.game_id, r.team_id, r.player_id, r.status, r.reason, g.game_date
             FROM nba_report_rows r JOIN games g USING (game_id)
-            WHERE r.report_ts = ? AND g.game_date BETWEEN ? AND ?)
+            WHERE r.report_ts = ? AND g.game_date BETWEEN ? AND ?),
+        br AS (
+            SELECT c.game_id, c.player_id, max(t.report_ts) AS last_break
+            FROM cur c
+            JOIN nba_report_teams t ON t.game_id = c.game_id AND t.team_id = c.team_id AND t.submitted
+                                   AND t.report_ts <= ?
+            LEFT JOIN nba_report_rows h ON h.game_id = c.game_id AND h.player_id = c.player_id
+                                       AND h.report_ts = t.report_ts AND h.status = c.status
+            WHERE h.player_id IS NULL
+            GROUP BY 1, 2)
         SELECT c.*, (SELECT min(h.report_ts) FROM nba_report_rows h
                      WHERE h.game_id = c.game_id AND h.player_id = c.player_id AND h.status = c.status
                        AND h.report_ts <= ?
-                       AND h.report_ts > coalesce((SELECT max(x.report_ts) FROM nba_report_rows x
-                                                   WHERE x.game_id = c.game_id AND x.player_id = c.player_id
-                                                     AND x.status <> c.status AND x.report_ts <= ?),
-                                                  '-infinity'::TIMESTAMPTZ)) AS since
-        FROM cur c
+                       AND h.report_ts > coalesce(br.last_break, '-infinity'::TIMESTAMPTZ)) AS since
+        FROM cur c LEFT JOIN br USING (game_id, player_id)
     """, [ts, start, end, ts, ts]).df()
     rows = [{"player_id": int(r.player_id), "date": pd.Timestamp(r.game_date).date(),
              "play_prob": _prob(r.status, cfg), "minutes_cap": None, "status": r.status,

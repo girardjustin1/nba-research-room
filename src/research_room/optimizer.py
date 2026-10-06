@@ -249,11 +249,16 @@ def _solve(
                 prob += y[(p, t)] == 0
             prob += a[(p, t)] >= y[(p, t)] - (y[(p, t - 1)] if t > 0 else 0)
     prob += pulp.lpSum(a.values()) <= acquisitions_left
+    for p in F:  # a dropped free agent goes to waivers: each is added at most once a week
+        prob += pulp.lpSum(a[(p, t)] for t in T) <= 1
     stats = prob.solve(pulp.COIN_CMD(msg=False, timeLimit=opt.solver_time_limit_s))
     if stats.status != pulp.LpSolveStatus.Optimal:
         return [], stats.status.name.lower()
     on = lambda p, t: (y[(p, t)].value() or 0) > 0.5  # noqa: E731
-    moves = []
+    # Each add is paired with a drop. A drop the solution makes before the add that needs its spot
+    # is held and made with that add (keeping the player until then can only help); a drop never
+    # needed by an add isn't made. Dropping it would free a spot nothing uses.
+    moves, pending = [], []
     for t in T:
         if t < first_add:
             continue
@@ -265,12 +270,9 @@ def _solve(
             left = [p for p in R if not on(p, 0)]  # dropped before the first day counts
         else:
             left = [p for p in R + F if on(p, t - 1) and not on(p, t)]
-        dropped = sorted(left, key=lambda p: float(values.loc[p].sum()))
-        for i in range(max(len(added), len(dropped))):
-            ad = added[i] if i < len(added) else None
-            dr = dropped[i] if i < len(dropped) else None
-            if ad is None:
-                continue  # a drop with no add frees nothing useful
+        pending += sorted(left, key=lambda p: float(values.loc[p].sum()))
+        for ad in added:
+            dr = pending.pop(0) if pending else None
             moves.append(Move(move_id(ad, dr, days[t]), ad, dr, days[t]))
     return moves, "optimal"
 
@@ -345,6 +347,9 @@ def optimize(
         ]
         moves, status = _solve(base, cands, values, days, first_add, acquisitions_left, cfg)
         if status != "optimal":
+            break
+        if check(base, moves, acquisitions_left, cfg, days, days[first_add]) is not None:
+            status = "invalid"  # never score or return a plan the roster rules reject
             break
         m = evaluate(inp, base, pool, moves, cfg)
         if m.p_win_week > best.p_win_week:
