@@ -112,3 +112,16 @@ def test_who_sits_in_this_game_never_reaches_its_features():
     a = full[full["game_id"] == gid].set_index(key).sort_index()[cols]
     b = other[other["game_id"] == gid].set_index(key).sort_index()[cols]
     pd.testing.assert_frame_equal(a, b, check_exact=False, rtol=1e-12, atol=1e-12)
+
+
+def test_a_players_team_as_of_a_moment_comes_from_the_past():
+    """Audit F03: editing only a future game's team must not change the team as of earlier."""
+    logs, ctx = synthetic(seed=3)
+    cfg = settings()
+    built = features.build(logs, ctx, cfg)
+    cut = logs.loc[logs["game_id"] == 1020, "tip_utc"].iloc[0]
+    later = built.copy()
+    later.loc[(later["player_id"] == 101) & (later["tip_utc"] >= cut), "team_id"] = 999   # traded later
+    a = features.monday_states(built, [cut]).set_index("player_id")
+    b = features.monday_states(later, [cut]).set_index("player_id")
+    assert a.at[101, "team_id"] == b.at[101, "team_id"] == 1

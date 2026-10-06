@@ -178,6 +178,8 @@ backtest:                      # replay of a past season (research_room/backtest
   matchups_per_week: 7         # head-to-heads per week (7 = all of them; each runs the optimizer)
   react_to_absences: true      # daily lineups swap in a bench player for a starter who sits (as a manager would)
   seed: 7
+  plan_hour_et: 12             # the week's add/drop plan is made the Sunday before, at noon Eastern
+  decision_hour_et: 17.5       # news replay: each day's odds, lineups and re-plans at 5:30 PM Eastern
 
 simulation:                    # team-week variance calibration (research_room/calibration.py)
   calibration_teams: 6000      # random teams sampled per season to fit / score the multipliers

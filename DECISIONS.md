@@ -368,6 +368,7 @@ ties counted).
 
 All 7 matchups a week, 20 weeks (140 team-weeks, about 8 min):
 - Do-nothing Brier **0.168** (was 0.180). Honest through the 80s: predicted 31% → 33% won,
+  *(Superseded in part by "Codex audit, part 2" below: re-run after the timing fixes.)*
   50% → 52%, 71% → 69%, 91% → 85% (37 weeks). Only the most lopsided weeks still run hot: 95%
   predicted won 83% (21 weeks).
 - Plans: 54% → 94% weekly win rate (+40 pts, 80% range +34 to +45), predicted +37, still against an
@@ -442,6 +443,7 @@ rest).
   season's archive builds up.
 
 **Do betting markets beat the baseline? Yes, clearly, where a liquid prop exists (2026-10-05).**
+*(Caveat from the Codex audit, F17: see "Codex audit, part 2" below.)*
 Last season's pre-tip Kalshi prices were backfilled for 40 randomly sampled regular-season games:
 points, rebounds, assists and threes; 2,448 rungs. Each rung's price is the last hourly
 candlestick before tip, from `/historical/markets/{ticker}/candlesticks`, kept only when liquid
@@ -550,6 +552,7 @@ P(plays) and when the news arrived. A player ruled out on X after the props were
   source dropped while a newer one counts, a minutes cap, and the injury news time.
 
 **Teammates out: switched on (2026-10-05).** `teammates.py`, applied inside the baseline's
+*(Superseded in part by "Codex audit, part 2" below.)*
 `predict`, so live, calibration, backtest and scoreboard projections all get it.
 - Measure, per player-game: teammates' missing minutes (rotation teammates, EWMA ≥ 12 min, × P(they
   sit)) and their missing share of each stat, minus what the player is used to (an EWMA over his
@@ -620,6 +623,7 @@ pre-game and nightly runs.
   12:40 ET today). The health screen's check for it starts with the regular season.
 
 **News backtest: game-day news makes the weekly odds more honest (2026-10-05).**
+*(Superseded in part by "Codex audit, part 2" below.)*
 `backtest_news.py`, `make report-backfill SEASONS="2025"` then `make backtest-news`.
 - 2025-26's NBA injury reports are stored with the production reader (`jobs/nba_report_backfill.py`:
   the noon report on early-tip days, then the 5 PM one; 218 reports, 21,633 player rows, every
@@ -666,6 +670,7 @@ pre-game and nightly runs.
   steps still add up exactly (tested).
 
 **Add/drop replay with game-day news: re-planning each morning doesn't help (2026-10-05).**
+*(Superseded in part by "Codex audit, part 2" below.)*
 `backtest_news.run_moves`, `make backtest-news ARGS=--moves` (about 30 minutes). Same league and
 matchups as the weekly backtest (140 team-weeks); my side streams, the opponent never does; each
 day's lineups come from that version's projections that morning.
@@ -734,3 +739,47 @@ found real defects. Each was re-checked against the code; these are fixed, with 
   TheRundown key from `.env`; the key is now only needed for the real API.
 Not yet handled (part 2): the backtest and replay timing (F01-F03), separately drafted leagues
 (F12), and how strongly DECISIONS.md states its results (F14, F15, F17).
+
+**Codex audit, part 2: backtest timing, one league, and what the results support (2026-10-05).**
+Fixes to how the backtests replay time, then every benchmark re-run (2025-26, 140 team-weeks).
+- F03: a player's state as of a moment took his team from his next game, so a trade showed up
+  early. His team now comes from his last game before the moment (strictly before). Known and
+  small: a player who never plays again keeps a one-game-old state.
+- F02: the weekly plan, "made Sunday noon", used states through Monday midnight (Sunday's games).
+  It now uses only games before the plan (`backtest.plan_hour_et`, 12).
+- F01: the news replay's "start of day" odds and noon re-plans used the 5 PM report. Each day's
+  odds, lineups and re-plans are now made at `backtest.decision_hour_et` (5:30 PM Eastern) and
+  use only reports published by then (and at least 30 minutes before the game's tip).
+- F12: the news replays drafted their own league, not the weekly backtest's (DECISIONS said
+  otherwise; that was wrong). They now use the weekly backtest's projections and draft, so all
+  three run on the same league and matchups (checked: identical Monday odds).
+- Weekly backtest, now (teammates out on): do-nothing Brier 0.187; the 80-100% band predicted 90%
+  and won 76% (17 weeks), the 40-60% band 50% and 59%. Plans: 48% -> 88% weekly win rate (+40
+  points, 80% range +35 to +45) against a non-streaming opponent. A different league from the
+  earlier runs (0.168 / 54% -> 94%), so the change can't be pinned on one fix.
+- News replay, same league (Brier pooled over each day's decision time; paired by matchup, with
+  95% ranges by matchup and by whole week):
+  - Monday-only 0.1483, re-projected daily 0.1386, daily with the NBA report 0.1323.
+  - Daily vs Monday-only: -0.0097 (95% -0.016 to -0.004). The report on top of daily: -0.0063
+    (95% -0.010 to -0.003). Together: -0.016 (95% -0.025 to -0.008). Clear, and larger than the
+    first replay showed: re-projecting each day and reading the report both make the odds better.
+  - Teammates out on minus off, same report: +0.0029 (95% -0.002 to +0.011). Not supported either
+    way for the weekly odds; the earlier "small, consistent gain" does not survive the fixes. Its
+    per-player gains stand (scoreboard, re-scored after F18: minutes -4.4% and points -1.6% with
+    the report and "not listed"; -0.0% and -0.1% with no news). It stays on.
+  - Status rates fitted on 2024-25 alone (F14) give the same results to four decimals as the
+    pooled two-season rates, so that in-sample use made no difference.
+- Add/drop replay, same league: do nothing 48%, Sunday plan 88.6%, daily re-plan 89.3%, re-plan
+  with the report 89.3%. Re-planning changed 1 and 3 weeks of 140 (1-0 and 2-1): no measurable
+  difference either way. The earlier "re-planning slightly hurts" came from the timing and
+  roster-validity bugs; there is no case for or against re-planning, so the Moves screen keeps
+  re-planning on fresh projections.
+- How to read all of this (F14, F15): 2025-26 has been used again and again to choose settings,
+  so these are development results, not an untouched test. The bootstrap ranges treat matchups as
+  independent; whole-week ranges are close but the same drafted teams recur. Ranges that include
+  zero mean "not shown", not "no effect". The first clean test is the 2026-27 season itself, which
+  the live scoreboard (`live_scores.py`) records from opening night.
+- Market test (F17): the props test scored Kalshi's prices (lines if he plays) against the
+  baseline's P(plays) x P(over | plays), so part of the market's edge may come from the baseline
+  carrying availability risk the props don't. The market-mean RMSE test (graded on games played)
+  isn't affected. To re-test on this season's archive with both sides if-he-plays.

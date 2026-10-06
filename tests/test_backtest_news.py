@@ -26,10 +26,11 @@ def _report(con, ts, rows, teams):
 
 def test_report_news_uses_the_last_report_before_tip(con):
     cfg = settings()
-    games = pd.DataFrame({"game_id": [9], "tip_utc": [TIP]})
-    five_pm, late = pd.Timestamp("2025-11-04 22:00", tz="UTC"), pd.Timestamp("2025-11-05 00:15", tz="UTC")
+    games = pd.DataFrame({"game_id": [9], "tip_utc": [TIP], "game_date": [DAY]})
+    five_pm, six_pm = pd.Timestamp("2025-11-04 22:00", tz="UTC"), pd.Timestamp("2025-11-04 23:00", tz="UTC")
     _report(con, five_pm, [(1, 10, "Questionable")], [(10, True), (20, False)])
-    _report(con, late, [(1, 10, "Out")], [(10, True), (20, True)])        # within 30 min of tip: too late
+    # 6 PM: before the 7:30 tip, but after the 5:30 PM decision (audit F01), so not used
+    _report(con, six_pm, [(1, 10, "Out")], [(10, True), (20, True)])
     listed, filed = backtest_news.report_news(con, games, cfg)
     assert listed.set_index("player_id").at[1, "status"] == "Questionable"
     assert listed.set_index("player_id").at[1, "p"] == cfg.overrides.status_play_prob["Questionable"]

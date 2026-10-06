@@ -2,8 +2,10 @@
 > (model gpt-6-astra), run read-only on a fresh clone of the public repo plus a cleaned copy of the
 > store (Basketball Monster, Yahoo league, draft tables and team names removed). Each finding was
 > re-checked against the code before fixing. Fixed with tests: F04, F05, F06, F07, F08, F09, F10,
-> F11, F13, F16, F18 (see DECISIONS.md, "Codex audit"). F01-F03, F12, F14, F15, F17 concern the
-> backtests and the claims made from them and are handled in the follow-up.
+> F11, F13, F16, F18 (DECISIONS.md, "Codex audit, part 1"). Part 2 fixed F01, F02, F03 and F12,
+> re-ran every benchmark, and restated the results F14, F15 and F17 call into question
+> (DECISIONS.md, "Codex audit, part 2"). Known and left: a player who never plays again keeps a
+> one-game-old state (part of F03).
 
 # Independent audit: NBA Research Room engine
 

@@ -67,8 +67,12 @@ def week_projections(
 ) -> pd.DataFrame:
     """Projections for every scheduled game this week, as the live system makes them: each player's
     state as of Monday (his games before it only), carried onto all of his team's games, whether
-    or not he later played. Players: everyone with a game this season before Monday."""
-    cut = pd.Timestamp(datetime.combine(start, datetime.min.time(), matchup.ET)).tz_convert("UTC")
+    or not he later played. Players: everyone with a game this season before the plan. The state is
+    as of the plan's time (the Sunday before, `backtest.plan_hour_et`), so Sunday's later games
+    are not in it (audit F02)."""
+    plan_at = datetime.combine(start - timedelta(days=1), datetime.min.time(), matchup.ET) + timedelta(
+        hours=cfg.backtest.plan_hour_et)
+    cut = pd.Timestamp(plan_at).tz_convert("UTC")
     pre = logs[(logs["tip_utc"] < cut) & (logs["season"] >= season - 1)]
     last = pre[pre["season"] == season].sort_values("tip_utc").groupby("player_id").tail(1)
     if last.empty:
@@ -228,8 +232,8 @@ def run(
             me_r, opp_r = roster_frame(league[a], elig, names), roster_frame(league[b], elig, names)
             me_td, opp_td = matchup.team_days(me_r, pw, days, cfg), matchup.team_days(opp_r, pw, days, cfg)
             dn = matchup.matchup_now(me_td, opp_td, z0, z0, var_mult, cfg, corr)
-            now = datetime.combine(start - timedelta(days=1), datetime.min.time(), matchup.ET).replace(
-                hour=12
+            now = datetime.combine(start - timedelta(days=1), datetime.min.time(), matchup.ET) + timedelta(
+                hours=bt.plan_hour_et
             )
             inp = {
                 "days": days,

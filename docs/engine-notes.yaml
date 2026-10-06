@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-05-codex-audit
+    date: 2026-10-05
+    kind: finding
+    title: An independent audit, and what it changed
+    body: >
+      OpenAI's Codex (Astra) reviewed the engine and re-ran every benchmark. The numbers matched
+      what was reported, and it found real bugs, now fixed: the add/drop plan could hold 13 players,
+      free throws made could exceed attempts, a day counted as played after its first tip, and the
+      backtests let a little future information in. Re-run: re-projecting each day and reading the
+      NBA injury report clearly improve the win-the-week odds; teammates-out helps individual
+      projections but not measurably the weekly odds.
+    refs: [DECISIONS.md, docs/audits/2026-10-05-codex-astra.md]
+
   - id: 2026-10-05-live-scoreboard
     date: 2026-10-05
     kind: update
@@ -17,12 +30,12 @@ notes:
   - id: 2026-10-05-moves-replay
     date: 2026-10-05
     kind: finding
-    title: Make the week's add/drop plan early and stick to it
+    title: Re-planning adds and drops each day neither helps nor hurts
     body: >
-      Replaying last season, re-planning adds and drops every morning (with or without the
-      injury report) never beat the plan made before the week started: the results changed in
-      only 3-4 of 140 weeks, each for the worse. The early plan already uses nearly all four
-      acquisitions and won 89% of weeks against a manager who doesn't stream.
+      Replaying last season (after an independent audit fixed the replay's timing), re-planning
+      adds and drops every day, with or without the injury report, changed the result in only 1-3
+      of 140 weeks, in both directions. The plan made before the week already wins 89% of weeks
+      against a manager who doesn't stream.
     refs: [DECISIONS.md, src/research_room/backtest_news.py]
 
   - id: 2026-10-05-multi-day-news

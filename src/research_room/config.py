@@ -256,6 +256,8 @@ class BacktestConfig(BaseModel):
     matchups_per_week: int
     react_to_absences: bool = True
     seed: int
+    plan_hour_et: float = 12.0        # the week's plan is made the day before, at this hour (Eastern)
+    decision_hour_et: float = 17.5    # the news replay decides each day at this hour (after the 5 PM report)
 
 
 class OptimizerConfig(BaseModel):

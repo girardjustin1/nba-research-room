@@ -3,25 +3,29 @@
 Inputs: game logs and team context (features.py), the season's games (with tip times), player
 positions, the NBA injury reports stored for that season (`make report-backfill`), the baseline
 model (with and without teammates out) and the simulator calibration, fitted on earlier seasons.
-Outputs: one row per sampled team-week and version: P(win week) at the start of each day, and
+Outputs: one row per sampled team-week and version: P(win week) at each day's decision time, and
 the categories and week each version's lineups actually won. A summary by version and day.
 Tables: reads nba_report_rows, nba_report_teams (the rest comes in as frames).
 
-The weekly backtest (backtest.py) projects once, on Monday, with no game-day news, and sets
-lineups from who actually played. The live app instead re-projects each morning and sets each
-day's lineup from that day's projections. This replays that, for the same simulated league
-(backtest.draft_league), in five versions:
-- monday: Monday's projections all week (no news), lineups from them.
-- daily: re-projected each day from every player's state that morning, no news.
-- daily_news: as daily, plus the NBA injury report published before each game (the latest at
-  least 30 minutes before tip): listed statuses at the calibrated P(plays), and for a team that
-  has filed, a rotation player not listed plays by his recent play rate (overrides.fill_unlisted;
-  "not listed" uses that season's rosters, not today's). Teammates out on.
+The weekly backtest (backtest.py) projects once, as of the Sunday plan, with no game-day news, and
+sets lineups from who actually played. The live app instead re-projects each game day and sets
+each day's lineup from that day's projections. This replays that, for the weekly backtest's own
+league and matchups (its draft and its Sunday projections), in five versions:
+- monday: the weekly backtest's projections all week (no news), lineups from them.
+- daily: re-projected each day from every player's state that morning (games before the day), no
+  news.
+- daily_news: as daily, plus the NBA injury report: for each game, the latest report published by
+  the day's decision time (`backtest.decision_hour_et`, 5:30 PM Eastern) and at least 30 minutes
+  before its tip. Listed statuses at the calibrated P(plays); for a team that has filed, a
+  rotation player not listed plays by his recent play rate (overrides.fill_unlisted; "not listed"
+  uses that season's rosters, not today's). Teammates out on.
 - daily_news_no_tmo: daily_news with teammates out switched off.
 - hindsight: lineups set from who actually played (perfect news), Monday's projections.
-P(win week) at day k: the real totals of that version's starters on days before k, plus that
-version's day-k projections for the rest of the week, for both sides (both managers equally
-informed). Rosters are as drafted (no adds), so lineups and news are the only levers.
+P(win week) at day k (its decision time): the real totals of that version's starters on days
+before k, plus that version's day-k projections for the rest of the week (including day k's
+games), for both sides (both managers equally informed). Rosters are as drafted (no adds), so
+lineups and news are the only levers. Known approximation: a player who never plays again keeps a
+one-game-old state (features.monday_states).
 """
 
 from __future__ import annotations
@@ -44,14 +48,19 @@ def _cut(day: date) -> pd.Timestamp:
 
 
 def report_news(con, games: pd.DataFrame, cfg: Settings) -> tuple[pd.DataFrame, set[tuple[int, int]]]:
-    """Per game, the latest stored report at least 30 minutes before tip: listed players
-    (game_id, player_id, status, p) and the (game_id, team_id) pairs that had filed."""
+    """Per game, the latest stored report published by that day's decision time
+    (`backtest.decision_hour_et`) and at least 30 minutes before its tip (audit F01): listed
+    players (game_id, player_id, status, p) and the (game_id, team_id) pairs that had filed."""
     teams = con.execute("SELECT report_ts, game_id, team_id, submitted FROM nba_report_teams").df()
     rows = con.execute("SELECT report_ts, game_id, player_id, status FROM nba_report_rows").df()
     if teams.empty:
         return pd.DataFrame(columns=["game_id", "player_id", "status", "p"]), set()
-    tips = games.set_index("game_id")["tip_utc"]
-    teams["deadline"] = teams["game_id"].map(tips) - pd.Timedelta(minutes=30)
+    g = games.set_index("game_id")
+    tips = pd.to_datetime(g["tip_utc"], utc=True) - pd.Timedelta(minutes=30)
+    decide = pd.to_datetime(g["game_date"]).dt.tz_localize(matchup.ET) + pd.Timedelta(
+        hours=cfg.backtest.decision_hour_et
+    )
+    teams["deadline"] = teams["game_id"].map(np.minimum(tips, decide.dt.tz_convert("UTC")))
     ok = teams[pd.to_datetime(teams["report_ts"], utc=True) <= pd.to_datetime(teams["deadline"], utc=True)]
     pick = ok.groupby("game_id")["report_ts"].max().rename("pick").reset_index()
     filed = ok.merge(pick, on="game_id")
@@ -147,6 +156,8 @@ def _prepare(
     states = features.monday_states(built[built["season"] == test_season], [_cut(d) for d in all_days])
     states["day"] = states["monday"].dt.tz_convert(matchup.ET).dt.date
     return {
+        "logs": logs,
+        "team_ctx": team_ctx,
         "season": test_season,
         "model": BaselineModel(cfg).fit(train),
         "model_off": BaselineModel(off).fit(train),
@@ -180,7 +191,11 @@ def _weeks(ctx: dict, positions: dict, cfg: Settings, versions=("daily", "daily_
         if not days:
             return
         st = {d: ctx["states"].loc[ctx["states"]["day"] == d, keep] for d in days}
-        mon = project(ctx["model"], st[days[0]], ctx["schedule"], days, None, None, cfg)
+        # The weekly backtest's own projections (state as of the Sunday plan), so every replay
+        # drafts the same league and the Monday version is the weekly one (audit F02, F12).
+        mon = backtest.week_projections(
+            ctx["model"], ctx["logs"], ctx["team_ctx"], ctx["schedule"], start, days, ctx["season"], cfg
+        )
         for pid in mon["player_id"].unique():
             elig.setdefault(int(pid), backtest.eligibility(positions.get(int(pid))))
         if league is None:
@@ -295,11 +310,12 @@ def run_moves(
     - do_nothing: the roster as drafted, lineups from Monday's projections.
     - monday_plan: the optimizer's Sunday plan for the week (Monday projections), as the weekly
       backtest does.
-    - replan_daily: the same Sunday plan's Monday moves, then each morning a re-plan for the rest of
-      the week with that morning's projections and the acquisitions left; only the moves that must
+    - replan_daily: the same Sunday plan's Monday moves, then each day at the decision time a
+      re-plan for the rest of the week with that day's projections and the acquisitions left; only
+      the moves that must
       be made that day (the adds counting from tomorrow) are made, the rest wait for the next re-plan.
-    - replan_news: replan_daily with that morning's NBA report and teammates out.
-    Each day's lineups (both sides) come from the version's projections that morning; outcomes are
+    - replan_news: replan_daily with that day's NBA report (by the decision time) and teammates out.
+    Each day's lineups (both sides) come from the version's projections that day; outcomes are
     real box scores."""
     cfg = cfg or settings()
     ctx = _prepare(con, logs, team_ctx, games, cfg, test_season)
@@ -310,8 +326,8 @@ def run_moves(
         days, made, aw, league = wk["days"], wk["made"], wk["aw"], wk["league"]
         owned = {p for r in league for p in r}
         pool = backtest.roster_frame(sorted(set(wk["mon"]["player_id"]) - owned), wk["elig"], names)
-        sunday = datetime.combine(days[0] - timedelta(days=1), datetime.min.time(), matchup.ET).replace(
-            hour=12
+        sunday = datetime.combine(days[0] - timedelta(days=1), datetime.min.time(), matchup.ET) + timedelta(
+            hours=cfg.backtest.plan_hour_et
         )
         for a, b in wk["matchups"]:
             me_r = backtest.roster_frame(league[a], wk["elig"], names)
@@ -355,9 +371,8 @@ def run_moves(
                         mine = matchup.team_days(rosters[:k] + [roster], decide, days[: k + 1], cfg)
                         step = {
                             "days": rest,
-                            "now": datetime.combine(days[k], datetime.min.time(), matchup.ET).replace(
-                                hour=12
-                            ),
+                            "now": datetime.combine(days[k], datetime.min.time(), matchup.ET)
+                            + timedelta(hours=cfg.backtest.decision_hour_et),
                             "proj": rem,
                             "me_roster": roster,
                             "opp_roster": opp_r,
@@ -424,7 +439,7 @@ def summarize_moves(res: pd.DataFrame) -> dict:
 
 
 def summarize(res: pd.DataFrame) -> dict:
-    """By version: weekly-odds Brier at the start of each day and pooled, and the pooled Brier
+    """By version: weekly-odds Brier at each day's decision time and pooled, and the pooled Brier
     difference against the Monday-only version, paired by team-week (80% bootstrap range). Both
     sides use the same version, so lineup gains cancel: `same_result_as_monday` says how often a
     version's lineups changed the week's result at all. A tied week scores 0.5."""

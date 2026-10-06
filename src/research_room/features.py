@@ -178,8 +178,10 @@ STATE_COLUMNS = ["min_played_ewma", "play_rate_ewma", "games_prior", "min_r3", "
 def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFrame:
     """Each player's feature state as of each Monday (00:00 Eastern, given in UTC), from the feature
     table: his first game at or after Monday carries the state after every game before Monday,
-    exactly what the live system projects from. A player with no later game (out for the season)
-    takes his last game's state, one game stale. Only players who have played before that Monday."""
+    exactly what the live system projects from. His team is the one of his last game before the
+    moment. A player with no later game (out for the season) takes his last game's state, one game
+    stale (known, small: it only affects players who never appear again). Only players who have
+    played before that Monday."""
     keep = ["player_id", "team_id", "tip_utc", *STATE_COLUMNS]
     right = built[keep].sort_values("tip_utc")
     first = right.groupby("player_id")["tip_utc"].min()
@@ -190,11 +192,15 @@ def monday_states(built: pd.DataFrame, mondays: list[pd.Timestamp]) -> pd.DataFr
     fwd = pd.merge_asof(
         pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="forward"
     )
-    back = pd.merge_asof(
-        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="backward"
+    back = pd.merge_asof(                                  # strictly before the moment
+        pairs, right, left_on="monday", right_on="tip_utc", by="player_id", direction="backward",
+        allow_exact_matches=False,
     )
     use_fwd = np.broadcast_to(fwd["tip_utc"].notna().to_numpy()[:, None], fwd.shape)
     out = fwd.where(use_fwd, back)
+    # His team is the one he last played for before the moment, never the next game's (a trade
+    # would otherwise show up early; audit F03).
+    out["team_id"] = back["team_id"].where(back["tip_utc"].notna(), out["team_id"]).to_numpy()
     return out.drop(columns=["tip_utc"]).dropna(subset=["min_played_ewma"])
 
 
