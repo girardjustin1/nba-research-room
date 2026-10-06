@@ -799,3 +799,25 @@ Fixes to how the backtests replay time, then every benchmark re-run (2025-26, 14
 - A spread correction fitted on 2024-25 (a global factor of 0.96, or per category) didn't help
   2025-26: Brier +0.0004 (95% -0.0005 to +0.0013) and +0.0018. No change made. The live
   scoreboard's weekly-odds Brier is the check to watch this season.
+
+**Yahoo Fantasy API, read only (2026-10-06).** `ingest/yahoo_api.py`; `make yahoo-auth` (once,
+in your own terminal), `make yahoo-check`, `make yahoo-pull`. Written and tested on recorded-shape
+fakes while API access is pending; the first live `make yahoo-check` is the check against Yahoo.
+- `ApiBackend` is a drop-in for the CSV inbox: teams, every team's roster, free agents (with NBA
+  team codes from player details), this week's matchup totals (Yahoo's stat ids, now in
+  `categories[].yahoo_stat_id`) with acquisitions used, and draft picks. They go through the same
+  CSV validation and the same ingest, so nothing downstream changes. The nightly run uses the API
+  once signed in and falls back to the CSV inbox if it fails (recorded in ingest_runs).
+- Read only by construction: yahoo_fantasy_api can add, drop, move players and trade. Every call
+  goes through `ReadOnly`, which lets a fixed list of read methods through and raises
+  `YahooWriteBlocked` for anything else (tested, including that no write method is on the list).
+- `make yahoo-check` reads the league's own settings and sets them beside settings.yaml: teams,
+  draft rounds (non-IL roster spots), keepers, roster slots, categories, weekly acquisitions, draft
+  order and my slot, fantasy week dates. Each is match, differs, new (Yahoo has it, settings
+  don't yet) or unknown, with the settings.yaml line to change. It edits nothing: confirming the
+  open draft facts stays a deliberate change.
+- Sign-in: yahoo_oauth's out-of-band flow (the browser shows a code to paste); tokens are saved in
+  oauth2.json (gitignored) and refreshed automatically. Only the Yahoo lines of .env are read; no
+  secret is exported or printed.
+- Found on the way: a blank NBA team code arriving as pandas' NA crashed the shared name resolver
+  (`if not abbr` on NA); fixed for both backends.

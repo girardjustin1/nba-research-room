@@ -33,7 +33,7 @@ from research_room import (
     store,
 )
 from research_room.config import Settings, settings
-from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo
+from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo, yahoo_api
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
@@ -163,6 +163,22 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
     return report
 
 
+def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
+    """Yahoo snapshots: read from the API once signed in (read only), else the CSV inbox. An API
+    failure is recorded and the CSV inbox is used instead."""
+    if yahoo_api.signed_in():
+        try:
+            with store.ingest_run(con, "yahoo_api", "read"):
+                backend = yahoo_api.auto_backend(cfg)
+                backend.available()                        # every read happens here
+            return yahoo.ingest_inbox(con, backend=backend, cfg=cfg)
+        except yahoo.YahooCsvError:
+            raise                                          # a snapshot that fails validation
+        except Exception:  # noqa: BLE001 - recorded in ingest_runs; the CSV inbox still works
+            pass
+    return yahoo.ingest_inbox(con, cfg=cfg)
+
+
 def _guarded(con: duckdb.DuckDBPyConnection, source: str, fn) -> dict:
     """Run one nightly step, recorded in ingest_runs; a failure never stops the run."""
     try:
@@ -236,7 +252,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
                 con, "live_scores", lambda: live_scores.update(con, cfg, day - timedelta(days=1))))
             report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
         try:
-            report["inbox"] = step("yahoo inbox", lambda: yahoo.ingest_inbox(con))
+            report["inbox"] = step("yahoo inbox", lambda: _yahoo(con, cfg))
         except yahoo.YahooCsvError as exc:
             report["inbox"] = {"rejected": str(exc)}
             echo(f"yahoo inbox REJECTED: {exc}")

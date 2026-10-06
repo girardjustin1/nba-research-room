@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-06-yahoo-api
+    date: 2026-10-06
+    kind: update
+    title: Ready to read the league straight from Yahoo
+    body: >
+      Once Yahoo grants API access and you sign in once (make yahoo-auth), the app reads every
+      roster, the free agents, this week's matchup totals and the draft picks itself, so no more
+      CSV exports, and make yahoo-check confirms the draft rounds, order and week dates against our
+      settings. It can only read: anything that would act inside Yahoo is blocked.
+    refs: [DECISIONS.md, src/research_room/ingest/yahoo_api.py]
+
   - id: 2026-10-06-odds-check
     date: 2026-10-06
     kind: finding

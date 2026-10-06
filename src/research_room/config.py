@@ -31,6 +31,7 @@ class Category(BaseModel):
     higher_is_better: bool = True
     made: str | None = None
     attempts: str | None = None
+    yahoo_stat_id: int | None = None      # Yahoo Fantasy API stat id (matchup totals)
 
     @model_validator(mode="after")
     def _pct_needs_components(self) -> Category:

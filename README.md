@@ -41,6 +41,9 @@ make test && make lint
 make doctor                      # draft-night readiness: what is missing and how to fix it
 make markets                     # archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
 make pregame-schedule            # game days: X news + NBA injury report + injuries + markets + projections every 15 min before tip
+make yahoo-auth                  # once: sign in to the read-only Yahoo Fantasy API (your terminal)
+make yahoo-check                 # Yahoo league settings beside settings.yaml (rounds, order, weeks, ...)
+make yahoo-pull                  # rosters, free agents, matchup totals, draft picks from Yahoo
 make scoreboard-live             # grade what the app said before each game against what happened
 make report-backfill SEASONS="2025"  # store a past season's NBA injury reports (for the news backtest)
 make backtest-news               # replay that season day by day: does game-day news make the weekly odds more honest?

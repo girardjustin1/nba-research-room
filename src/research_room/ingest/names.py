@@ -83,7 +83,7 @@ class NameResolver:
                 self._alias[normalize_name(variant)] = ("alias", entry.get("player_id"), canonical)
 
     def _team(self, abbr: str | None) -> str | None:
-        if not abbr:
+        if abbr is None or pd.isna(abbr) or not str(abbr).strip():   # blank or pandas NA
             return None
         up = str(abbr).upper()
         return self._team_aliases.get(up, up)

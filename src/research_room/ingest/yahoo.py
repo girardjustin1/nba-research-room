@@ -1,5 +1,6 @@
-"""Yahoo Fantasy ingest (read-only). CSV snapshots in data/inbox/ are the default backend;
-an OAuth `ApiBackend` will implement the same interface once API access is approved.
+"""Yahoo Fantasy ingest (read-only). Two backends with one interface: CSV snapshots in
+data/inbox/, and the Fantasy API (ingest/yahoo_api.py `ApiBackend`, used by the nightly run once
+`make yahoo-auth` has signed in).
 
 Inputs: data/inbox/{teams,roster,players,matchup,draft_results}.csv (column schemas in `SCHEMAS`
 and the README), settings.league.

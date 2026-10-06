@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -58,6 +58,15 @@ backtest:  ## replay last season week by week: are the win odds honest, do the p
 
 backtest-news:  ## replay last season day by day with the NBA injury reports: does game-day news help?
 	$(PY) jobs/backtest_news.py $(ARGS)
+
+yahoo-auth:  ## one-time Yahoo sign-in for the read-only Fantasy API (run in your own terminal)
+	$(PY) jobs/yahoo_auth.py
+
+yahoo-check:  ## compare the league's Yahoo settings with settings.yaml (read only)
+	$(PY) jobs/yahoo_check.py
+
+yahoo-pull:  ## read teams, rosters, free agents, matchup totals and draft picks from Yahoo (read only)
+	$(PY) jobs/yahoo_pull.py
 
 scoreboard-live:  ## grade what the app said before each game against what happened (season to date)
 	$(PY) jobs/scoreboard_live.py $(ARGS)

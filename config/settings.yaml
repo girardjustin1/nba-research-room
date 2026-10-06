@@ -9,16 +9,17 @@ league:
   public: false
   format: h2h_one_win          # one W or L per week: majority of the 9 categories
 
-categories:                    # higher_is_better: false means fewer wins the category
-  - {key: fg_pct, label: FG%,  kind: pct,   made: fgm,  attempts: fga, higher_is_better: true}
-  - {key: ft_pct, label: FT%,  kind: pct,   made: ftm,  attempts: fta, higher_is_better: true}
-  - {key: fg3m,   label: 3PTM, kind: count, higher_is_better: true}
-  - {key: pts,    label: PTS,  kind: count, higher_is_better: true}
-  - {key: reb,    label: REB,  kind: count, higher_is_better: true}
-  - {key: ast,    label: AST,  kind: count, higher_is_better: true}
-  - {key: stl,    label: ST,   kind: count, higher_is_better: true}
-  - {key: blk,    label: BLK,  kind: count, higher_is_better: true}
-  - {key: tov,    label: TO,   kind: count, higher_is_better: false}
+categories:                    # higher_is_better: false means fewer wins the category;
+                               # yahoo_stat_id: Yahoo's NBA stat id (standard ids; checked on the first API read)
+  - {key: fg_pct, label: FG%,  kind: pct,   made: fgm,  attempts: fga, higher_is_better: true, yahoo_stat_id: 5}
+  - {key: ft_pct, label: FT%,  kind: pct,   made: ftm,  attempts: fta, higher_is_better: true, yahoo_stat_id: 8}
+  - {key: fg3m,   label: 3PTM, kind: count, higher_is_better: true, yahoo_stat_id: 10}
+  - {key: pts,    label: PTS,  kind: count, higher_is_better: true, yahoo_stat_id: 12}
+  - {key: reb,    label: REB,  kind: count, higher_is_better: true, yahoo_stat_id: 15}
+  - {key: ast,    label: AST,  kind: count, higher_is_better: true, yahoo_stat_id: 16}
+  - {key: stl,    label: ST,   kind: count, higher_is_better: true, yahoo_stat_id: 17}
+  - {key: blk,    label: BLK,  kind: count, higher_is_better: true, yahoo_stat_id: 18}
+  - {key: tov,    label: TO,   kind: count, higher_is_better: false, yahoo_stat_id: 19}
 
 roster:
   slots: [PG, SG, G, SF, PF, F, C, C, Util, Util, BN, BN, IL]   # from Yahoo, 2026-10-04
