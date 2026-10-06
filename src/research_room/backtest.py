@@ -27,6 +27,7 @@ re-planned mid-week; rosters don't carry plans from week to week.
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import date, datetime, timedelta
 
@@ -279,10 +280,19 @@ def run(
                     "tie_plan": cats_plan == opp_plan,
                     "n_moves": len(plan.moves),
                     "solve_ms": plan.solve_ms,
+                    # Per category, doing nothing: P(win), both sides' projected final and sd, and
+                    # what happened, so the spreads can be checked and refitted offline.
+                    "cats_detail": json.dumps({
+                        c.key: [dn.p_cat[c.key], *dn.final_me[c.key], *dn.final_opp[c.key],
+                                me_act[c.key], opp_act[c.key]]
+                        for c in cfg.categories
+                    }),
                 }
             )
         echo(f"week of {start}: {len(rows)} team-weeks so far")
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    out.attrs = {"corr": corr.tolist(), "var_mult": var_mult}   # the calibration the odds used
+    return out
 
 
 def summarize(res: pd.DataFrame) -> dict:

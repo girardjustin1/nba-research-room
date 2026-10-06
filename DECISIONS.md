@@ -783,3 +783,19 @@ Fixes to how the backtests replay time, then every benchmark re-run (2025-26, 14
   baseline's P(plays) x P(over | plays), so part of the market's edge may come from the baseline
   carrying availability risk the props don't. The market-mean RMSE test (graded on games played)
   isn't affected. To re-test on this season's archive with both sides if-he-plays.
+
+**Are the weekly odds overconfident? No, not measurably (2026-10-06).** After the audit re-run the
+2025-26 weekly backtest's 80-100% band won 76% of 17 weeks, so the odds were checked more widely.
+- The backtest now records, per matchup and category, P(win), both sides' projected final and sd,
+  and the real totals (`backtest_results.cats_detail`), so spreads can be checked offline.
+- Two seasons, 24 weeks each, all matchups: 2024-25 (fitted on 2023-24 only) and 2025-26, 168
+  team-weeks each.
+- Per category the spreads are right or slightly wide, never narrow: realized edge errors in units
+  of the forecast sd have a spread of 0.79-1.04 (2024-25) and 0.93-1.00 (2025-26); 1 is exact.
+- The two seasons disagree at the top: 2024-25's 80-100% band predicted 90% and won 93% (44
+  weeks), 2025-26's 90% and 79% (26). Pooled (336): 11/16%, 31/30%, 50/52%, 71/73%, 90/88%
+  (predicted/won). The top-band gap is noise (binomial p = 0.69); the calibration slope is 0.87
+  (95% 0.68 to 1.13; 1 = honest).
+- A spread correction fitted on 2024-25 (a global factor of 0.96, or per category) didn't help
+  2025-26: Brier +0.0004 (95% -0.0005 to +0.0013) and +0.0018. No change made. The live
+  scoreboard's weekly-odds Brier is the check to watch this season.

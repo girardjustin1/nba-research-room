@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-06-odds-check
+    date: 2026-10-06
+    kind: finding
+    title: The win-the-week odds are honest
+    body: >
+      Checked over two replayed seasons (336 matchups): weeks given about 90% were won 88% of the
+      time, 70% about 73%, 50% about 52%. One season alone looked overconfident at the top, but
+      the other went the opposite way, and a correction fitted on one season made the other worse,
+      so the odds stay as they are.
+    refs: [DECISIONS.md]
+
   - id: 2026-10-05-codex-audit
     date: 2026-10-05
     kind: finding

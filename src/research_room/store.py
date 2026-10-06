@@ -146,7 +146,7 @@ SCHEMA: dict[str, Table] = {
         "run_at TIMESTAMPTZ", "season INTEGER", "week_start DATE", "team INTEGER", "opponent INTEGER",
         "p_dn DOUBLE", "p_plan DOUBLE", "cats_dn INTEGER", "cats_plan INTEGER", "won_dn BOOLEAN",
         "won_plan BOOLEAN", "n_moves INTEGER", "solve_ms DOUBLE", "cats_opp_dn INTEGER",
-        "cats_opp_plan INTEGER", "tie_dn BOOLEAN", "tie_plan BOOLEAN"),
+        "cats_opp_plan INTEGER", "tie_dn BOOLEAN", "tie_plan BOOLEAN", "cats_detail JSON"),
     "decisions_log": _t(("decision_id",),
         "decision_id VARCHAR", "ts TIMESTAMPTZ", "page VARCHAR", "kind VARCHAR",
         "recommendation JSON", "inputs JSON", "model_version VARCHAR"),
