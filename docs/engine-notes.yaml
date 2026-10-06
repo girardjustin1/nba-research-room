@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-06-live-tab
+    date: 2026-10-06
+    kind: update
+    title: The nightly report card is on the System screen
+    body: >
+      System now has a Live tab: how far off each stat's projections were, whether the betting
+      market or our model was closer, how well we called who would play, how often each news
+      source's statuses came true, and how honest the win-the-week odds were. It fills in after
+      opening night; switch between the season and the last 7 days.
+    refs: [DECISIONS.md, web/src/components/app-shell/system/LiveView.tsx]
+
   - id: 2026-10-06-yahoo-api
     date: 2026-10-06
     kind: update

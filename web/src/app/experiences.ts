@@ -19,7 +19,7 @@ export const EXPERIENCE_HOME: Record<Experience, string> = {
 export const EXPERIENCE_LABEL: Record<Experience, { title: string; subtitle: string }> = {
   draft: { title: 'Draft', subtitle: 'Live draft board and picks' },
   league: { title: 'League', subtitle: 'Play the season: matchup, lineup, players' },
-  system: { title: 'System', subtitle: 'Health, draft readiness, model scores, updates' },
+  system: { title: 'System', subtitle: 'Health, draft readiness, model scores, live grades, updates' },
 };
 
 /** season-ui screens call onTabChange with their tab names; map them onto League routes. */

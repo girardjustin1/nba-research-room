@@ -821,3 +821,20 @@ fakes while API access is pending; the first live `make yahoo-check` is the chec
   secret is exported or printed.
 - Found on the way: a blank NBA team code arriving as pandas' NA crashed the shared name resolver
   (`if not abbr` on NA); fixed for both backends.
+
+**Live scoreboard on the System screen (2026-10-06).** `GET /system/scoreboard`
+(`system.live_scoreboard`), a "Live" tab between Models and Updates (`#/system/live`, `LiveView`).
+- The response holds two windows (the season so far, the last 7 days) of `live_scores.summary`:
+  per stat the average miss, lean and 80% band coverage; on market games the market's miss
+  against our model's; the P(plays) Brier and its lean; projected player-games with no box score;
+  each news source's statuses against how often those players played, beside the P(plays)
+  assumed; and the weekly odds' Brier once a week's Yahoo result is in.
+- Before opening night it says grading starts after the first games, instead of showing empty
+  cards. Sections without data (no market games yet, no finished week) are hidden or say when
+  they'll fill in.
+- Five System tabs no longer fit at 360 px with MUI's minimum tab width; the tabs now shrink to
+  their labels (checked by screenshot at 360 and 390 px).
+- Storybook: `App Shell/System/Live Scoreboard` (season, last 7 days, opening week, before the
+  season, loading, API down, refresh failed), `App Shell/System/Screen/Live`, and the prototype
+  route `Prototype/System Live` (the route sync test covers it). Demo mode serves the mid-season
+  sample.

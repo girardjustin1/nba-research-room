@@ -34,4 +34,5 @@ export const LeagueNotifications = at('#/league/notifications');
 export const SystemHealth = at('#/system/health');
 export const SystemDraftReadiness = at('#/system/draft');
 export const SystemModels = at('#/system/models');
+export const SystemLive = at('#/system/live');
 export const SystemUpdates = at('#/system/notes');

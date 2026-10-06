@@ -14,6 +14,7 @@ type Story = StoryObj<typeof meta>;
 export const Health: Story = {};
 export const DraftReadiness: Story = { args: { tab: 'draft' } };
 export const Models: Story = { args: { tab: 'models' } };
+export const Live: Story = { args: { tab: 'live' } };
 export const Updates: Story = { args: { tab: 'notes' } };
 /** Live mode with the endpoint missing (404): sample data with the "Prototype data" chip. */
 export const EndpointMissing: Story = { args: { mode: 'live' } };

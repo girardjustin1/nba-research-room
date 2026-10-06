@@ -4,7 +4,7 @@ import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
 import type { AppApis } from '../app/types';
-import { healthWarn, modelsNormal, notesNormal, readinessWarn } from '../mocks/app-shell/system';
+import { healthWarn, liveScoreboardNormal, modelsNormal, notesNormal, readinessWarn } from '../mocks/app-shell/system';
 import { CATEGORIES, makeBoard, makeCompare, makeInsights, makePool, makePositional, makeStrength, makeTeams } from '../mocks/draft/fixtures';
 import { demoSession, DemoPickError, initialDemoDraft, recordDemoPick, removeDemoPick, undoDemoPick, type DemoDraft } from '../mocks/draft/demoState';
 import { SAMPLE_PLAYERS } from '../mocks/draft/players';
@@ -146,6 +146,7 @@ function routes(): [string, RegExp, Handler][] {
     ['GET', /^\/system\/health$/, () => healthWarn],
     ['GET', /^\/system\/readiness$/, () => readinessWarn],
     ['GET', /^\/system\/models$/, () => modelsNormal],
+    ['GET', /^\/system\/scoreboard$/, () => liveScoreboardNormal],
     ['GET', /^\/system\/notes$/, () => notesNormal],
   ];
 }

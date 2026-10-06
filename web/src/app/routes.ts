@@ -67,6 +67,7 @@ export const ROUTES: AppRoute[] = [
   sys('health', '#/system/health', 'Health checks', 'prototype--system-health'),
   sys('draft', '#/system/draft', 'Draft readiness', 'prototype--system-draft-readiness'),
   sys('models', '#/system/models', 'Model performance', 'prototype--system-models'),
+  sys('live', '#/system/live', 'Live scoreboard', 'prototype--system-live'),
   sys('notes', '#/system/notes', 'Updates from Claude', 'prototype--system-updates'),
 ];
 

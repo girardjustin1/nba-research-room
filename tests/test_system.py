@@ -86,3 +86,36 @@ def test_notes_are_sorted_newest_first(tmp_path):
     assert system.notes(tmp_path / "missing.yaml") == {"notes": []}
     repo = system.notes()["notes"]
     assert repo and all({"id", "date", "kind", "title", "body"} <= set(n) for n in repo)
+
+
+def test_live_scoreboard_shapes_the_season_and_last_week(con):
+    """GET /system/scoreboard: empty before any grading, then stats, market, P(plays), news."""
+    from datetime import date
+
+    from research_room import system
+
+    empty = system.live_scoreboard(con, today=date(2026, 10, 25))
+    assert empty["season"]["days"] == 0 and empty["season"]["stats"] == [] and empty["as_of"] is None
+    now = pd.Timestamp("2026-10-25 12:00", tz="UTC")
+    rows = [
+        {"day": date(2026, 10, 21), "stat": "pts", "segment": "all", "n": 100, "mae": 4.5, "rmse": 6.0,
+         "bias": -0.3, "coverage_80": 0.81, "graded_at": now},
+        {"day": date(2026, 10, 21), "stat": "pts", "segment": "market", "n": 20, "mae": 4.0, "rmse": 5.0,
+         "bias": 0.1, "coverage_80": None, "graded_at": now},
+        {"day": date(2026, 10, 21), "stat": "pts", "segment": "market_model", "n": 20, "mae": 4.6,
+         "rmse": 5.8, "bias": -0.9, "coverage_80": None, "graded_at": now},
+        {"day": date(2026, 10, 21), "stat": "p_play", "segment": "brier", "n": 100, "mae": 0.1, "rmse": 0.3,
+         "bias": 0.02, "coverage_80": None, "graded_at": now},
+        {"day": date(2026, 10, 21), "stat": "_coverage", "segment": "no_box_score", "n": 3, "mae": None,
+         "rmse": None, "bias": None, "coverage_80": None, "graded_at": now},
+    ]
+    store.upsert(con, "live_scores", pd.DataFrame(rows))
+    store.upsert(con, "live_news_scores", pd.DataFrame([{"day": date(2026, 10, 21), "source": "nba_report",
+                 "status": "Questionable", "listed": 10, "played": 5, "graded_at": now}]))
+    out = system.live_scoreboard(con, today=date(2026, 10, 25))
+    s = out["season"]
+    assert s["days"] == 1 and s["stats"][0]["stat"] == "pts" and s["stats"][0]["coverage_80"] == 0.81
+    assert s["market"] == [{"stat": "pts", "n": 20, "market_mae": 4.0, "model_mae": 4.6}]
+    assert s["p_play"]["brier"] == pytest.approx(0.09) and s["ungraded"] == 3
+    assert s["news"][0]["played_rate"] == 0.5 and s["news"][0]["assumed"] == 0.49
+    assert out["last_7_days"]["days"] == 1

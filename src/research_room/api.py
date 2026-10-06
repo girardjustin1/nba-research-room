@@ -716,6 +716,14 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         finally:
             con.close()
 
+    @app.get("/system/scoreboard")
+    def get_system_scoreboard() -> dict:
+        con = read_con()
+        try:
+            return system.live_scoreboard(con)
+        finally:
+            con.close()
+
     @app.get("/system/notes")
     def get_system_notes() -> dict:
         return system.notes()

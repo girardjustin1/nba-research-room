@@ -1,4 +1,11 @@
-import type { HealthResponse, ModelsResponse, NotesResponse, ReadinessResponse } from '../../api/system';
+import type {
+  HealthResponse,
+  LiveBlock,
+  LiveScoreboardResponse,
+  ModelsResponse,
+  NotesResponse,
+  ReadinessResponse,
+} from '../../api/system';
 
 /** Invented System data for stories and the app's "Prototype data" fallback. */
 const AS_OF = '2026-11-18T18:42:00-05:00';
@@ -170,4 +177,88 @@ export const readinessError: ReadinessResponse = {
     { key: 'keepers', label: 'Keepers', status: 'error', detail: "keeper 'Sample Player' not matched (ambiguous); add player_id", action: 'fix draft.keepers in config/settings.yaml' },
     ...readinessWarn.checks.filter((c) => c.key !== 'keepers'),
   ],
+};
+
+// ---- live scoreboard (GET /system/scoreboard): illustrative numbers, sized like the backtests
+const liveStat = (stat: string, n: number, mae: number, bias: number, coverage: number, played: number) => ({
+  stat, n, mae, bias, coverage_80: coverage, played_mae: played,
+});
+
+const liveSeason: LiveBlock = {
+  days: 34,
+  stats: [
+    liveStat('minutes', 9120, 5.9, 0.6, 0.79, 5.1),
+    liveStat('pts', 9120, 4.9, 0.4, 0.81, 4.6),
+    liveStat('reb', 9120, 2.1, 0.1, 0.8, 1.95),
+    liveStat('ast', 9120, 1.5, -0.1, 0.82, 1.42),
+    liveStat('stl', 9120, 0.71, 0.0, 0.86, 0.7),
+    liveStat('blk', 9120, 0.52, 0.02, 0.88, 0.5),
+    liveStat('fg3m', 9120, 0.95, 0.05, 0.83, 0.9),
+    liveStat('tov', 9120, 0.9, 0.04, 0.8, 0.86),
+  ],
+  market: [
+    { stat: 'pts', n: 1480, market_mae: 4.2, model_mae: 4.7 },
+    { stat: 'reb', n: 1210, market_mae: 1.98, model_mae: 2.06 },
+    { stat: 'ast', n: 1190, market_mae: 1.49, model_mae: 1.47 },
+  ],
+  p_play: { n: 9120, brier: 0.071, bias: 0.012 },
+  ungraded: 41,
+  news: [
+    { source: 'nba_report', status: 'Out', listed: 812, played: 1, played_rate: 0.0012, assumed: 0 },
+    { source: 'nba_report', status: 'Doubtful', listed: 31, played: 1, played_rate: 0.032, assumed: 0.02 },
+    { source: 'nba_report', status: 'Questionable', listed: 143, played: 66, played_rate: 0.462, assumed: 0.49 },
+    { source: 'nba_report', status: 'Probable', listed: 58, played: 54, played_rate: 0.931, assumed: 0.91 },
+    { source: 'x', status: 'Out', listed: 96, played: 2, played_rate: 0.021, assumed: 0 },
+    { source: 'x', status: 'Questionable', listed: 22, played: 12, played_rate: 0.545, assumed: 0.49 },
+    { source: 'bdl', status: 'Out', listed: 640, played: 9, played_rate: 0.014, assumed: 0 },
+    { source: 'bdl', status: 'Day-To-Day', listed: 118, played: 79, played_rate: 0.669, assumed: 0.6 },
+  ],
+  weekly_odds: { weeks: 5, brier_all_snapshots: 0.128, brier_first_snapshot: 0.189 },
+};
+
+export const liveScoreboardNormal: LiveScoreboardResponse = {
+  as_of: AS_OF,
+  season_start: '2026-10-20',
+  season: liveSeason,
+  last_7_days: {
+    ...liveSeason,
+    days: 7,
+    stats: liveSeason.stats.map((r) => ({ ...r, n: Math.round(r.n / 5), mae: r.mae == null ? null : r.mae * 1.04 })),
+    market: liveSeason.market.map((r) => ({ ...r, n: Math.round(r.n / 5) })),
+    ungraded: 6,
+    news: liveSeason.news.map((r) => ({ ...r, listed: Math.max(1, Math.round(r.listed / 5)), played: Math.round(r.played / 5) })),
+    weekly_odds: { weeks: 1, brier_all_snapshots: 0.112, brier_first_snapshot: 0.17 },
+  },
+  note: 'Each finished game is graded against the last projection made before its tip. A game he sat counts 0, as projected.',
+};
+
+const earlyBlock: LiveBlock = {
+  days: 3,
+  stats: liveSeason.stats.map((r) => ({ ...r, n: 780 })),
+  market: [],
+  p_play: { n: 780, brier: 0.083, bias: 0.031 },
+  ungraded: 4,
+  news: [
+    { source: 'nba_report', status: 'Out', listed: 70, played: 0, played_rate: 0, assumed: 0 },
+    { source: 'nba_report', status: 'Questionable', listed: 9, played: 4, played_rate: 0.444, assumed: 0.49 },
+  ],
+  weekly_odds: null,
+};
+
+/** Opening week: a few days graded, no market games or finished weeks yet. */
+export const liveScoreboardEarly: LiveScoreboardResponse = {
+  ...liveScoreboardNormal,
+  season: earlyBlock,
+  last_7_days: earlyBlock,
+};
+
+const emptyBlock: LiveBlock = { days: 0, stats: [], market: [], p_play: null, ungraded: 0, news: [], weekly_odds: null };
+
+/** Before opening night: nothing graded yet. */
+export const liveScoreboardEmpty: LiveScoreboardResponse = {
+  as_of: null,
+  season_start: '2026-10-20',
+  season: emptyBlock,
+  last_7_days: emptyBlock,
+  note: liveScoreboardNormal.note,
 };

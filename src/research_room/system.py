@@ -185,6 +185,60 @@ def models(con: duckdb.DuckDBPyConnection) -> dict:
                      "drive recommendations.")}
 
 
+LIVE_STATS = ("minutes", "pts", "reb", "ast", "stl", "blk", "fg3m", "tov", "fga", "fgm", "fta", "ftm")
+
+
+def _live_block(summary: dict) -> dict:
+    """One window of live_scores.summary, shaped for the System screen."""
+    recs = summary.get("projections") or []
+    by = {(r["stat"], r["segment"]): r for r in recs}
+    num = lambda v: None if v is None or (isinstance(v, float) and pd.isna(v)) else float(v)  # noqa: E731
+    stats = [{"stat": st, "n": int(by[(st, "all")]["n"]), "mae": num(by[(st, "all")]["mae"]),
+              "bias": num(by[(st, "all")]["bias"]), "coverage_80": num(by[(st, "all")]["coverage_80"]),
+              "played_mae": num(by.get((st, "played"), {}).get("mae"))}
+             for st in LIVE_STATS if (st, "all") in by]
+    market = [{"stat": st, "n": int(by[(st, "market")]["n"]), "market_mae": num(by[(st, "market")]["mae"]),
+               "model_mae": num(by[(st, "market_model")]["mae"])}
+              for st in LIVE_STATS if (st, "market") in by and (st, "market_model") in by]
+    pp = by.get(("p_play", "brier"))
+    return {
+        "days": int(summary.get("days") or 0),
+        "stats": stats,
+        "market": market,
+        "p_play": {"n": int(pp["n"]), "brier": num(pp.get("brier")), "bias": num(pp["bias"])} if pp else None,
+        "ungraded": int(by.get(("_coverage", "no_box_score"), {}).get("n", 0)),
+        "news": [{"source": r["source"], "status": r["status"], "listed": int(r["listed"]),
+                  "played": int(r["played"]), "played_rate": num(r["played_rate"]),
+                  "assumed": num(r.get("assumed"))}
+                 for r in summary.get("news") or []],
+        "weekly_odds": summary.get("weekly_odds"),
+    }
+
+
+def live_scoreboard(con: duckdb.DuckDBPyConnection, cfg=None, today=None) -> dict:
+    """The live scoreboard (live_scores.py): what the app said before each game against what
+    happened, for the season so far and the last 7 days."""
+    from datetime import timedelta
+
+    from research_room import live_scores
+    from research_room.config import settings
+
+    cfg = cfg or settings()
+    today = today or pd.Timestamp.now(tz="America/New_York").date()
+    have = store.has_table(con, "live_scores")
+    as_of = con.execute("SELECT max(graded_at) FROM live_scores").fetchone()[0] if have else None
+    season = live_scores.summary(con, cfg) if have else {}
+    week = live_scores.summary(con, cfg, today - timedelta(days=7)) if have else {}
+    return {
+        "as_of": _iso(as_of),
+        "season_start": cfg.season.first_game_date.isoformat(),
+        "season": _live_block(season),
+        "last_7_days": _live_block(week),
+        "note": ("Each finished game is graded against the last projection made before its tip. A game "
+                 "he sat counts 0, as projected. Grading runs nightly after the box scores arrive."),
+    }
+
+
 def notes(path: Path | None = None) -> dict:
     p = path or NOTES_PATH
     raw = yaml.safe_load(p.read_text()) if p.exists() else {}

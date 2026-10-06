@@ -29,7 +29,8 @@ export interface ModelsViewProps {
 const BASELINE = 'baseline';
 const TARGET = 0.8;
 
-function Calibration({ coverage }: { coverage: number | null }) {
+/** Share of outcomes inside the 80% band, against the 80% target mark. */
+export function Calibration({ coverage }: { coverage: number | null }) {
   const viz = useVizColors();
   const v = coverage == null ? 0 : Math.max(0, Math.min(1, coverage)) * 100;
   return (
