@@ -269,6 +269,8 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             # An outage leaves yesterday's data: projections still run (recorded in ingest_runs).
             report["bdl"] = step("bdl sync", lambda: _soft(lambda: bdl.sync_daily(con, api, day)))
             report["nba_report"] = step("nba injury report", lambda: _guarded_report(con, cfg))
+            # Late-evening news about tomorrow's games, read tonight (round-3 audit X03).
+            report["x_feed"] = step("x feed", lambda: _guarded(con, "x", lambda: x_feed.poll(con, cfg)))
             report["live_scores"] = step("live scoreboard", lambda: _guarded(
                 con, "live_scores", lambda: live_scores.update(con, cfg, day - timedelta(days=1))))
             report["scorecard"] = step("scorecard", lambda: _guarded(

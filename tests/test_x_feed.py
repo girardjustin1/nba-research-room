@@ -143,7 +143,7 @@ def test_budget_is_hard_and_no_games_means_no_reads(seeded):
     tight = cfg.model_copy(update={"x_feed": cfg.x_feed.model_copy(update={"daily_read_budget": 2})})
     fx = FakeX(_posts())
     first = x_feed.poll(seeded, tight, client=fx, parser=FakeParser(), now=NOW)
-    assert first["posts_read"] == 0 and fx.calls == []  # under 10 left: no search at all
+    assert first["status"] == "skipped" and fx.calls == []  # under 10 left: no search at all
     store.upsert(
         seeded,
         "x_feed_log",
@@ -156,7 +156,7 @@ def test_budget_is_hard_and_no_games_means_no_reads(seeded):
     off = x_feed.poll(
         seeded, cfg, client=FakeX(_posts()), parser=FakeParser(), now=datetime(2026, 11, 6, 21, tzinfo=UTC)
     )
-    assert off == {"status": "skipped", "reason": "no games today"}
+    assert off == {"status": "skipped", "reason": "no games today or tomorrow"}
 
 
 class TimeFrameParser(FakeParser):
@@ -216,14 +216,17 @@ def test_a_late_night_post_is_about_the_next_game_not_tonight(seeded):
     assert ov["date"].tolist() == [date(2026, 11, 6)] and not ov["carried"].any()   # audit B10
 
 
-def test_a_stated_date_wins_and_a_date_without_a_game_falls_back(seeded):
+def test_a_stated_date_wins_and_a_date_without_a_game_is_never_acted_on(seeded):
     _next_game(seeded)
     x_feed.poll(seeded, settings(), client=FakeX(_one_post("2026-11-04T20:30:00Z")),
                 parser=DatedParser("2026-11-06"), now=NOW)
     assert seeded.execute("SELECT game_id, game_basis FROM status_events").fetchone() == (10, "stated")
-    seeded.execute("DELETE FROM status_events")
-    seeded.execute("DELETE FROM x_feed_log")
+    for t in ("status_events", "x_feed_log", "x_feed_seen", "x_feed_cursor"):
+        seeded.execute(f"DELETE FROM {t}")
     x_feed.poll(seeded, settings(), client=FakeX(_one_post("2026-11-04T20:30:00Z")),
                 parser=DatedParser("2026-11-05"), now=NOW)                # no game that day
-    assert seeded.execute("SELECT game_id, game_basis FROM status_events").fetchone() == (9, "next_game")
+    row = seeded.execute("SELECT game_id, game_date, game_basis FROM status_events").fetchone()
+    assert row == (None, date(2026, 11, 5), "unmatched")                 # kept for diagnosis (audit X05)
+    ov = overrides.from_status_events(seeded, date(2026, 11, 4), date(2026, 11, 7), NOW, settings())
+    assert ov.empty                                                       # never acted on
 

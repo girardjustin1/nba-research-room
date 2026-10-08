@@ -115,7 +115,7 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
     to `end`. Rows after the game's date are `carried`: same-day news on those dates outranks them."""
     have = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name = 'status_events'").fetchall()}
-    opt = ("out_days_min", "out_days_max", "game_date")
+    opt = ("out_days_min", "out_days_max", "game_date", "game_basis")
     days = ", ".join(c if c in have else f"NULL AS {c}" for c in opt)
     ev = con.execute(f"""
         SELECT player_id, team_id, status, minutes_cap, account, ts, {days},
@@ -126,6 +126,8 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
     cap = cfg.overrides.max_carry_days
     rows = []
     for r in ev.itertuples(index=False):
+        if r.game_basis == "unmatched":   # a stated date with no game for him: never acted on (X05)
+            continue
         posted = pd.Timestamp(r.ts).tz_convert("America/New_York").date()
         d0 = pd.Timestamp(r.game_date).date() if pd.notna(r.game_date) else posted
         status = str(r.status)
@@ -138,7 +140,7 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
             plan = [(posted + timedelta(days=k), 0.0) for k in range(lo_d)]
             plan += [(posted + timedelta(days=k), (k - lo_d + 1) / (hi_d - lo_d + 2))
                      for k in range(lo_d, hi_d + 1)] if hi_d > lo_d else []
-            plan = [(d, p) for d, p in plan if d >= d0] or [(d0, 0.0)]
+            plan = [(d, p) for d, p in plan if d >= d0]   # over before his next game: nothing (X05)
         else:
             plan = [(d0, _prob(status, cfg))]
         span = f"out {lo:.0f}" + (f"-{hi:.0f}" if hi and hi > lo else "+") + " days" if lo else None
@@ -252,10 +254,15 @@ def from_manual(con: duckdb.DuckDBPyConnection, start: date, end: date, cfg: Set
 
 def _drop_overtaken(rows: pd.DataFrame) -> pd.DataFrame:
     """A carried forecast ends once newer same-day news says he's likely to play (not listed, or
-    P(plays) >= 0.5): its rows from that date on are dropped. A newer "out" keeps it."""
+    P(plays) >= 0.5): its rows from that date on are dropped. A newer "out" keeps it. Only the
+    same-day report that wins its day counts: a lower-authority "probable" that loses to an
+    official "out" ends nothing (round-3 audit X08)."""
     carried = rows[rows["carried"]]
-    p = pd.to_numeric(rows["play_prob"], errors="coerce")
-    fresh = rows[~rows["carried"] & ((rows["status"] == NOT_LISTED) | (p >= 0.5))]
+    won = (rows[~rows["carried"]].sort_values(["player_id", "date", "_rank", "_ts"],
+                                               ascending=[True, True, True, False])
+           .drop_duplicates(["player_id", "date"]))
+    p = pd.to_numeric(won["play_prob"], errors="coerce")
+    fresh = won[(won["status"] == NOT_LISTED) | (p >= 0.5)]
     if carried.empty or fresh.empty:
         return rows
     pair = carried[["player_id", "date", "_ts"]].reset_index().merge(
@@ -266,13 +273,17 @@ def _drop_overtaken(rows: pd.DataFrame) -> pd.DataFrame:
 
 def resolve(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime | None = None,
             cfg: Settings | None = None, manual_path: Path | None = None) -> pd.DataFrame:
-    """One row per player-date: the winning source's play_prob and minutes_cap."""
+    """One row per player-date: the winning source's play_prob and minutes_cap. Absences are
+    worked out over the days before `start` too (as far back as one can be carried), then cut
+    to the dates asked for, so a return that ended an absence still ends it when the dates asked
+    for start after the return (round-3 audit X07)."""
     cfg = cfg or settings()
     as_of = as_of or store.utcnow()
-    parts = [f for f in (from_injuries(con, start, end, as_of, cfg),
-                         from_nba_report(con, start, end, as_of, cfg),
-                         from_status_events(con, start, end, as_of, cfg),
-                         from_manual(con, start, end, cfg, manual_path)) if not f.empty]
+    early = start - timedelta(days=cfg.overrides.max_carry_days)
+    parts = [f for f in (from_injuries(con, early, end, as_of, cfg),
+                         from_nba_report(con, early, end, as_of, cfg),
+                         from_status_events(con, early, end, as_of, cfg),
+                         from_manual(con, early, end, cfg, manual_path)) if not f.empty]
     if not parts:
         return pd.DataFrame(columns=COLUMNS)
     allrows = pd.concat(parts, ignore_index=True)
@@ -285,4 +296,5 @@ def resolve(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datet
     allrows = _drop_overtaken(allrows)
     best = allrows.sort_values(["player_id", "date", "carried", "_rank", "_ts"],
                                ascending=[True, True, True, True, False])
+    best = best[pd.to_datetime(best["date"]).dt.date >= start]
     return best.drop_duplicates(["player_id", "date"]).drop(columns=["_rank", "_ts"]).reset_index(drop=True)

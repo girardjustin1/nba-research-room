@@ -96,6 +96,12 @@ SCHEMA: dict[str, Table] = {
     "x_feed_log": _t(("poll_at", "query_key"),
         "poll_at TIMESTAMPTZ", "query_key VARCHAR", "day DATE", "posts_read INTEGER",
         "newest_at TIMESTAMPTZ", "events INTEGER"),
+    # How far each watched account has been read completely, and the post ids read recently
+    # (ids only, never text), so an overlapping read is never parsed twice (round-3 audit X02).
+    "x_feed_cursor": _t(("handle",),
+        "handle VARCHAR", "read_through TIMESTAMPTZ", "updated_at TIMESTAMPTZ"),
+    "x_feed_seen": _t(("post_id",),
+        "post_id VARCHAR", "seen_at TIMESTAMPTZ"),
     "yahoo_league": _t(("league_id", "snapshot_at"),
         "league_id INTEGER", "snapshot_at TIMESTAMPTZ", "settings JSON", *_INGEST),
     "yahoo_rosters": _t(("snapshot_at", "team_id", "yahoo_player_key"),

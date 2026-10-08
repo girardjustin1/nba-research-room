@@ -289,6 +289,12 @@ x_feed:                        # injury / lineup news from config/x_accounts.yam
   max_query_chars: 512         # X recent-search query length limit
   poll_minutes: 15             # pre-game cadence (make pregame-schedule)
   window_hours_before_tip: 3   # polling starts this long before the day's first tip
-  lookback_minutes: 90         # first poll of a query reads at most this far back
+  catchup_hours: 20            # an account read for the first time (or after a long gap): this far back
+  overlap_minutes: 2           # each read re-covers this much before the last one (late-indexed posts)
+  max_pages_per_query: 5       # result pages followed per query and poll (100 posts each)
   llm_model: claude-haiku-4-5-20251001   # small model that turns posts into status events
-  max_posts_per_llm_call: 40
+  # 40 posts per call cut the model's answer off at its output limit and lost the whole batch
+  # (round-3 audit test, all three runs). A cut-off call is split in half and retried.
+  max_posts_per_llm_call: 10
+  llm_max_tokens: 4000
+  min_confidence: 0.5          # the model's own confidence below this: the status is not used

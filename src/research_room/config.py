@@ -369,9 +369,13 @@ class XFeedConfig(BaseModel):
     max_query_chars: int = 512
     poll_minutes: int = 15
     window_hours_before_tip: float = 3
-    lookback_minutes: int = 90
+    catchup_hours: float = 20
+    overlap_minutes: float = 2
+    max_pages_per_query: int = 5
     llm_model: str = "claude-haiku-4-5-20251001"
-    max_posts_per_llm_call: int = 40
+    max_posts_per_llm_call: int = 10
+    llm_max_tokens: int = 4000
+    min_confidence: float = 0.5
 
 
 class Settings(BaseModel):

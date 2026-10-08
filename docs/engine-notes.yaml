@@ -3,6 +3,31 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-08-x-feed-audit
+    date: 2026-10-08
+    kind: update
+    title: X news reading fixed before opening night
+    body: >
+      An outside review of how the app reads injury news from X found that a busy news night could
+      be lost entirely (the reader's answer got cut off), news posted between checks could be
+      skipped, and a player could be marked out again after returning. All fixed and tested. On 60
+      invented test posts the reader now finds every status, invents none, and gets every stated
+      date right. Whether X makes the projections better is still to be shown with this season's
+      games (a test is set for mid-November).
+    refs: [DECISIONS.md, docs/audits/2026-10-08-x-feed-astra.md]
+
+  - id: 2026-10-08-scorecard
+    date: 2026-10-08
+    kind: update
+    title: A nightly scorecard, and a second model in the background
+    body: >
+      Every night the app now grades its own projections against last season's accuracy and says,
+      per stat, whether things look fine, need watching or need action (an alert in the bell when
+      they do). Nothing is graded until about four game nights in. The blended model now projects
+      alongside the main one without being used, so by mid-December there is real evidence on
+      whether it should take over.
+    refs: [DECISIONS.md, src/research_room/scorecard.py, src/research_room/shadow.py]
+
   - id: 2026-10-08-alerts-audit
     date: 2026-10-08
     kind: update

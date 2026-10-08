@@ -1005,3 +1005,42 @@ anything, is fixed before any 2026-27 game is played.
   zero): X is switched off until fixed. The replay is not built yet; the parser test from the
   round-3 audit (docs/audits) is read alongside it.
 
+**X news pipeline: round-3 audit fixes (2026-10-08).** Codex (gpt-6-astra) audited the X
+pipeline on a clean clone with public tables only (docs/audits/2026-10-08-x-feed-astra.md) and
+wrote 60 invented posts with their right answers, kept out of the repo. Its test could not call
+the parser; run here afterwards on the production model (Claude Haiku 4.5), three times each:
+- As it was: every 40-post call stopped at the 2,000-token output limit and returned nothing,
+  in all three runs. A busy news window would have lost every status in it, silently (X15).
+- Same posts, 10 a call: all 57 statuses found, players, teams and statuses all right; one
+  weekday turned into the wrong date, two stated absences miscounted, and "out for the rest of
+  tonight's game" became an Out (in two runs of three).
+- After the fixes: all 57 found, no invented status in any run, 49 of 49 stated dates and 5 of 5
+  time frames right; the only differences were starting-lineup flags (one or two posts), which
+  nothing uses yet. The audit's own end-to-end check went from 51 to 55 of 57 (the other two
+  are a nickname and initials, held for review by design).
+Fixed, each with a test that fails on the old code:
+- X15: 10 posts a call, 4,000-token limit; a cut-off reply is split in half and retried down to
+  one post, never dropped; a post that still fails is counted.
+- X01: reads are logged the moment a page arrives, so the budget is a hard cap even when
+  parsing fails; nothing moves on until the posts are parsed and stored.
+- X02, X03: every page is followed; each account remembers how far it was read completely and the
+  next read starts there (a small overlap for late-indexed posts; at most 20 hours back), so the
+  hours between polls are never skipped; post ids already read are not parsed again; the least
+  recently read query goes first. Teams playing tomorrow are watched too, and the nightly run
+  polls once (late news about tomorrow).
+- X04: the availability-word filter is wider ("will sit", "day-to-day", "good to go", "suit up",
+  "re-evaluated" ...).
+- X05: a stated date with no game for him is kept as `unmatched` and never acted on (it no longer
+  becomes his next game: a post after tip about tonight lands here); an absence that ends before
+  his next game no longer makes an Out for it. The model is told in-game injuries are not news
+  for an upcoming game, and each post carries the next week's dates by weekday.
+- X07: absences are worked out from up to 60 days before the dates asked for, so a return still
+  ends an absence when the dates asked for start after it.
+- X08: only the same-day report that wins its day ends a carried absence.
+- X13, X14: the model's events are checked before use: a name must look like a name, minutes
+  limits and days must be possible, and a confidence under 0.5 is not used.
+After opening night: X06 (a post naming the wrong team), X09 and X10 (grading the decisions
+actually used, with first-seen times), X11 (two games in one post; a limit with no number),
+X12 (a projected return window worded as "ruled out today"). The forward test with and without X
+(rules above) still decides whether X keeps its place.
+
