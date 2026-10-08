@@ -95,14 +95,14 @@ def test_the_purge_removes_every_yahoo_item(tmp_path, con):
     )
     (tmp_path / "inbox").mkdir()
     (tmp_path / "data").mkdir()
-    for f in ("inbox/roster.csv", "inbox/teams.csv", "oauth2.json", "data/notifications_read.json"):
+    for f in ("inbox/roster.csv", "inbox/teams.csv", "inbox/opponent.json", "oauth2.json", "data/notifications_read.json"):
         (tmp_path / f).write_text("x")
     con.execute("INSERT INTO week_outcomes VALUES (1, 5, 4, now())")
     out = purge(con, cfg, root=tmp_path)
     assert out["week_outcomes"] == 1 and con.execute("SELECT count(*) FROM week_outcomes").fetchone()[0] == 0
     assert not any(
         (tmp_path / f).exists()
-        for f in ("inbox/roster.csv", "inbox/teams.csv", "oauth2.json", "data/notifications_read.json")
+        for f in ("inbox/roster.csv", "inbox/teams.csv", "inbox/opponent.json", "oauth2.json", "data/notifications_read.json")
     )
 
 

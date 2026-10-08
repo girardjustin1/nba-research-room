@@ -1,5 +1,5 @@
 import type { FetchLike } from './client';
-import type { MovesResponse, NotificationsResponse, ScenarioRequest } from './season';
+import type { MovesResponse, NotificationsResponse, OpponentRoster, OpponentRosterRequest, ScenarioRequest } from './season';
 import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
@@ -12,6 +12,7 @@ import { gcMidweekClose } from '../mocks/matchup-analysis/gamecenter';
 import { mockScenarioEngine, probNormal } from '../mocks/matchup-analysis/probability';
 import { weekNormal } from '../mocks/matchup-analysis/week';
 import { notificationsNormal } from '../mocks/notifications/notifications';
+import { opponentRosterFilled, sampleSave, sampleSearch } from '../mocks/team-profiles/opponentRoster';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
 import { playerBramwell, playerHargreaveLastDay, playerPellham, playerRosswell } from '../mocks/player-profiles/player';
 import { resultsNormal } from '../mocks/results/results';
@@ -54,9 +55,10 @@ type Handler = (m: { params: string[]; query: URLSearchParams; body: unknown; dr
 
 const SEASON_PLAYERS = [playerBramwell, playerPellham, playerRosswell, playerHargreaveLastDay];
 
-/** Demo notifications: "mark read" sticks until the demo is reset. */
+/** Demo state: "mark read" and the opponent entry stick until the demo is reset. */
 interface DemoNotes {
   notes: NotificationsResponse;
+  opponent: OpponentRoster;
 }
 const freshNotes = (): NotificationsResponse => JSON.parse(JSON.stringify(notificationsNormal)) as NotificationsResponse;
 
@@ -155,6 +157,9 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['POST', /^\/season\/notifications\/read$/, ({ body }) => markRead(state, (body as { ids?: string[] } | undefined)?.ids ?? [])],
     ['GET', /^\/season\/league_teams\/(\d+)$/, ({ params }) => (Number(params[0]) === leagueTeamMe.team.team_id ? leagueTeamMe : leagueTeamOpponent)],
     ['GET', /^\/season\/nba_teams\/([A-Za-z]+)$/, () => nbaTeamNOP],
+    ['GET', /^\/season\/opponent_roster$/, () => state.opponent],
+    ['POST', /^\/season\/opponent_roster$/, ({ body }) => (state.opponent = sampleSave(state.opponent, body as OpponentRosterRequest))],
+    ['GET', /^\/season\/player_search$/, ({ query }) => ({ players: sampleSearch(query.get('q') ?? '') })],
     // ---- system
     ['GET', /^\/system\/health$/, () => healthWarn],
     ['GET', /^\/system\/readiness$/, () => readinessWarn],
@@ -166,7 +171,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
 
 export function createDemoTransport(base = '/api'): DemoTransport {
   let draft = initialDemoDraft();
-  const state: DemoNotes = { notes: freshNotes() };
+  const state: DemoNotes = { notes: freshNotes(), opponent: opponentRosterFilled };
   const table = routes(state);
   const unhandled: string[] = [];
   const fetchImpl: FetchLike = async (input, init) => {
@@ -195,6 +200,7 @@ export function createDemoTransport(base = '/api'): DemoTransport {
     reset: () => {
       draft = initialDemoDraft();
       state.notes = freshNotes();
+      state.opponent = opponentRosterFilled;
     },
   };
 }

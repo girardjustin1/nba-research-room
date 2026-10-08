@@ -8,6 +8,7 @@ import { LeagueMatchupScreen } from '../components/app-shell/league/LeagueMatchu
 import { LeagueMovesScreen } from '../components/app-shell/league/LeagueMovesScreen';
 import { LeagueNbaTeamScreen } from '../components/app-shell/league/LeagueNbaTeamScreen';
 import { LeagueNotificationsScreen } from '../components/app-shell/league/LeagueNotificationsScreen';
+import { LeagueOpponentScreen } from '../components/app-shell/league/LeagueOpponentScreen';
 import { LeaguePickupsScreen } from '../components/app-shell/league/LeaguePickupsScreen';
 import { LeaguePlayerProfileScreen } from '../components/app-shell/league/LeaguePlayerProfileScreen';
 import { LeaguePlayersScreen } from '../components/app-shell/league/LeaguePlayersScreen';
@@ -60,6 +61,7 @@ export const ROUTES: AppRoute[] = [
   route({ path: '#/league/players/compare', experience: 'league', title: 'Players · Compare', component: LeagueCompareScreen, storyId: 'prototype--league-player-compare', leagueTab: 'players' }),
   route({ path: '#/league/players/schedule', experience: 'league', title: 'Players · Schedule volume', component: LeagueScheduleScreen, storyId: 'prototype--league-schedule', leagueTab: 'players' }),
   route({ path: '#/league/teams', experience: 'league', title: 'Teams · League team', component: LeagueTeamsScreen, storyId: 'prototype--league-teams', leagueTab: 'teams' }),
+  route({ path: '#/league/teams/opponent', experience: 'league', title: "Teams · This week's opponent", component: LeagueOpponentScreen, storyId: 'prototype--league-teams-opponent', leagueTab: 'teams' }),
   route({ path: '#/league/teams/nba', experience: 'league', title: 'Teams · NBA team', component: LeagueNbaTeamScreen, storyId: 'prototype--league-nba-team', leagueTab: 'teams' }),
   route({ path: '#/league/results', experience: 'league', title: 'Results', component: LeagueResultsScreen, storyId: 'prototype--league-results', leagueTab: 'results' }),
   route({ path: '#/league/results/review', experience: 'league', title: 'Results · Prediction review', component: LeagueReviewScreen, storyId: 'prototype--league-results-review', leagueTab: 'results' }),

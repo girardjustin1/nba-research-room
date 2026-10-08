@@ -27,6 +27,7 @@ export const LeaguePlayerProfile = at('#/league/players/profile');
 export const LeaguePlayerCompare = at('#/league/players/compare');
 export const LeagueSchedule = at('#/league/players/schedule');
 export const LeagueTeams = at('#/league/teams');
+export const LeagueTeamsOpponent = at('#/league/teams/opponent');
 export const LeagueNbaTeam = at('#/league/teams/nba');
 export const LeagueResults = at('#/league/results');
 export const LeagueResultsReview = at('#/league/results/review');

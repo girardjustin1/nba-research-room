@@ -1350,6 +1350,35 @@ export interface NbaTeamProfile extends Envelope {
  * Typed client for the season endpoints (the app uses it for /season/lineup today; the
  * rest are proposed). Errors follow the draft client: ApiError / ApiUnreachableError.
  */
+/* ---------------------------------------------------------------------------------------------
+ *  This week's opponent, entered by hand (GET/POST /season/opponent_roster, GET /season/player_search).
+ *  One opponent at a time, replaced each week, kept on this computer only; players from the NBA list.
+ * ------------------------------------------------------------------------------------------- */
+export interface OpponentRoster {
+  /** The fantasy week the entry is for (the current one, or the first before the season). */
+  week: { week: number; start: IsoDate; end: IsoDate } | null;
+  /** League teams other than mine, by number. */
+  teams: { team_id: number; label: string }[];
+  opponent_team_id: number | null;
+  players: PlayerRef[];
+  /** Pasted names that matched no NBA player, with suggestions (reported, never kept). */
+  unmatched: { name: string; suggestions: string[] }[];
+  saved_at: IsoDateTime | null;
+  /** How the entry is kept, shown on the screen. */
+  policy: string;
+}
+
+export interface OpponentRosterRequest {
+  team_id: number;
+  player_ids: number[];
+  /** Names pasted one per line; matched to NBA players on the server. */
+  names: string[];
+}
+
+export interface PlayerSearchResponse {
+  players: PlayerRef[];
+}
+
 export interface SeasonApi {
   week(): Promise<WeekResponse>;
   weekProbability(): Promise<WinProbabilityResponse>;
@@ -1372,6 +1401,10 @@ export interface SeasonApi {
   /** unread is null when the count couldn't be read (a job held the store); the mark was saved. */
   markNotificationsRead(ids?: string[]): Promise<{ unread: number | null }>;
   leagueTeam(teamId: number): Promise<LeagueTeamProfile>;
+  opponentRoster(): Promise<OpponentRoster>;
+  saveOpponentRoster(body: OpponentRosterRequest): Promise<OpponentRoster>;
+  /** NBA players whose name contains `q` (the NBA list, not Yahoo's). */
+  playerSearch(q: string): Promise<PlayerSearchResponse>;
   nbaTeam(abbr: string): Promise<NbaTeamProfile>;
 }
 
@@ -1396,6 +1429,9 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     markNotificationsRead: (ids) =>
       seasonPost<{ unread: number | null }>(base, '/season/notifications/read', { ids: ids ?? [] }, fetchImpl),
     leagueTeam: (id) => get(`/season/league_teams/${id}`),
+    opponentRoster: () => get('/season/opponent_roster'),
+    saveOpponentRoster: (body) => seasonPost<OpponentRoster>(base, '/season/opponent_roster', body, fetchImpl),
+    playerSearch: (q) => get('/season/player_search', { q }),
     nbaTeam: (abbr) => get(`/season/nba_teams/${abbr}`),
   };
 }

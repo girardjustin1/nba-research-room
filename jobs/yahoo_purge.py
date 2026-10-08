@@ -37,6 +37,7 @@ def purge(con, cfg, root: Path = REPO_ROOT) -> dict:
         out[table] = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
         con.execute(f"DELETE FROM {table}")
     files = [cfg.paths.inbox_dir / f"{n}.csv" for n in yahoo.SCHEMAS]
+    files += [cfg.paths.inbox_dir / "opponent.json"]
     files += [cfg.paths.db.resolve().parent / "notifications_read.json", root / "oauth2.json"]
     for f in files:
         if f.exists():

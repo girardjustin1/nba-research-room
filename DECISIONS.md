@@ -1092,3 +1092,15 @@ are kept. The owner chose this over keeping a local copy.
   on game days; the page says when it was saved. Moves worth exactly the same now list in a fixed
   order.
 
+**This week's opponent, entered by hand (2026-10-08).** Teams → This week's opponent
+(`#/league/teams/opponent`, `opponent_roster.py`, `GET/POST /season/opponent_roster`,
+`GET /season/player_search`): pick the team I play this week and add their players from the NBA
+list (search) or paste names, one per line (names that match no player come back with
+suggestions and aren't kept). The live read uses it when Yahoo didn't supply the opponent: his
+roster and, with no Yahoo matchup, the week's pairing, whose totals so far are then unknown (the
+whole week is projected, and the odds say so). Kept to the Yahoo data policy: one opponent at a
+time in one small file (`data/inbox/opponent.json`), replaced by the next week's entry, never in
+the database, never an archive of past opponents and never every team's roster (asked for, and
+declined for that reason); deleted by `make yahoo-purge`. In Storybook (Team Profiles / This
+week's opponent) and the prototype; with sample data, saving and search work in memory.
+

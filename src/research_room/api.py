@@ -28,7 +28,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import alerts, images, moves_api, readiness, schedule, season_api, store, system
+from research_room import (
+    alerts,
+    images,
+    moves_api,
+    opponent_roster,
+    readiness,
+    schedule,
+    season_api,
+    store,
+    system,
+)
 from research_room.config import Settings, settings
 from research_room.draft import eligibility, tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
@@ -249,6 +259,12 @@ def finish_mock(s: Session) -> None:
 
 
 # ------------------------------------------------------------------ request bodies
+class OpponentIn(BaseModel):
+    team_id: int
+    player_ids: list[int] = Field(default_factory=list)
+    names: list[str] = Field(default_factory=list)
+
+
 class ScenarioIn(BaseModel):
     move_ids: list[str] = Field(default_factory=list)
 
@@ -844,6 +860,37 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
             return moves_api.scenario_response(con, body.move_ids, now=when)
         except season_api.NotReady as exc:
             raise HTTPException(409, str(exc)) from exc
+        finally:
+            con.close()
+
+    # ---------------------------------------------------------------- this week's opponent (typed in)
+    @app.get("/season/opponent_roster")
+    def get_opponent_roster(now: str | None = None) -> dict:
+        """OpponentRoster: this week's opponent as entered by hand (opponent_roster.py)."""
+        con = read_con()
+        try:
+            return opponent_roster.response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
+        finally:
+            con.close()
+
+    @app.post("/season/opponent_roster")
+    def put_opponent_roster(body: OpponentIn, now: str | None = None) -> dict:
+        """Replace this week's opponent: picked players plus pasted names (unmatched come back)."""
+        con = read_con()
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return opponent_roster.save(con, body.team_id, body.player_ids, body.names, now=when)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.get("/season/player_search")
+    def get_player_search(q: str, limit: int = 10) -> dict:
+        """NBA players whose name contains `q` (BallDontLie's list: never Yahoo's)."""
+        con = read_con()
+        try:
+            return {"players": opponent_roster.search(con, q, min(limit, 25))}
         finally:
             con.close()
 

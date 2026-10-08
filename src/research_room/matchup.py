@@ -355,6 +355,10 @@ def week_inputs(con, cfg: Settings | None = None, now: datetime | None = None) -
         proj, through = proj[~tipped], days[0]
     me_done, miss = to_date(con, rows, me_id, me_roster, start, through, cfg)
     opp_done, _ = to_date(con, rows, opp_id, opp_roster, start, through, cfg)
+    if rows is not None and "source" in rows and (rows["source"] == "manual").any():
+        miss.append({"key": "week_to_date", "label": "This week's totals so far aren't known",
+                     "effect": "The opponent was entered by hand, with no Yahoo matchup: the whole week is "
+                               "projected, including days already played."})
     return {"week": week_no, "start": start, "end": end, "days": days, "now": now, "run_at": run,
             "cats_as_of": cats_as_of, "me_id": me_id, "opp_id": opp_id,
             "me": team_days(me_roster, proj, days, cfg), "opp": team_days(opp_roster, proj, days, cfg),

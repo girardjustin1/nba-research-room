@@ -71,7 +71,8 @@ def attach(
                 api.team_ids = {me} | (
                     {o} if (o := _opponent(api.read("matchup"), me)) is not None else set()
                 )
-            return {"source": "api", **yahoo.load_live(con, _Limited(api, me), cfg, want, show_names)}
+            out = {"source": "api", **yahoo.load_live(con, _Limited(api, me), cfg, want, show_names)}
+            return _with_manual_opponent(con, cfg, want, out)
         except yahoo.YahooCsvError:
             raise
         except Exception as exc:  # noqa: BLE001 - the CSV inbox still works; reported
@@ -82,6 +83,15 @@ def attach(
     }
     if error:
         out["api_error"] = error
+    return _with_manual_opponent(con, cfg, want, out)
+
+
+def _with_manual_opponent(con, cfg: Settings, want: tuple[str, ...], out: dict) -> dict:
+    """This week's opponent entered by hand fills in when Yahoo didn't supply him (opponent_roster)."""
+    from research_room import opponent_roster
+
+    if "roster" in want:
+        out["manual_opponent"] = opponent_roster.apply(con, cfg)
     return out
 
 
