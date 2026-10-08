@@ -214,9 +214,16 @@ def test_news_and_weekly_odds(seeded):
             ]
         ),
     )
+    # The decision used before tip: a beat writer's Out for player 2 (a raw post alone isn't graded:
+    # round-3 audit X09). The post-tip run for player 1 is ignored.
+    seeded.execute("""UPDATE projections SET news_source = 'x:beat', news_status = 'Out', news_carried = false
+                      WHERE player_id = 2 AND stat = 'minutes'""")
+    seeded.execute("""UPDATE projections SET news_source = 'x:official', news_status = 'Out',
+                      news_carried = true WHERE player_id = 1 AND stat = 'minutes' AND run_at > ?""", [TIP])
     live_scores.update(seeded, cfg, through=DAY)
     news = {(r["source"], r["status"]): r for r in live_scores.summary(seeded, cfg, since=DAY)["news"]}
-    assert news[("x", "Out")]["listed"] == 1 and news[("x", "Out")]["played"] == 0
+    assert news[("x:beat", "Out")]["listed"] == 1 and news[("x:beat", "Out")]["played"] == 0
+    assert not any(k[0] == "x:official" for k in news)                   # only pre-tip decisions count
     assert news[("nba_report", "Questionable")]["played_rate"] == 1.0
     assert news[("nba_report", "Questionable")]["assumed"] == cfg.overrides.status_play_prob["Questionable"]
     # week 2 (Nov 2-8): two snapshots, then the final Yahoo file after the week

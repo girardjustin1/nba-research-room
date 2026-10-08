@@ -84,6 +84,11 @@ TOOL = {
                         },
                         "status": {"type": "string", "enum": STATUSES},
                         "minutes_cap": {"type": ["number", "null"]},
+                        "minutes_limited": {
+                            "type": ["boolean", "null"],
+                            "description": "True when the post says he is on a minutes limit or "
+                            "restriction but gives no number.",
+                        },
                         "starting": {"type": ["boolean", "null"]},
                         "out_days_min": {
                             "type": ["number", "null"],
@@ -120,8 +125,9 @@ SYSTEM = (
     "its date: read relative words from the post's Eastern time (at_et) and take weekday dates from "
     "dates_ahead; otherwise leave it null. An injury during a game in progress ('will not return', "
     "'out for the rest of tonight's game') is not a status for any upcoming game: record nothing for "
-    "it. Ignore rumors, opinions, trades, stats and highlights. One event per player per post. If a "
-    "post states nothing usable, record nothing for it."
+    "it. Ignore rumors, opinions, trades, stats and highlights. One event per player per game: a post "
+    "about two of his games gives two events, each with its date. If a post states nothing usable, "
+    "record nothing for it."
 )
 
 
@@ -228,6 +234,8 @@ def valid_event(e: dict, cfg: Settings) -> str | None:
         v = e.get(k)
         if v is not None and (_days(v) is None or _days(v) > 400):
             return f"impossible {k}"
+    if e.get("minutes_limited") is not None and not isinstance(e.get("minutes_limited"), bool):
+        return "minutes_limited not true or false"
     lo, hi = _days(e.get("out_days_min")), _days(e.get("out_days_max"))
     if lo and hi and hi < lo:
         return "time frame ends before it starts"
@@ -480,6 +488,7 @@ def poll(
                 "status": e["status"],
                 "minutes_cap": float(e["minutes_cap"]) if e.get("minutes_cap") is not None else None,
                 "starting": e.get("starting") if isinstance(e.get("starting"), bool) else None,
+                "limited": bool(e.get("minutes_limited")),
                 "out_days_min": _days(e.get("out_days_min")),
                 "out_days_max": _days(e.get("out_days_max")),
                 "stated_date": _date(e.get("game_date")),
@@ -538,10 +547,28 @@ def _store_events(con: duckdb.DuckDBPyConnection, rows: list[dict], now) -> int:
         return 0
     team_ids = dict(con.execute("SELECT abbreviation, team_id FROM teams").fetchall())
     current = dict(con.execute("SELECT player_id, team_id FROM players WHERE team_id IS NOT NULL").fetchall())
-    ev["event_id"] = ev["post_id"] + ":" + ev["player_id"].astype(int).astype(str)
     ev["player_id"] = ev["player_id"].astype(int)
-    ev["team_id"] = ev["team_abbr"].map(team_ids).fillna(ev["player_id"].map(current))
+    # One event per post, player and game (audit X11: a post about two of his games keeps both).
+    which = ev["stated_date"].map(lambda d: d.isoformat() if d else "next")
+    ev["event_id"] = ev["post_id"] + ":" + ev["player_id"].astype(str) + ":" + which
+    stated = ev["team_abbr"].map(team_ids)
+    now_on = ev["player_id"].map(current)
+    ev["team_id"] = stated.fillna(now_on)
     ev[["game_id", "game_date", "game_basis"]] = target_games(con, ev)
+    # A post naming a team he isn't on (audit X06): held for review, never acted on. A same-day
+    # trade the players table hasn't caught up with waits for the nightly roster refresh.
+    clash = stated.notna() & now_on.notna() & (stated != now_on)
+    ev.loc[clash, "game_id"] = None
+    ev.loc[clash, "game_basis"] = "team_conflict"
+    # When the system first had it (audit X10): kept across re-reads, so "known by" is honest.
+    marks = ",".join("?" * len(ev))
+    had = dict(
+        con.execute(
+            f"SELECT event_id, first_seen_at FROM status_events WHERE event_id IN ({marks})",
+            ev["event_id"].tolist(),
+        ).fetchall()
+    )
+    ev["first_seen_at"] = ev["event_id"].map(had).fillna(pd.Timestamp(now))
     cols = [
         "event_id",
         "player_id",
@@ -558,6 +585,8 @@ def _store_events(con: duckdb.DuckDBPyConnection, rows: list[dict], now) -> int:
         "game_id",
         "game_date",
         "game_basis",
+        "first_seen_at",
+        "limited",
         "source",
         "fetched_at",
     ]

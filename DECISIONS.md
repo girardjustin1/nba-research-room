@@ -1039,8 +1039,23 @@ Fixed, each with a test that fails on the old code:
 - X08: only the same-day report that wins its day ends a carried absence.
 - X13, X14: the model's events are checked before use: a name must look like a name, minutes
   limits and days must be possible, and a confidence under 0.5 is not used.
-After opening night: X06 (a post naming the wrong team), X09 and X10 (grading the decisions
-actually used, with first-seen times), X11 (two games in one post; a limit with no number),
-X12 (a projected return window worded as "ruled out today"). The forward test with and without X
-(rules above) still decides whether X keeps its place.
+The medium findings, fixed the same day (owner's call), each with a test:
+- X06: a post naming a team he isn't on is kept as `team_conflict` and never acted on (a same-day
+  trade the players table hasn't caught up with waits for the nightly roster refresh).
+- X09: every projection records the news that decided it (`news_source`, with X's account tier,
+  `news_status`, `news_carried`); the live scoreboard grades X by those decisions, a carried
+  status apart, instead of by the latest post.
+- X10: each status keeps when it was first read (`first_seen_at`, kept across re-reads); a
+  status read after a decision's time was not known for it.
+- X11: one event per post, player and game, so a post about two of his games keeps both; "on a
+  minutes restriction" with no number is kept (`limited`) and shown, never turned into a number.
+  Starting lineups stay informational.
+- X12: a day inside a reported absence's return window reads "could return (N% chance he plays)",
+  once per absence and never urgent; days still inside the absence add no new alert.
+Re-run after these: the real parser on the audit set (three runs) found every status, invented
+none, kept both games of the two-game post in two runs of three and flagged the unnumbered
+restriction in all three; the audit's end-to-end check (asking as of just after each read, which
+the first-seen rule now requires) is 57 of 59, the two misses being the held nickname and
+initials. The forward test with and without X (rules above) still decides whether X keeps its
+place.
 

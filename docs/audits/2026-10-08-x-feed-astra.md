@@ -2,8 +2,7 @@
 > OpenAI Codex CLI 0.154.0 (model gpt-6-astra, reasoning xhigh) on a fresh clone plus a database of
 > public tables only (teams, games, players). Every post in its test set is invented; the set itself
 > stays out of the repo. Fixed before opening night, with tests (DECISIONS.md, "X news pipeline:
-> round-3 audit fixes"): X01-X05, X07, X08, X13 (names), X14, X15. After opening night: X06, X09,
-> X10, X11, X12. The real parser was then run on the test set (the audit could not): see DECISIONS.
+> round-3 audit fixes"): X01-X15, all fixed the same day. The real parser was then run on the test set (the audit could not): see DECISIONS.
 > Links below point to the audit's scratch files, which are not in the repo.
 
 # Independent audit, round 3: X injury-news pipeline

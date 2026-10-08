@@ -285,7 +285,20 @@ def project_window(con: duckdb.DuckDBPyConnection, start: date, end: date,
         # Missing from his team's filed NBA injury report: likely to play (overrides.fill_unlisted).
         df["play_prob_override"] = pd.to_numeric(df["play_prob_override"], errors="coerce").fillna(
             overrides_mod.fill_unlisted(df, cfg))
-    return model.predict(df)
+    pred = model.predict(df)
+    if overrides is not None and not overrides.empty:
+        # Which news decided each line (round-3 audit X09): the live scoreboard grades these
+        # decisions, not the latest post. X sources carry their tier ("x:official").
+        x = overrides["source"].astype(str).str.startswith("X @")
+        lab = pd.DataFrame({
+            "player_id": overrides["player_id"],
+            "date": pd.to_datetime(overrides["date"]).dt.date,
+            "news_source": np.where(x, "x:" + overrides["authority"].astype(str), overrides["authority"]),
+            "news_status": overrides["status"],
+            "news_carried": overrides["carried"].fillna(False).astype(bool),
+        })
+        pred = pred.merge(lab, on=["player_id", "date"], how="left")
+    return pred
 
 
 def write_projections(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, model_name: str,
@@ -295,6 +308,7 @@ def write_projections(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, model_
     whether the market set it, the teammates-out factor) so explain.py can show where each number
     came from."""
     cols = ["player_id", "date", "stat", "mean", "sd",
-            *[c for c in ("p_play", "minutes_mean", "model_mean", "market", "teammates") if c in proj]]
+            *[c for c in ("p_play", "minutes_mean", "model_mean", "market", "teammates", "news_source",
+                          "news_status", "news_carried") if c in proj]]
     rows = proj[cols].assign(model=model_name, run_at=run_at or store.utcnow())
     return store.upsert(con, "projections", rows)

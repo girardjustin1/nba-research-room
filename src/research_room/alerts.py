@@ -186,34 +186,62 @@ def _status_alerts(con, cfg: Settings, now: datetime, impact: dict | None) -> li
                 continue  # filed for a team he has since left: not about tonight's game (B05)
             status = str(o["status"] or "").strip()
             cap = o["minutes_cap"] if pd.notna(o["minutes_cap"]) else None
+            limited = bool(o.get("limited")) if pd.notna(o.get("limited")) else False
+            carried = bool(o.get("carried")) if pd.notna(o.get("carried")) else False
+            p_play = pd.to_numeric(o.get("play_prob"), errors="coerce")
             phrase = LIMITING.get(status.lower())
-            if not phrase and cap is None:
+            if carried:
+                # A forecast from an earlier report, not a ruling for today (audit X12): only the
+                # return window is news (he was alerted on the day it was reported).
+                if not (pd.notna(p_play) and 0 < p_play < 1):
+                    continue
+                phrase = f"could return ({p_play:.0%} chance he plays)"
+            if not phrase and cap is None and not limited:
                 continue
-            what = phrase or f"limited to {cap:.0f} minutes"
+            what = phrase or (
+                f"limited to {cap:.0f} minutes" if cap is not None else "on a minutes restriction"
+            )
             active = str(r.selected_slot or "").upper() not in ("BN", "IL", "IL+", "")
             before_tip = pd.Timestamp(now) < tip
             if not before_tip:
                 continue  # his game has started: nothing to act on (B04)
-            hard = status.lower() in ("out", "out for season", "doubtful")
+            hard = not carried and status.lower() in ("out", "out for season", "doubtful")
+            reported = (
+                f"{o['source']} reported him out ({o['note'] or 'no time frame'}) on "
+                f"{pd.Timestamp(o['ts']).tz_convert(ET):%b %-d}; today is in the expected return window"
+                if carried
+                else None
+            )
+            told = status or "a minutes limit"
+            if limited and cap is None and not carried:
+                told = f"{status or 'a status'} with a minutes restriction (no number given)"
             if side == "mine":
                 kind = "injury"
                 priority = "urgent" if (active and before_tip and hard) else "high" if hard else "normal"
                 body = (
-                    f"{o['source']} reports {status or 'a minutes limit'} for his "
-                    f"{tip.tz_convert(ET):%-I:%M %p} game"
-                    + (f" (minutes limit {cap:.0f})" if cap is not None and phrase else "")
+                    (
+                        reported
+                        if carried
+                        else f"{o['source']} reports {told} for his {tip.tz_convert(ET):%-I:%M %p} game"
+                    )
+                    + (f" (minutes limit {cap:.0f})" if cap is not None and phrase and not carried else "")
                     + (". He's in your lineup." if active else ". He's on your bench.")
                 )
                 action = {"label": "Check today's lineup", "target": "lineup", "ref": str(today)}
             else:
                 kind = "news"
                 priority = "normal"
-                body = (
-                    f"Your opponent's player: {o['source']} reports {status or 'a minutes limit'} for today."
+                body = "Your opponent's player: " + (
+                    f"{reported}." if carried else f"{o['source']} reports {told} for today."
                 )
                 action = {"label": "See the matchup", "target": "feed", "ref": None}
             since = pd.Timestamp(o["ts"]).isoformat() if pd.notna(o["ts"]) else ""
-            key = f"{kind}:{pid}:{today}:{status.lower()}:{cap}:{since}"  # one per status episode (B03)
+            # One alert per status episode (B03); a return window once per reported absence (X12).
+            key = (
+                f"{kind}:{pid}:return-window:{since}"
+                if carried
+                else f"{kind}:{pid}:{today}:{status.lower()}:{cap}:{limited}:{since}"
+            )
             out.append(
                 {
                     "id": _id(key),
@@ -377,8 +405,12 @@ def _scorecard_alert(now: datetime, report: dict | None) -> list[dict]:
             "action": {"label": "See the scorecard", "target": "scorecard", "ref": None},
             "deadline": None,
             "provenance": [
-                {"module": "scorecard", "as_of": pd.Timestamp(now).isoformat(), "run_id": None,
-                 "note": "live scoreboard, season to date"}
+                {
+                    "module": "scorecard",
+                    "as_of": pd.Timestamp(now).isoformat(),
+                    "run_id": None,
+                    "note": "live scoreboard, season to date",
+                }
             ],
         }
     ]

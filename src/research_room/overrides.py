@@ -39,8 +39,9 @@ from research_room.ingest.names import normalize_name
 
 # team_id: the team the report was filed for, when the source says (X posts, the NBA report);
 # alerts drop a report filed for a team the player has since left (audit B05).
+# limited: a minutes restriction stated without a number (X posts; audit X11).
 COLUMNS = ["player_id", "date", "play_prob", "minutes_cap", "status", "authority", "source", "ts", "note",
-           "carried", "team_id"]
+           "carried", "team_id", "limited"]
 NOT_LISTED = "Not Listed"
 
 
@@ -115,7 +116,7 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
     to `end`. Rows after the game's date are `carried`: same-day news on those dates outranks them."""
     have = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name = 'status_events'").fetchall()}
-    opt = ("out_days_min", "out_days_max", "game_date", "game_basis")
+    opt = ("out_days_min", "out_days_max", "game_date", "game_basis", "first_seen_at", "limited")
     days = ", ".join(c if c in have else f"NULL AS {c}" for c in opt)
     ev = con.execute(f"""
         SELECT player_id, team_id, status, minutes_cap, account, ts, {days},
@@ -123,10 +124,13 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
                     ELSE 'aggregator' END AS authority
         FROM status_events WHERE ts <= ? AND player_id IS NOT NULL
     """, [as_of]).df()
+    # Known only once it arrived (audit X10): a post read after `as_of` wasn't known then.
+    seen = pd.to_datetime(ev["first_seen_at"], utc=True).fillna(pd.to_datetime(ev["ts"], utc=True))
+    ev = ev[seen <= pd.Timestamp(as_of)]
     cap = cfg.overrides.max_carry_days
     rows = []
     for r in ev.itertuples(index=False):
-        if r.game_basis == "unmatched":   # a stated date with no game for him: never acted on (X05)
+        if r.game_basis in ("unmatched", "team_conflict"):   # held for review, never acted on (X05, X06)
             continue
         posted = pd.Timestamp(r.ts).tz_convert("America/New_York").date()
         d0 = pd.Timestamp(r.game_date).date() if pd.notna(r.game_date) else posted
@@ -144,13 +148,17 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
         else:
             plan = [(d0, _prob(status, cfg))]
         span = f"out {lo:.0f}" + (f"-{hi:.0f}" if hi and hi > lo else "+") + " days" if lo else None
+        limited = bool(r.limited) if pd.notna(r.limited) else False
+        if limited and pd.isna(r.minutes_cap):
+            span = "minutes restriction, no number given"
         for d, p in plan:
             if start <= d <= end:
                 rows.append({"player_id": int(r.player_id), "date": d, "play_prob": p,
                              "minutes_cap": r.minutes_cap if d == d0 else None, "status": status,
                              "authority": r.authority, "source": f"X @{r.account}", "ts": r.ts,
                              "note": span, "carried": d > d0,
-                             "team_id": int(r.team_id) if pd.notna(r.team_id) else None})
+                             "team_id": int(r.team_id) if pd.notna(r.team_id) else None,
+                             "limited": limited if d == d0 else None})
     return pd.DataFrame(rows, columns=COLUMNS)
 
 

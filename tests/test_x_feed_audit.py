@@ -178,3 +178,66 @@ def test_a_losing_report_does_not_end_an_official_absence(seeded):  # noqa: F811
                            as_of=datetime(2026, 10, 26, 20, tzinfo=UTC), manual_path=_no_manual())
     by = {pd.Timestamp(d).date(): r for d, r in zip(ov["date"], ov["play_prob"], strict=True)}
     assert by[date(2026, 10, 26)] == 0.0 and by[date(2026, 10, 27)] == 0.0                     # X08
+
+
+# ------------------------------------------------------------------ the medium findings
+
+
+def test_a_post_naming_a_team_he_is_not_on_is_held(seeded):  # noqa: F811
+    class WrongTeam(Echo):
+        def parse(self, posts):
+            return [{**OUT, "team": "MIA", "post_id": p["id"]} for p in posts]   # he plays for BOS
+
+    x_feed.poll(seeded, settings(), client=Pages([_post(1)]), parser=WrongTeam(), now=NOW)
+    row = seeded.execute("SELECT game_basis, game_id FROM status_events").fetchone()
+    assert row == ("team_conflict", None)                                                  # X06
+    assert overrides.from_status_events(seeded, date(2026, 11, 4), date(2026, 11, 6), NOW, settings()).empty
+
+
+def test_a_post_known_only_after_the_decision_is_not_used_for_it(seeded):  # noqa: F811
+    read_late = datetime(2026, 11, 5, 3, 30, tzinfo=UTC)              # posted before tip, read after it
+    x_feed.poll(seeded, settings(), client=Pages([_post(1)]), parser=Echo(), now=read_late)
+    before_tip = datetime(2026, 11, 4, 23, 0, tzinfo=UTC)
+    assert overrides.from_status_events(seeded, date(2026, 11, 4), date(2026, 11, 4), before_tip,
+                                        settings()).empty                                  # X10
+    first = seeded.execute("SELECT first_seen_at FROM status_events").fetchone()[0]
+    seeded.execute("DELETE FROM x_feed_seen")                          # read again later: first seen stays
+    x_feed.poll(seeded, settings(), client=Pages([_post(1)]), parser=Echo(),
+                now=pd.Timestamp(read_late) + pd.Timedelta(hours=1))
+    assert seeded.execute("SELECT first_seen_at FROM status_events").fetchone()[0] == first
+
+
+def test_two_games_in_one_post_both_stay_and_a_limit_without_a_number_is_kept(seeded):  # noqa: F811
+    store.upsert(seeded, "games", pd.DataFrame([{
+        "game_id": 10, "season": 2026, "game_date": date(2026, 11, 6), "home_team_id": 2,
+        "visitor_team_id": 1, "postseason": False, "tip_utc": pd.Timestamp("2026-11-07T00:30:00Z"), **META}]))
+
+    class TwoGames(Echo):
+        def parse(self, posts):
+            p = posts[0]["id"]
+            return [{**OUT, "post_id": p, "game_date": "2026-11-04"},
+                    {**OUT, "post_id": p, "status": "Available", "minutes_limited": True,
+                     "game_date": "2026-11-06"}]
+
+    x_feed.poll(seeded, settings(), client=Pages([_post(1)]), parser=TwoGames(), now=NOW)
+    rows = seeded.execute("SELECT game_id, status, limited FROM status_events ORDER BY game_id").fetchall()
+    assert rows == [(9, "Out", False), (10, "Available", True)]                          # X11
+    ov = overrides.from_status_events(seeded, date(2026, 11, 4), date(2026, 11, 6), NOW, settings())
+    lim = ov[ov["date"] == date(2026, 11, 6)].iloc[0]
+    assert bool(lim["limited"]) and lim["note"] == "minutes restriction, no number given"
+
+
+def test_a_return_window_is_not_worded_as_ruled_out(seeded, monkeypatch):  # noqa: F811
+    from research_room import alerts
+
+    store.upsert(seeded, "yahoo_rosters", pd.DataFrame([{
+        "snapshot_at": pd.Timestamp(NOW), "team_id": settings().league.my_team_id, "yahoo_player_key": "k",
+        "player_name": "Invented Wing", "player_id": 501, "selected_slot": "SF",
+        "eligible_positions": "SF", "status": None, **META}]))
+    store.upsert(seeded, "status_events", pd.DataFrame([_ev("a", "Out", pd.Timestamp("2026-10-23T16:00:00Z"),
+                                                            lo=10, hi=14)]))
+    monkeypatch.setattr(alerts, "_opponent", lambda *a: None)
+    found = alerts._status_alerts(seeded, settings(), NOW, None)    # Nov 4: day 12 of "out 10-14 days"
+    assert len(found) == 1 and "ruled out" not in found[0]["title"]                       # X12
+    assert found[0]["title"].startswith("Invented Wing could return (") and found[0]["priority"] != "urgent"
+    assert "expected return window" in found[0]["body"]

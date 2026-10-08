@@ -15,8 +15,9 @@ tip is never graded), against the box score (a game he sat is 0, as projected).
   projection and our model's own number before it; the market should keep winning
   (DECISIONS.md, market-informed projections).
 - p_play: Brier score of P(plays) against whether he played; bias = mean P(plays) - played rate.
-News: how often a player each source listed with a status that day actually played (X posts by
-their date; the last NBA report before tip; the last BallDontLie list before tip).
+News: how often a player each source listed with a status that day actually played. X: the news
+behind the last projection before tip, by account tier (x:official ...; carried statuses apart);
+the NBA report: its last report before tip; BallDontLie: its last list before tip.
 Weekly odds (summary only): each stored P(win week) snapshot against the week's final result
 from the latest Yahoo matchup file after the week ended.
 """
@@ -146,15 +147,27 @@ def news_rows(con: duckdb.DuckDBPyConnection, start: date, end: date) -> pd.Data
         SELECT l.player_id, l.game_id, l.game_date, l.did_play, gm.tip_utc
         FROM game_logs l JOIN games gm USING (game_id)
         WHERE l.game_date BETWEEN ? AND ? AND coalesce(gm.status_state, '') = 'final'"""
-    if "status_events" in have:
+    proj_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'projections'").fetchall()}
+    if "news_source" in proj_cols:
+        # X: the decision actually used (round-3 audit X09): the news behind the last projection
+        # before tip, by account tier ("x:official"), a status carried from an earlier report
+        # graded apart. Only what was known at that run counts (X10).
         parts.append(
             con.execute(
                 f"""
-            WITH g AS ({base})
-            SELECT 'x' AS source, e.status, g.game_date, g.player_id, g.did_play
-            FROM g JOIN status_events e ON e.player_id = g.player_id AND e.ts < g.tip_utc
-             AND coalesce(e.game_date, CAST(timezone('America/New_York', e.ts) AS DATE)) = g.game_date
-            QUALIFY row_number() OVER (PARTITION BY g.player_id, g.game_id ORDER BY e.ts DESC) = 1
+            WITH g AS ({base}),
+            r AS (SELECT g.player_id, g.game_id, max(p.run_at) AS run_at FROM g JOIN projections p
+                  ON p.player_id = g.player_id AND p.date = g.game_date AND p.model = 'baseline'
+                 AND p.stat = 'minutes' AND p.run_at < g.tip_utc GROUP BY 1, 2)
+            SELECT p.news_source AS source,
+                   CASE WHEN p.news_carried THEN p.news_status || ' (carried)' ELSE p.news_status END
+                       AS status,
+                   g.game_date, g.player_id, g.did_play
+            FROM g JOIN r USING (player_id, game_id)
+            JOIN projections p ON p.model = 'baseline' AND p.stat = 'minutes' AND p.run_at = r.run_at
+                              AND p.player_id = g.player_id AND p.date = g.game_date
+            WHERE p.news_source LIKE 'x:%'
         """,
                 [start, end],
             ).df()
