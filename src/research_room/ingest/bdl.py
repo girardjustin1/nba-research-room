@@ -301,6 +301,12 @@ def parse_odds(rows: list[dict], fetched_at, is_opening: bool = False) -> pd.Dat
 
 # ---------------------------------------------------------------- ingest jobs
 
+def _keyed(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Rows with their key columns; an empty response (no games in the window, e.g. the night
+    before opening night) has no columns at all and writes nothing."""
+    return df.dropna(subset=cols) if not df.empty else df
+
+
 def _collect(client: BdlClient, path: str, params: dict, con, use_cache: bool,
              progress: Callable[[int], None] | None = None) -> list[dict]:
     rows: list[dict] = []
@@ -338,20 +344,20 @@ def sync_stats(con, client: BdlClient, params: dict, use_cache: bool,
         known = {r[0] for r in con.execute("SELECT player_id FROM players").fetchall()}
         store.upsert(con, "players", players[~players["player_id"].isin(known)])
     logs = parse_stats(rows, now)
-    return store.upsert(con, "game_logs", logs.dropna(subset=["game_id", "player_id"]))
+    return store.upsert(con, "game_logs", _keyed(logs, ["game_id", "player_id"]))
 
 
 def sync_advanced(con, client: BdlClient, params: dict, use_cache: bool,
                   progress: Callable[[int], None] | None = None) -> int:
     rows = _collect(client, EP_ADVANCED, {"period": 0, **params}, con, use_cache, progress)
     adv = parse_advanced(rows, store.utcnow())
-    return store.upsert(con, "advanced_stats", adv.dropna(subset=["game_id", "player_id"]))
+    return store.upsert(con, "advanced_stats", _keyed(adv, ["game_id", "player_id"]))
 
 
 def sync_injuries(con, client: BdlClient) -> int:
     rows = _collect(client, EP_INJURIES, {}, con, use_cache=False)
     inj = parse_injuries(rows, store.utcnow())
-    return store.upsert(con, "injuries", inj.dropna(subset=["player_id"]))
+    return store.upsert(con, "injuries", _keyed(inj, ["player_id"]))
 
 
 def sync_odds(con, client: BdlClient, dates: list[date]) -> int:

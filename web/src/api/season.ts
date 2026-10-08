@@ -1291,7 +1291,8 @@ export interface SeasonNotification {
   /** Effect on my week when the engine computed one (same shape as the feed). */
   impact: Impact | null;
   /** What to do, and where in the app it goes. */
-  action: { label: string; target: 'move' | 'lineup' | 'player' | 'pickups' | 'feed'; ref: string | null } | null;
+  /** 'scorecard': the System screen's Live tab (in-season checks of the model). */
+  action: { label: string; target: 'move' | 'lineup' | 'player' | 'pickups' | 'feed' | 'scorecard'; ref: string | null } | null;
   deadline: Deadline | null;
   claim: WaiverClaimStatus | null;
   provenance: Provenance[];

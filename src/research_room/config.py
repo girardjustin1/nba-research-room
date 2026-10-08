@@ -214,6 +214,21 @@ class AlertsConfig(BaseModel):
     lock_window_hours: float = 3.0     # lineup-lock reminders only this close to the first lock
 
 
+class ScorecardConfig(BaseModel):
+    """In-season checks of the live scoreboard (scorecard.py). Each pair is (watch, act)."""
+    min_player_games: int = 2000
+    reference_mae: dict[str, float] = Field(default_factory=dict)
+    reference_coverage: dict[str, float] = Field(default_factory=dict)
+    mae_ratio: tuple[float, float] = (1.05, 1.10)
+    bias_share: tuple[float, float] = (0.10, 0.20)
+    coverage_gap: tuple[float, float] = (0.04, 0.07)
+    p_play_bias: tuple[float, float] = (0.03, 0.05)
+    min_listed: int = 30
+    status_gap: tuple[float, float] = (0.10, 0.15)
+    min_weeks: int = 15
+    weekly_brier: tuple[float, float] = (0.22, 0.25)
+
+
 class NbaReportConfig(BaseModel):
     base_url: str = "https://ak-static.cms.nba.com/referee/injury/"
     lookback_minutes: int = 180
@@ -273,6 +288,7 @@ class EnsembleConfig(BaseModel):
 
 class ModelsConfig(BaseModel):
     driver: Literal["baseline", "lgbm"] = "baseline"
+    shadow: list[Literal["ensemble"]] = Field(default_factory=list)
     lgbm: LgbmConfig
     ridge: RidgeConfig = Field(default_factory=RidgeConfig)
     catboost: CatBoostConfig = Field(default_factory=CatBoostConfig)
@@ -374,6 +390,7 @@ class Settings(BaseModel):
     x_feed: XFeedConfig
     nba_report: NbaReportConfig = Field(default_factory=NbaReportConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
+    scorecard: ScorecardConfig = Field(default_factory=ScorecardConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig

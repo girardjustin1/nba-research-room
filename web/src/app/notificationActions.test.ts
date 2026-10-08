@@ -16,11 +16,12 @@ describe('notification actions', () => {
   it('sends each action to its screen', () => {
     const base = notificationsNormal.items[0];
     if (!base) throw new Error('the mock has no alerts');
-    const at = (target: 'move' | 'lineup' | 'pickups' | 'player' | 'feed') => actionPath({ ...base, action: { label: 'x', target, ref: null } });
+    const at = (target: 'move' | 'lineup' | 'pickups' | 'player' | 'feed' | 'scorecard') => actionPath({ ...base, action: { label: 'x', target, ref: null } });
     expect(at('move')).toBe('#/league/team/moves');
     expect(at('lineup')).toBe('#/league/team');
     expect(at('pickups')).toBe('#/league/team/pickups');
     expect(at('feed')).toBe('#/league/matchup');
+    expect(at('scorecard')).toBe('#/system/live');
     if (base.player) expect(at('player')).toBe(`#/league/players/profile?id=${base.player.player_id}`);
   });
 });

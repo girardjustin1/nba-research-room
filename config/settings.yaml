@@ -156,6 +156,7 @@ baseline:
 
 models:                        # Phase 3 challengers (projections/*.py); each must beat the baseline first
   driver: baseline             # which model writes the nightly projections: baseline | lgbm
+  shadow: [ensemble]           # project next to the driver, graded live, never used (shadow.py)
   lgbm:                        # gradient-boosted corrections to minutes and per-minute rates
     n_estimators: 300
     learning_rate: 0.05
@@ -255,6 +256,26 @@ alerts:                        # in-app notifications (research_room/alerts.py, 
   lookback_days: 14            # how far back the inbox shows
   waiver_min_gain: 0.02        # add/drop alert only when the move adds at least 2 pts of P(win week)
   lock_window_hours: 3         # lineup-lock reminder only in the 3 hours before the first lock
+
+scorecard:                     # in-season checks (scorecard.py); the rules are in DECISIONS.md,
+                               # "In-season scorecard", written before opening night. Pairs: watch, act.
+  min_player_games: 2000       # per stat, before the error and band checks count
+  # The baseline on 2025-26 with no game-day news (make bakeoff, 2026-10-08). Live projections have
+  # the news, so their errors should be at or below these.
+  reference_mae: {minutes: 6.291, pts: 4.200, reb: 1.678, ast: 1.127, stl: 0.529, blk: 0.361,
+                  fg3m: 0.685, tov: 0.703, fga: 2.816, fta: 1.257}
+  # Share of outcomes inside the 80% band then. Small whole-number stats sit above 0.80 by
+  # construction (a 0-or-1 block game is inside a band of 0.2-0.9), so each stat has its own.
+  reference_coverage: {minutes: 0.816, pts: 0.839, reb: 0.851, ast: 0.870, stl: 0.899, blk: 0.908,
+                       fg3m: 0.895, tov: 0.881, fga: 0.826, fta: 0.888}
+  mae_ratio: [1.05, 1.10]      # live average miss over the reference
+  bias_share: [0.10, 0.20]     # |lean| as a share of the reference average miss
+  coverage_gap: [0.04, 0.07]   # |live band coverage - reference|
+  p_play_bias: [0.03, 0.05]    # |mean P(plays) - share who played|
+  min_listed: 30               # per news source and status, before its played rate counts
+  status_gap: [0.10, 0.15]     # |played rate - the P(plays) we assume for that status|
+  min_weeks: 15                # one result a week (my matchup): too few to judge before this
+  weekly_brier: [0.22, 0.25]   # 0.25 is a coin flip; the backtest's was 0.187
 
 nba_report:                    # the NBA's official injury report (ingest/nba_injury_report.py)
   base_url: https://ak-static.cms.nba.com/referee/injury/

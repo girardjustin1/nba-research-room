@@ -82,8 +82,8 @@ def health(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
     checks.append(_fresh("markets", "Betting markets (Kalshi, TheRundown)", mk, fh["markets"], now,
                          "run make markets (or make nightly); check RUNDOWN_API_KEY in .env",
                          missing_detail="no market snapshot yet: props and sportsbook lines stay missing"))
-    checks.append(_fresh("projections", "Projections", one("SELECT max(run_at) FROM projections"),
-                         fh["projections"], now, "run make nightly"))
+    last_run = one("SELECT max(run_at) FROM projections WHERE model = 'baseline'")
+    checks.append(_fresh("projections", "Projections", last_run, fh["projections"], now, "run make nightly"))
     snap = one("SELECT max(snapshot) FROM external_projections WHERE source='bbm'")
     checks.append(_fresh("preseason", "Basketball Monster projections",
                          pd.Timestamp(snap).tz_localize("UTC") if snap else None,

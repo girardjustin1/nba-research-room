@@ -356,6 +356,34 @@ def _waiver_alerts(con, cfg: Settings, now: datetime) -> list[dict]:
     return out
 
 
+def _scorecard_alert(now: datetime, report: dict | None) -> list[dict]:
+    """When the in-season scorecard (scorecard.py) has checks that need action: one alert a day."""
+    sc = (report or {}).get("scorecard") or {}
+    acts = [c for c in sc.get("flagged", []) if c["status"] == "act"]
+    if not acts:
+        return []
+    day = _today(now)
+    names = ", ".join(f"{c['area']} {c['item']}" for c in acts[:3]) + ("..." if len(acts) > 3 else "")
+    return [
+        {
+            "id": _id(f"scorecard:{day}"),
+            "kind": "model",
+            "priority": "high",
+            "title": f"Model check: {len(acts)} need{'s' if len(acts) == 1 else ''} attention",
+            "body": f"The in-season scorecard flags {names}. Each comes with what to look at first.",
+            "player_id": None,
+            "owner": None,
+            "impact": None,
+            "action": {"label": "See the scorecard", "target": "scorecard", "ref": None},
+            "deadline": None,
+            "provenance": [
+                {"module": "scorecard", "as_of": pd.Timestamp(now).isoformat(), "run_id": None,
+                 "note": "live scoreboard, season to date"}
+            ],
+        }
+    ]
+
+
 def _model_note(con, now: datetime, report: dict | None) -> list[dict]:
     n = (report or {}).get("projections")
     if not n:
@@ -407,7 +435,11 @@ def generate(
         lambda: _game_day(con, cfg, now),
     ]
     if run == "nightly":
-        builders = [lambda: _waiver_alerts(con, cfg, now), lambda: _model_note(con, now, report)]
+        builders = [
+            lambda: _waiver_alerts(con, cfg, now),
+            lambda: _model_note(con, now, report),
+            lambda: _scorecard_alert(now, report),
+        ]
     errors = []
     for b in builders:
         try:

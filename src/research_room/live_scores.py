@@ -35,16 +35,19 @@ from research_room.config import Settings, settings
 Z80 = 1.2815515655446004
 
 
-def graded_rows(con: duckdb.DuckDBPyConnection, start: date, end: date) -> pd.DataFrame:
+def graded_rows(
+    con: duckdb.DuckDBPyConnection, start: date, end: date, model: str = "baseline"
+) -> pd.DataFrame:
     """Per projected player-game-stat in [start, end] whose game is final: the last pre-tip
     projection and the real line. Starts from what was projected (audit F16): a projected player
     with no box-score row is kept, with `no_log`, so he is counted as ungraded, not dropped.
-    His game is his current team's game that day (live grading runs nightly on recent days)."""
+    His game is his current team's game that day (live grading runs nightly on recent days).
+    `model`: whose projections (a shadow model's rows pair with the baseline's by run time)."""
     return con.execute(
         """
         WITH pg AS (
             SELECT DISTINCT player_id, date FROM projections
-            WHERE model = 'baseline' AND date BETWEEN ? AND ?),
+            WHERE model = ? AND date BETWEEN ? AND ?),
         gm AS (
             SELECT pg.player_id, pg.date AS game_date, g.game_id, g.tip_utc
             FROM pg JOIN players pl USING (player_id)
@@ -53,18 +56,18 @@ def graded_rows(con: duckdb.DuckDBPyConnection, start: date, end: date) -> pd.Da
         runs AS (
             SELECT gm.player_id, gm.game_id, max(p.run_at) AS run_at
             FROM gm JOIN projections p ON p.player_id = gm.player_id AND p.date = gm.game_date
-            WHERE p.model = 'baseline' AND p.run_at < gm.tip_utc
+            WHERE p.model = ? AND p.run_at < gm.tip_utc
             GROUP BY 1, 2)
         SELECT gm.player_id, gm.game_id, gm.game_date, gm.tip_utc, l.player_id IS NULL AS no_log,
                coalesce(l.did_play, false) AS did_play, l.minutes,
                l.pts, l.reb, l.ast, l.stl, l.blk, l.fg3m, l.tov, l.fgm, l.fga, l.ftm, l.fta,
                p.stat, p.mean, p.sd, p.p_play, p.model_mean, coalesce(p.market, false) AS market, r.run_at
         FROM gm JOIN runs r USING (player_id, game_id)
-        JOIN projections p ON p.model = 'baseline' AND p.run_at = r.run_at AND p.player_id = gm.player_id
+        JOIN projections p ON p.model = ? AND p.run_at = r.run_at AND p.player_id = gm.player_id
                           AND p.date = gm.game_date
         LEFT JOIN game_logs l ON l.game_id = gm.game_id AND l.player_id = gm.player_id
     """,
-        [start, end],
+        [model, start, end, model, model],
     ).df()
 
 

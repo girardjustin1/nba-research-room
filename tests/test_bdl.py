@@ -225,3 +225,14 @@ def test_sync_odds_stores_live_and_opening(con):
     })
     assert bdl.sync_odds(con, c, [date(2026, 10, 21)]) == 4
     assert sess.calls[0][1]["dates[]"] == ["2026-10-21"]
+
+
+def test_an_empty_window_writes_nothing_instead_of_failing(con):
+    """The night before opening night: no box scores, no advanced rows, no injuries."""
+    empty = FakeResponse(200, {"data": [], "meta": {}})
+    c, _, _ = client({(bdl.EP_STATS, None): empty, (bdl.EP_ADVANCED, None): empty,
+                      (bdl.EP_INJURIES, None): empty})
+    window = {"start_date": "2026-10-16", "end_date": "2026-10-19"}
+    assert bdl.sync_stats(con, c, window, use_cache=False) == 0
+    assert bdl.sync_advanced(con, c, window, use_cache=False) == 0
+    assert bdl.sync_injuries(con, c) == 0

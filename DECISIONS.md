@@ -963,3 +963,45 @@ so "blending can't help" was wrong. A blend with weights optimized on validation
 to drop members) is the better-specified test and is not built. The deciding question, whether
 it moves the weekly odds, is answered above: not measurably.
 
+**In-season scorecard and the forward tests: the rules, written before opening night
+(2026-10-08).** Written now so that what counts as working, and what each test needs to change
+anything, is fixed before any 2026-27 game is played.
+- `scorecard.py` grades the live scoreboard season to date every night (also at the end of
+  `make scoreboard-live`). Each check reads ok, watch, act or not enough yet; an act raises one
+  high alert a day in the app, linking to System → Live. An action says what to look at first.
+  Nothing changes a model or a setting by itself. Thresholds are in `settings.scorecard`.
+- References: the baseline on 2025-26 with no game-day news (`make bakeoff`). Live projections
+  have the news, so they should do at least as well; doing worse means something broke.
+  - Average miss per stat: watch at 5% above the reference, act at 10%.
+  - Lean (projected minus actual) per stat, as a share of the reference miss: watch at 10%, act
+    at 20%. The preseason finding that the top players were projected about 7% too many minutes
+    would read watch.
+  - 80% band coverage per stat against its own reference (small whole-number stats sit above
+    0.80 by construction): watch at 0.04 off, act at 0.07.
+  - P(plays): mean P(plays) minus the share who played, watch at 0.03, act at 0.05.
+  - News: per source and status, after 30 listings, the share who played against the P(plays)
+    assumed for that status: watch at 0.10 off, act at 0.15.
+  - None of these is graded before 2,000 player-games per stat (about four game nights).
+  - Weekly odds: my matchup gives one result a week, so nothing is graded before 15 weeks (the
+    backtest's 140 team-weeks could tell apart about ±0.004 in Brier; 15 weeks of one team only
+    about ±0.1). Then watch above 0.22, act at 0.25, a coin flip (the backtest's was 0.187).
+- Checkpoints: Monday reviews of `make scoreboard-live`; week 3 (Nov 2-8), the first full review;
+  week 6 (Nov 23-29), the Phase 2 exit: the weekly backtest replayed on this season's weeks 1-6.
+  It passes when the do-nothing Brier is at most 0.22 and the plans' win-rate lift over doing
+  nothing has an 80% range above zero.
+- The ensemble runs in the shadow from opening night (`settings.models.shadow`, `shadow.py`): it
+  projects in every nightly and pre-game run with the baseline's inputs and run time, and drives
+  nothing; `make shadow-report` compares the two game by game. On Dec 14 (Phase 3's window) it
+  earns a second deciding replay (this season's weeks 1-8, driven by each, under the rule above)
+  only if, on live games, its RMSE is lower on at least 8 of the 10 stats and its average miss is
+  not worse (95% range entirely above zero) on any of points, rebounds, assists, steals, blocks,
+  threes or turnovers. Otherwise it stays in the shadow until the All-Star break.
+- X forward test, mid-November, once there are 3 weeks and at least 150 X statuses tied to a
+  game: replay this season's game days from the stored inputs twice, with and without X statuses
+  in the overrides (the NBA report and BallDontLie only), paired by player-game. Primary: the
+  P(plays) Brier on player-games where X gave a status is lower with X, 95% range (resampling
+  days) below zero. Guard: the points average miss is not worse. Pass: X keeps its place. Primary
+  not met: X drops below the NBA injury report in the authority order. Worse with X (range above
+  zero): X is switched off until fixed. The replay is not built yet; the parser test from the
+  round-3 audit (docs/audits) is read alongside it.
+

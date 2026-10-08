@@ -20,6 +20,7 @@ export function actionPath(n: SeasonNotification): string {
   if (a.target === 'move') return '#/league/team/moves';
   if (a.target === 'lineup') return '#/league/team';
   if (a.target === 'pickups') return '#/league/team/pickups';
+  if (a.target === 'scorecard') return '#/system/live';
   if (a.target === 'player') return n.player ? `#/league/players/profile?id=${n.player.player_id}` : '#/league/players';
   return '#/league/matchup';
 }

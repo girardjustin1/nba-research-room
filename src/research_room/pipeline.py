@@ -31,6 +31,8 @@ from research_room import (
     overrides,
     schedule,
     scoreboard,
+    scorecard,
+    shadow,
     store,
 )
 from research_room.config import Settings, settings
@@ -96,9 +98,11 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
 
 
 def refresh_projections(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date, step,
-                        report: dict) -> pd.DataFrame:
+                        report: dict, refit_shadow: bool = False) -> pd.DataFrame:
     """Fit the driver model, project the window with today's overrides and the market overlay,
-    and store it (one projections run). Shared by the nightly and pre-game runs."""
+    and store it (one projections run). Shared by the nightly and pre-game runs. Then the shadow
+    models (shadow.py) project the same window with the same inputs, stored at the same run time;
+    only the nightly run (`refit_shadow`) may fit one."""
     seasons = sorted(cfg.bdl.backfill_seasons)
     train = step("features (train)", lambda: features.build(
         features.load_logs(con, seasons), features.team_context(con, seasons), cfg))
@@ -117,7 +121,12 @@ def refresh_projections(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date
     proj = market.overlay(con, proj, cfg, news=ov)
     report["market_overlay"] = int(proj["market"].sum())
     report["market_stale"] = int(proj["market_stale"].sum())
-    report["projections"] = step("store projections", lambda: write_projections(con, proj, model.name))
+    run_at = store.utcnow()
+    report["projections"] = step("store projections",
+                                 lambda: write_projections(con, proj, model.name, run_at=run_at))
+    if cfg.models.shadow:
+        report["shadow"] = step("shadow models", lambda: shadow.project(
+            con, cfg, train, seasons, start, end, ov, prior, run_at, refit_shadow))
     return proj
 
 
@@ -180,6 +189,14 @@ def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
         except Exception:  # noqa: BLE001 - recorded in ingest_runs; the CSV inbox still works
             pass
     return yahoo.ingest_inbox(con, cfg=cfg)
+
+
+def _soft(fn) -> dict:
+    """A step that records its own run: its failure is reported, never stops the night."""
+    try:
+        return fn()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}"[:300]}
 
 
 def _guarded(con: duckdb.DuckDBPyConnection, source: str, fn) -> dict:
@@ -249,10 +266,13 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
     with store.ingest_run(con, "pipeline", "nightly") as run:
         if sync:
             api = client or bdl.BdlClient.from_env()
-            report["bdl"] = step("bdl sync", lambda: bdl.sync_daily(con, api, day))
+            # An outage leaves yesterday's data: projections still run (recorded in ingest_runs).
+            report["bdl"] = step("bdl sync", lambda: _soft(lambda: bdl.sync_daily(con, api, day)))
             report["nba_report"] = step("nba injury report", lambda: _guarded_report(con, cfg))
             report["live_scores"] = step("live scoreboard", lambda: _guarded(
                 con, "live_scores", lambda: live_scores.update(con, cfg, day - timedelta(days=1))))
+            report["scorecard"] = step("scorecard", lambda: _guarded(
+                con, "scorecard", lambda: scorecard.run(con, cfg)))
             report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
         try:
             report["inbox"] = step("yahoo inbox", lambda: _yahoo(con, cfg))
@@ -260,7 +280,7 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             report["inbox"] = {"rejected": str(exc)}
             echo(f"yahoo inbox REJECTED: {exc}")
         seasons = sorted(cfg.bdl.backfill_seasons)
-        proj = refresh_projections(con, cfg, day, step, report)
+        proj = refresh_projections(con, cfg, day, step, report, refit_shadow=True)
         report["lineup"] = step("lineup", lambda: recommend_lineup(con, proj, day, cfg))
         if len(seasons) > 1:                                   # needs an earlier season to fit on
             report["scoreboard"] = step("scoreboard", lambda: scoreboard.write_scores(

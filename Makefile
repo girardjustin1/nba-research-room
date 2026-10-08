@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: bakeoff ensemble-replay yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: dry-run bakeoff ensemble-replay shadow-report yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -74,8 +74,14 @@ yahoo-pull:  ## read teams, rosters, free agents, matchup totals and draft picks
 ensemble-replay:  ## the deciding test: the weekly replay driven by the baseline, then the ensemble (read only)
 	$(PY) jobs/ensemble_replay.py
 
+dry-run:  ## the nightly and pre-game jobs on a copy of the store, clock set to a game day (default: opening night)
+	$(PY) jobs/dry_run.py $(ARGS)
+
 bakeoff:  ## models vs the baseline: fit, weight the ensemble on one season, test once on the next (read only)
 	$(PY) jobs/model_bakeoff.py
+
+shadow-report:  ## the shadow models (settings.models.shadow) against the baseline, game by game, season to date
+	$(PY) jobs/shadow_report.py
 
 scoreboard-live:  ## grade what the app said before each game against what happened (season to date)
 	$(PY) jobs/scoreboard_live.py $(ARGS)
