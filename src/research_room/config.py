@@ -251,9 +251,33 @@ class LgbmConfig(BaseModel):
     min_rate_minutes: float
 
 
+class RidgeConfig(BaseModel):
+    alpha: float = 10.0
+
+
+class CatBoostConfig(BaseModel):
+    iterations: int = 400
+    depth: int = 6
+    learning_rate: float = 0.05
+    l2_leaf_reg: float = 5.0
+
+
+class HierConfig(BaseModel):
+    k_grid_minutes: list[float] = Field(default_factory=lambda: [0.0, 60, 120, 250, 500, 1000, 2000])
+
+
+class EnsembleConfig(BaseModel):
+    members: list[str] = Field(default_factory=lambda: ["baseline", "lgbm", "ridge", "catboost", "hier"])
+    min_weight: float = 0.05          # every member keeps at least this weight per stat (build prompt)
+
+
 class ModelsConfig(BaseModel):
     driver: Literal["baseline", "lgbm"] = "baseline"
     lgbm: LgbmConfig
+    ridge: RidgeConfig = Field(default_factory=RidgeConfig)
+    catboost: CatBoostConfig = Field(default_factory=CatBoostConfig)
+    hier: HierConfig = Field(default_factory=HierConfig)
+    ensemble: EnsembleConfig = Field(default_factory=EnsembleConfig)
 
 
 class BacktestConfig(BaseModel):

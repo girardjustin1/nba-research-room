@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-08-bakeoff
+    date: 2026-10-08
+    kind: finding
+    title: Four more models tried; the baseline still wins
+    body: >
+      Ridge, CatBoost, a position-based model and a blend of all five were each tested on last
+      season (weights chosen on the season before). None beat the baseline: the blend's errors were
+      about 1% larger on most stats. The baseline keeps driving projections; the gains this season
+      come from news, injuries, teammates out and the betting markets instead.
+    refs: [DECISIONS.md, jobs/model_bakeoff.py]
+
   - id: 2026-10-08-notifications
     date: 2026-10-08
     kind: update

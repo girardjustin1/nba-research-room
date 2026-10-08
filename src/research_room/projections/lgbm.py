@@ -85,9 +85,13 @@ class LgbmModel(BaselineModel):
             x[c] = pd.to_numeric(df[c], errors="coerce").astype(float) if c in df else np.nan
         return x
 
+    def _estimator(self):
+        """A fresh regressor for one target (subclasses swap the learner; the frame stays)."""
+        return LGBMRegressor(**self._params())
+
     def _train(self, played: pd.DataFrame) -> dict:
         models = {
-            "minutes": LGBMRegressor(**self._params()).fit(
+            "minutes": self._estimator().fit(
                 self._x(played, self.MIN_FEATURES), played["y_minutes"].astype(float)
             )
         }
@@ -95,7 +99,7 @@ class LgbmModel(BaselineModel):
         for s in STATS:
             target = enough[f"y_{s}"] / enough["y_minutes"] - enough[f"{s}_pm_ewma"]
             ok = target.notna()
-            models[s] = LGBMRegressor(**self._params()).fit(
+            models[s] = self._estimator().fit(
                 self._x(enough[ok], self.RATE_BASE), target[ok], sample_weight=enough.loc[ok, "y_minutes"]
             )
         return models

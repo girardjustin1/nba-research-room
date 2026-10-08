@@ -856,3 +856,27 @@ aside in favour of the app's own inbox.
   state is a small file next to the store; the bell shows the unread count (re-read on every
   navigation); demo mode keeps its own read state until reset.
 - Waiver claim status (pending, cleared, lost) waits for the Yahoo API's transactions.
+
+**Model bake-off: Ridge, CatBoost, hierarchical and the ensemble. None adopted (2026-10-08).**
+`make bakeoff` (`jobs/model_bakeoff.py`), `projections/ridge.py`, `projections/catboost_model.py`
+(named so it can't shadow the catboost package), `projections/hier.py`, `projections/ensemble.py`.
+- Ridge and CatBoost use LightGBM's frame (corrections to minutes and per-minute rates from the
+  player's history) with a different learner. Hierarchical pulls each player's per-minute rates
+  toward his position group's (G, F, C), strength per stat chosen on the training games. The
+  ensemble is the build prompt's inverse-error blend per stat (every member at least 5%), with a
+  spread that widens where the members disagree; P(plays) and minutes come from the baseline.
+- Nested, the test season touched once (audit F14): members fitted on 2023-24, weights from their
+  2024-25 errors; members refitted on 2023-25 and scored once on 2025-26. Scored like the model
+  scoreboard (every game with a pre-game state, a sat game counting 0, no game-day news); 95%
+  ranges resample whole game days.
+- MAE against the baseline, 2025-26 (positive is worse): points LightGBM +2.1%, Ridge +1.3%,
+  CatBoost +1.9%, hierarchical +0.3%, ensemble +0.9%. Across minutes, points, rebounds, assists,
+  steals, blocks, threes, turnovers, FGA, FTA the ensemble is worse on 9 of 10 (+0.3% to +1.6%,
+  every 95% range above zero) and better only on turnovers (−0.26%, 95% −0.41% to −0.12%).
+  Hierarchical is about even (−0.2% to +0.8%). Ensemble 80% band coverage 0.83-0.91: too wide.
+- Why the blend can't help: the members' errors are so close in size that inverse-error weights
+  come out near 0.20 each, diluting the baseline with four weaker, correlated models.
+- Consistent with the LightGBM and context findings: projections from a player's own history are
+  at their limit; the gains came from new information (teammates out, the injury report,
+  markets). The baseline stays the driver; the ensemble is not gated on. The code stays as the
+  experiment record and for re-running each season.

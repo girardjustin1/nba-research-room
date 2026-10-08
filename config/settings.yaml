@@ -164,6 +164,18 @@ models:                        # Phase 3 challengers (projections/*.py); each mu
     subsample: 0.8
     colsample_bytree: 0.8
     min_rate_minutes: 8        # per-minute targets only from games with at least this many minutes
+  ridge:                       # the same frame, a linear learner (projections/ridge.py)
+    alpha: 10
+  catboost:                    # the same frame, CatBoost (projections/catboost_model.py)
+    iterations: 400
+    depth: 6
+    learning_rate: 0.05
+    l2_leaf_reg: 5
+  hier:                        # per-minute rates pulled toward the player's position (projections/hier.py)
+    k_grid_minutes: [0, 60, 120, 250, 500, 1000, 2000]
+  ensemble:                    # inverse-error blend of the members (projections/ensemble.py)
+    members: [baseline, lgbm, ridge, catboost, hier]
+    min_weight: 0.05           # every member keeps at least 5% per stat
 
 optimizer:                     # weekly add/drop plan (research_room/optimizer.py)
   candidate_pool: 40           # free agents considered, the most valuable this week under the current weights
