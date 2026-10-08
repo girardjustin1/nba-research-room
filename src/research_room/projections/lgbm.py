@@ -27,9 +27,14 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
+from research_room import teammates
 from research_room.config import Settings
 from research_room.features import CONTEXT_COLUMNS
 from research_room.projections.baseline import STATS, BaselineModel
+
+# Makes never exceed attempts (or threes the makes) once each rate is corrected on its own
+# (audit A03: independent corrections put FTM above FTA in 712 of 40,919 LightGBM rows).
+COHERENT = (("fgm", "fga"), ("ftm", "fta"), ("fg3m", "fgm"))
 
 MIN_FEATURES = [
     "min_played_ewma",
@@ -119,6 +124,11 @@ class LgbmModel(BaselineModel):
             out.loc[has, f"{s}_pm_ewma"] = np.clip(
                 rows[f"{s}_pm_ewma"].astype(float) + models[s].predict(x), 0, None
             )
+        for made, tried in COHERENT:
+            if f"{made}_pm_ewma" in out and f"{tried}_pm_ewma" in out:
+                out.loc[has, f"{made}_pm_ewma"] = np.minimum(
+                    out.loc[has, f"{made}_pm_ewma"], out.loc[has, f"{tried}_pm_ewma"]
+                )
         return out
 
     def corrected(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -140,6 +150,11 @@ class LgbmModel(BaselineModel):
             oof = self._apply(self._train(played), played)
         self.models = self._train(played)
         super().fit(oof.assign(y_did_play=True))  # phi from out-of-fold corrected predictions
+        # Teammates out needs the games players sat; the phi fit above only sees games played,
+        # where no teammate is ever missing (audit A01). Fit it on everything, as the baseline does.
+        self.teammates = None
+        if self.cfg.baseline.teammates.enabled and set(teammates.PRIOR_COLUMNS) <= set(train.columns):
+            self.teammates = teammates.TeammatesAdjust(self.cfg).fit(train)
         return self
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:

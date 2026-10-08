@@ -36,20 +36,24 @@ class HierModel(BaselineModel):
         self.name = "hier"
         self.pos_rate: dict[str, dict[str, float]] = {}
         self.k: dict[str, float] = {}
+        self.positions: dict[int, str | None] = {}  # player_id -> position, for rows without one
+
+    def _group(self, df: pd.DataFrame) -> pd.Series:
+        if "position" in df:
+            return position_group(df["position"])
+        if self.positions and "player_id" in df:
+            return position_group(df["player_id"].map(self.positions))
+        return pd.Series("ALL", index=df.index)
 
     def _prior(self, df: pd.DataFrame, s: str) -> pd.Series:
-        grp = position_group(df["position"]) if "position" in df else pd.Series("ALL", index=df.index)
+        grp = self._group(df)
         rates = self.pos_rate.get(s, {})
         return grp.map(rates).fillna(rates.get("ALL", np.nan)).astype(float)
 
     def fit(self, train: pd.DataFrame) -> HierModel:
         super().fit(train)  # phi, as the baseline
         played = train[train["y_did_play"].astype(bool) & train["min_played_ewma"].notna()]
-        grp = (
-            position_group(played["position"])
-            if "position" in played
-            else pd.Series("ALL", index=played.index)
-        )
+        grp = self._group(played)
         n = self._evidence(played)
         for s in STATS:
             y, mins, r = played[f"y_{s}"], played["y_minutes"], played[f"{s}_pm_ewma"]

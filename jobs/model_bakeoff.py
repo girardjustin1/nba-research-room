@@ -9,8 +9,11 @@ Nested, so the test season is touched once (audit F14):
    the stage-1 weights, and all are scored against what happened.
 Scored like the model scoreboard (scoreboard.evaluate): every game of a player with a pre-game
 state, a game he sat counting 0, no game-day news (play rate only). MAE, RMSE and 80% band coverage
-per stat; each challenger's MAE change against the baseline with a 95% range from resampling
-whole game days (games the same night share news and schedules, so they are not independent).
+per stat; each challenger's MAE and RMSE change against the baseline, the MAE change with a 95%
+range from resampling whole game days (games the same night share news and schedules, so they are
+not independent); and how many predicted stat lines have makes above attempts (audit A03).
+`position` is today's players table, used for every season: a fixed proxy, not a dated history
+(audit A07), so a player whose listed position changed is grouped by the current one throughout.
 """
 
 from __future__ import annotations
@@ -125,6 +128,8 @@ def main() -> int:
                 "n": int(len(a)),
             }
             if n != "baseline":
+                brmse = float(np.sqrt((b["err"] ** 2).mean()))
+                row["rmse_change_pct"] = 100 * (rmse - brmse) / brmse
                 d = (a["err"].abs() - b["err"].abs().reindex(a.index)).to_frame("d").assign(date=a["date"])
                 by_day = d.groupby("date")["d"].agg(["sum", "size"])
                 sums, cnt = by_day["sum"].to_numpy(), by_day["size"].to_numpy()
@@ -146,6 +151,15 @@ def main() -> int:
     piv = df.pivot_table(index="stat", columns="model", values="mae_change_pct").reindex(SHOWN).round(2)
     print("\nMAE change vs the baseline (%), test season, negative is better:")
     print(piv.to_string())
+    rpiv = df.pivot_table(index="stat", columns="model", values="rmse_change_pct").reindex(SHOWN).round(2)
+    print("\nRMSE change vs the baseline (%), same games, negative is better:")
+    print(rpiv.to_string())
+    print("\nPredicted makes above attempts (rows), test season:")
+    for n, p in tpreds.items():
+        w = p.pivot_table(index=["player_id", "game_id"], columns="stat", values="mean")
+        pairs = (("fgm", "fga"), ("ftm", "fta"), ("fg3m", "fgm"))
+        bad = {m: int((w[m] > w[t] + 1e-9).sum()) for m, t in pairs if m in w and t in w}
+        print(f"  {n:<9} " + ", ".join(f"{m} {c}" for m, c in bad.items()))
     print("\n95% ranges (resampling game days), ensemble:")
     for r in df[df["model"] == "ensemble"].itertuples():
         print(

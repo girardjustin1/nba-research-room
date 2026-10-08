@@ -189,8 +189,12 @@ def run(
     cfg: Settings | None = None,
     test_season: int | None = None,
     echo=print,
+    make_model=None,
 ) -> pd.DataFrame:
-    """Replay `test_season` (default: the latest in `logs`). Returns one row per team-week."""
+    """Replay `test_season` (default: the latest in `logs`). Returns one row per team-week.
+    `make_model(cfg)`: the projection model to replay (default the baseline); it drives the odds,
+    lineups and plans, with a calibration fitted on its own projections. The simulated draft and
+    the sampled team-weeks always come from the baseline, so two replays are paired."""
     cfg = cfg or settings()
     bt = cfg.backtest
     built = features.build(logs, team_ctx, cfg)
@@ -198,9 +202,13 @@ def run(
     test_season = test_season or int(built["season"].max())
     season_sched = team_schedule(games).merge(games[["game_id", "season"]], on="game_id")
     train_seasons = sorted(built.loc[built["season"] < test_season, "season"].unique())
-    model = BaselineModel(cfg).fit(built[built["season"] < test_season])
-    model.fit_minutes(built, season_sched, train_seasons)
-    cal = calibration.calibrate(built, cfg, test_season, schedule=season_sched)
+    base = BaselineModel(cfg).fit(built[built["season"] < test_season])
+    base.fit_minutes(built, season_sched, train_seasons)
+    model = base
+    if make_model is not None:
+        model = make_model(cfg).fit(built[built["season"] < test_season])
+        model.fit_minutes(built, season_sched, train_seasons)
+    cal = calibration.calibrate(built, cfg, test_season, schedule=season_sched, model=model)
     var_mult = dict(zip(cal["category"], cal["multiplier"], strict=True))
     corr = cal.attrs["corr"].to_numpy(float)
     actual = actuals(built[built["season"] == test_season])
@@ -221,7 +229,9 @@ def run(
             elig.setdefault(int(pid), eligibility(positions.get(int(pid))))
         if league is None:
             # The simulated draft uses the first replayed week's states (one week into the season).
-            league = draft_league(season_values(pw, days, cfg), bt.teams, bt.roster_size)
+            dw = pw if model is base else week_projections(base, logs, team_ctx, schedule, start, days,
+                                                             test_season, cfg)
+            league = draft_league(season_values(dw, days, cfg), bt.teams, bt.roster_size)
             owned = {p for r in league for p in r}
         aw = actual[actual["date"].isin(days)]
         suited = aw.loc[aw["y_did_play"].astype(bool), ["player_id", "date"]].drop_duplicates()

@@ -65,3 +65,32 @@ def test_game_context_matches_the_feature_table_and_respects_the_cutoff():
     b = features.game_context(rows, sched, later, cutoff=cut)["opp_pace_r10"]
     pd.testing.assert_series_equal(a, b)
     assert LgbmContextModel(cfg).name == "lgbm_ctx"
+
+
+def test_challengers_fit_teammates_out_on_the_games_players_sat():
+    cfg, built = _built()
+    small = cfg.model_copy(update={"models": cfg.models.model_copy(update={"lgbm": cfg.models.lgbm.model_copy(
+        update={"n_estimators": 20, "min_child_samples": 20})})})
+    m, ref = LgbmModel(small).fit(built), BaselineModel(small).fit(built)
+    if ref.teammates is None:
+        pytest.skip("teammates out is off in settings")
+    assert (~built["y_did_play"].astype(bool)).any()                    # the fixture has DNPs
+    assert m.teammates is not None and np.allclose(m.teammates.coef, ref.teammates.coef)   # audit A01
+    assert m.teammates.b == pytest.approx(ref.teammates.b)
+
+
+def test_corrected_makes_never_exceed_attempts():
+    class Up:                                                           # a correction that inflates makes
+        def __init__(self, d):
+            self.d = d
+
+        def predict(self, x):
+            return np.full(len(x), self.d)
+
+    _, built = _built()
+    flat = ("pts", "reb", "ast", "stl", "blk", "tov", "fga", "fta")
+    models = {"minutes": Up(30.0), **{s: Up(0.0) for s in flat}}
+    models |= {s: Up(1.0) for s in ("fgm", "ftm", "fg3m")}
+    out = LgbmModel._apply(models, built)
+    for made, tried in (("fgm", "fga"), ("ftm", "fta"), ("fg3m", "fgm")):      # audit A03
+        assert (out[f"{made}_pm_ewma"] <= out[f"{tried}_pm_ewma"] + 1e-12).all()

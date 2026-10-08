@@ -129,21 +129,24 @@ def calibrate(
     test_season: int | None = None,
     model_cls=BaselineModel,
     schedule: pd.DataFrame | None = None,
+    model=None,
 ) -> pd.DataFrame:
     """Fit multipliers on the seasons before `test_season`; score raw and calibrated coverage on it.
     With `schedule` (team_id, game_id, date, season) the player-weeks are built the live way
     (live_player_weeks: Monday states onto every scheduled game, missed games count 0), so
     unexpected absences are in the spread; without it, from games played (the older method,
-    which leaves them out). Returns one row per category."""
+    which leaves them out). `model`: one already fitted (and minutes-recalibrated) on the same
+    seasons, used instead of fitting `model_cls` again. Returns one row per category."""
     cfg = cfg or settings()
     built = built[built["min_played_ewma"].notna()] if schedule is None else built
     seasons = sorted(built["season"].unique())
     test_season = test_season or seasons[-1]
     train = built[built["season"] < test_season]
     test = built[built["season"] == test_season]
-    model = model_cls(cfg).fit(train[train["min_played_ewma"].notna()])
-    if schedule is not None:
-        model.fit_minutes(built, schedule, sorted(train["season"].unique()))
+    if model is None:
+        model = model_cls(cfg).fit(train[train["min_played_ewma"].notna()])
+        if schedule is not None:
+            model.fit_minutes(built, schedule, sorted(train["season"].unique()))
     if schedule is None:
         w_train, w_test = player_weeks(model, train), player_weeks(model, test)
     else:

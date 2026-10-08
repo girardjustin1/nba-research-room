@@ -189,17 +189,23 @@ class BaselineModel:
         usable = (has_ewma | has_prior).to_numpy()
         base = df.loc[usable, ["player_id", "game_id", "date"]].reset_index(drop=True)
         pu, mu_min = p[usable].to_numpy(float), m[usable]
+        conds = {"minutes": mu_min}
+        for s in STATS:
+            ew = (df[f"{s}_pm_ewma"] * df["min_played_ewma"]).to_numpy()
+            prior = df.get(f"prior_{s}", pd.Series(np.nan, index=df.index)).to_numpy()
+            cond = (np.where(has_ewma, ew, 0.0) * w + np.where(has_prior, prior, 0.0) * (1 - w)) * scale
+            cond = np.nan_to_num(cond[usable])
+            if s in rate_f:
+                cond = cond * rate_f[s][usable] * tm_scale[usable]
+            conds[s] = cond
+        # Makes within attempts and threes within makes: shrinkage and the threes' own teammates-out
+        # slope can otherwise put threes above field goals made (22 of 40,919 test rows).
+        for made, tried in (("fgm", "fga"), ("ftm", "fta"), ("fg3m", "fgm")):
+            if made in conds and tried in conds:
+                conds[made] = np.minimum(conds[made], conds[tried])
         for s in (*STATS, "minutes"):
             tm = tm_scale[usable] * (rate_f[s][usable] if s in rate_f else 1.0)   # teammates out's share
-            if s == "minutes":
-                cond = mu_min
-            else:
-                ew = (df[f"{s}_pm_ewma"] * df["min_played_ewma"]).to_numpy()
-                prior = df.get(f"prior_{s}", pd.Series(np.nan, index=df.index)).to_numpy()
-                cond = (np.where(has_ewma, ew, 0.0) * w + np.where(has_prior, prior, 0.0) * (1 - w)) * scale
-                cond = np.nan_to_num(cond[usable])
-                if s in rate_f:
-                    cond = cond * rate_f[s][usable] * tm_scale[usable]
+            cond = conds[s]
             phi = self.phi.get(s, 1.0)
             mean = pu * cond
             var = pu * (phi * cond + cond ** 2) - mean ** 2

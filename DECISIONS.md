@@ -908,3 +908,19 @@ engine and the bake-off on a clean clone (docs/audits/2026-10-08-codex-astra.md)
   at their limit; the gains came from new information (teammates out, the injury report,
   markets). The baseline stays the driver; the ensemble is not gated on. The code stays as the
   experiment record and for re-running each season.
+
+**Ensemble vs baseline on the weekly odds: the rule, written before the run (2026-10-08).**
+`make ensemble-replay` (`jobs/ensemble_replay.py`) replays 2025-26 week by week twice
+(backtest.py): once driven by the baseline, once by the ensemble (members fitted on 2023-25,
+weights nested inside those seasons: fitted on 2023-24, weighted on 2024-25). Same simulated
+league (drafted on the baseline), same sampled team-weeks, each model with a simulator calibration
+fitted on its own projections. The ensemble replaces the baseline as the driver only if all hold:
+1. Primary: its weekly win-odds Brier score (doing nothing; a tied week counts 0.5) is lower than
+   the baseline's on the same team-weeks, and the 95% range of the difference (resampling whole
+   weeks, 2,000 draws) lies entirely below zero.
+2. Guard: the realized win rate following its plans is not worse: the 95% range of (ensemble
+   plan win rate − baseline plan win rate) does not lie entirely below zero.
+3. Guard: no predicted makes above attempts in the bake-off's test season.
+Anything else, including a lower Brier whose range crosses zero, keeps the baseline. The result
+is recorded below whichever way it goes.
+

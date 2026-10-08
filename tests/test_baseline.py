@@ -121,3 +121,11 @@ def test_minutes_recalibration_pulls_toward_the_mean_and_skips_news():
     mins = lambda d, pid: float(d[(d["stat"] == "minutes") & (d["player_id"] == pid)]["mean"].iloc[0])  # noqa: E731
     assert mins(rc, 1) == pytest.approx(2.0 + 0.85 * 36.0)
     assert mins(rc, 2) == pytest.approx(mins(base, 2))        # an override is news: untouched
+
+
+def test_threes_never_exceed_makes_and_makes_never_exceed_attempts():
+    r = row(fg3m_pm_ewma=0.3, fgm_pm_ewma=0.2, fga_pm_ewma=0.1, ftm_pm_ewma=0.4, fta_pm_ewma=0.3)
+    pred = fitted().predict(pd.DataFrame([r]))
+    m = {s: one(pred, s)["mean"] for s in ("fg3m", "fgm", "fga", "ftm", "fta")}
+    assert m["fg3m"] <= m["fgm"] <= m["fga"] and m["ftm"] <= m["fta"]
+    assert m["fga"] == pytest.approx(0.1 * 30)                  # the attempts themselves are untouched

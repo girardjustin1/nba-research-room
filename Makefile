@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: bakeoff yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: bakeoff ensemble-replay yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -70,6 +70,9 @@ yahoo-check:  ## compare the league's Yahoo settings with settings.yaml (read on
 
 yahoo-pull:  ## read teams, rosters, free agents, matchup totals and draft picks from Yahoo (read only)
 	$(PY) jobs/yahoo_pull.py
+
+ensemble-replay:  ## the deciding test: the weekly replay driven by the baseline, then the ensemble (read only)
+	$(PY) jobs/ensemble_replay.py
 
 bakeoff:  ## models vs the baseline: fit, weight the ensemble on one season, test once on the next (read only)
 	$(PY) jobs/model_bakeoff.py
