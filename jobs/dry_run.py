@@ -9,7 +9,8 @@ Usage: make dry-run                                  (opening night, settings.se
 2. Nightly run the night before DAY, at 23:30 Eastern (feeds on: BallDontLie, the NBA injury
    report, markets; all public). Feeds can only return what exists today, so a future date's box
    scores or report are honestly absent; those steps must fail softly, not stop the night.
-3. Pre-game run on DAY at 17:00 Eastern. X is replaced by a stub unless --with-x.
+3. Pre-game run on DAY at 17:00 Eastern. X is replaced by a stub unless --with-x. Yahoo is read
+   from the CSV inbox only: the sign-in file is never refreshed or written.
 4. Checks what a game day needs and prints ok, FAIL, or WAIT (waiting on the owner's Yahoo
    files, not broken) for each, then any step errors.
 Needs the dev extra (time-machine) to move the clock.
@@ -67,7 +68,11 @@ def main(argv: list[str] | None = None) -> int:
     settings.cache_clear()
 
     from research_room import pipeline, store
-    from research_room.ingest import x_feed
+    from research_room.ingest import x_feed, yahoo_api
+
+    # Never touch the Yahoo sign-in: a refresh under the moved clock would write a future token
+    # time into oauth2.json and keep an expired token in use until that date. The CSV inbox is used.
+    yahoo_api.signed_in = lambda *a, **k: False
 
     cfg = settings()
     assert cfg.paths.db == db, "the dry run must never touch the real store"
