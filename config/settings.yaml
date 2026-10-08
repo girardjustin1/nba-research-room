@@ -184,6 +184,7 @@ optimizer:                     # weekly add/drop plan (research_room/optimizer.p
   min_gain_per_acquisition: 0.002   # spend an acquisition only for >= 0.2 pts of P(win week)
   relinearize_iterations: 3    # re-weight at the plan and re-solve; the best exact P(win week) wins
   solver_time_limit_s: 20
+  saved_plan_hours: 2          # pre-game runs re-save the plan (reading every free agent) at most this often
 
 backtest:                      # replay of a past season (research_room/backtest.py, make backtest)
   teams: 14                    # simulated league: snake draft on season-start projected value

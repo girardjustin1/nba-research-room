@@ -1083,4 +1083,12 @@ are kept. The owner chose this over keeping a local copy.
 - Cost: pages read Yahoo on each load (slower), and a Yahoo outage means no roster until it's
   back (the CSV inbox is the fallback). The draft room reads team names and eligibility once per
   draft session and holds them in that session's memory.
+- The saved plan (same day): the nightly run, and a pre-game run when the last one is over 2 hours
+  old (`optimizer.saved_plan_hours`), save the add/drop plan and its "with moves" odds line
+  (`saved_plans`), as the app's own analysis only: player names and positions from the NBA data,
+  no rostered %, no acquisitions used, my roster as a fingerprint. The Moves page and the odds page
+  read it with a few live calls (my roster, my opponent, the matchup) and solve live, reading every
+  free agent, only when no saved plan fits this week and roster. The plan can be up to 2 hours old
+  on game days; the page says when it was saved. Moves worth exactly the same now list in a fixed
+  order.
 

@@ -102,6 +102,13 @@ SCHEMA: dict[str, Table] = {
     # My week's result as categories won and lost: the app's own grading of a finished week, read
     # live from Yahoo once and kept as this count only (never Yahoo's stats: Yahoo data policy).
     # Deleted with every other analysis by `make yahoo-purge`.
+    # The add/drop plan and its "with moves" path, saved by the nightly and pre-game runs so the
+    # Moves page needn't read every free agent from Yahoo each time. The app's own analysis only:
+    # names and positions from the NBA data, no rostered %, no acquisitions used, and the roster as
+    # a fingerprint (moves_api.save_plan). Deleted by `make yahoo-purge`.
+    "saved_plans": _t(("saved_at",),
+        "saved_at TIMESTAMPTZ", "week INTEGER", "run_at TIMESTAMPTZ", "roster_key VARCHAR",
+        "moves JSON", "recommended JSON"),
     "week_outcomes": _t(("week",),
         "week INTEGER", "cats_me INTEGER", "cats_opp INTEGER", "graded_at TIMESTAMPTZ"),
     "x_feed_cursor": _t(("handle",),

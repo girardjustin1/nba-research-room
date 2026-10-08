@@ -12,13 +12,15 @@ Moves screens share one solve (about 2 s).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from datetime import date, datetime, timedelta
 
 import duckdb
 import pandas as pd
 
-from research_room import matchup, optimizer, season_api
+from research_room import matchup, optimizer, schedule, season_api, store
 from research_room.config import Settings, settings
 from research_room.season_api import STALE_AFTER, NotReady, _iso, _player_refs
 
@@ -269,7 +271,7 @@ def moves_response(
     )
     refs, missing = _refs_for(con, inp, pool), _missing_acq(acq)
     singles = {m.move_id: optimizer.evaluate(inp, inp["me_roster"], pool, [m], cfg) for m in plan.moves}
-    order = sorted(plan.moves, key=lambda m: -singles[m.move_id].p_win_week)
+    order = sorted(plan.moves, key=lambda m: (-singles[m.move_id].p_win_week, m.move_id))  # ties: fixed order
     moves = [
         _move_json(m, i + 1, refs, singles[m.move_id], baseline, inp, cfg, missing)
         for i, m in enumerate(order)
@@ -564,3 +566,141 @@ def player_response(
         )
     except explain.NotReady as exc:
         raise NotReady(str(exc)) from exc
+
+
+# ------------------------------------------------------------------ the saved plan
+def _roster_key(ids) -> str:
+    """A fingerprint of my roster: says whether a saved plan still fits, without keeping the roster."""
+    return hashlib.sha256(",".join(str(int(i)) for i in sorted(ids)).encode()).hexdigest()[:16]
+
+
+def _scrub(con, obj):
+    """The plan as the app's own analysis only: every player card takes its name and positions from
+    the NBA data (not Yahoo's), rostered % is dropped, and acquisitions used are left to the page."""
+    from research_room.backtest import eligibility
+
+    if isinstance(obj, list):
+        return [_scrub(con, x) for x in obj]
+    if not isinstance(obj, dict):
+        return obj
+    out = {k: _scrub(con, v) for k, v in obj.items()}
+    if "player_id" in out and ("eligible" in out or "pct_rostered" in out):
+        row = con.execute(
+            "SELECT full_name, position FROM players WHERE player_id = ?", [out["player_id"]]
+        ).fetchone()
+        if row:
+            out["name"] = row[0]
+            out["eligible"] = list(dict.fromkeys([*eligibility(row[1]), "Util"]))
+        out["pct_rostered"] = None
+    if "acquisitions" in out and isinstance(out["acquisitions"], dict):
+        out["acquisitions"] = {**out["acquisitions"], "used": None}
+    return out
+
+
+def save_plan(
+    con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
+) -> dict:
+    """Solve and save this week's plan and its "with moves" path (needs my roster, my opponent's,
+    the matchup and the free agents loaded live in `con`)."""
+    cfg = cfg or settings()
+    moves = moves_response(con, cfg, now)
+    inp, pool, plan, _acq = _week_and_plan(con, cfg, now)
+    rec = None
+    if plan.moves:
+        baseline = matchup.matchup_now(
+            inp["me"], inp["opp"], inp["me_done"], inp["opp_done"], inp["var_mult"], cfg, inp["corr"]
+        )
+        rec = _scenario(inp, pool, plan.moves, "recommended", "With moves", "recommended", cfg, baseline)
+    store.upsert(
+        con,
+        "saved_plans",
+        pd.DataFrame(
+            [
+                {
+                    "saved_at": pd.Timestamp(inp["now"]),
+                    "week": int(inp["week"]),
+                    "run_at": pd.Timestamp(inp["run_at"]),
+                    "roster_key": _roster_key(inp["me_roster"]["player_id"]),
+                    "moves": json.dumps(_scrub(con, moves), default=str),
+                    "recommended": json.dumps(_scrub(con, rec), default=str) if rec else None,
+                }
+            ]
+        ),
+    )
+    return {"week": int(inp["week"]), "moves": len(moves["moves"])}
+
+
+def _saved(con, cfg: Settings, now: datetime | None):
+    """The latest saved plan for this week if my roster (live in `con`) still matches it."""
+    when = pd.Timestamp(now or store.utcnow())
+    when = when if when.tzinfo else when.tz_localize("UTC")
+    week = schedule.week_of(when.tz_convert(matchup.ET).date(), cfg.season)
+    me = cfg.league.my_team_id
+    ids = [
+        r[0]
+        for r in con.execute(
+            """SELECT player_id FROM yahoo_rosters WHERE team_id = ? AND player_id IS NOT NULL
+           AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_rosters WHERE team_id = ?)""",
+            [me, me],
+        ).fetchall()
+    ]
+    if week is None or not ids:
+        return None, when
+    row = con.execute(
+        """SELECT moves, recommended, run_at FROM saved_plans WHERE week = ? AND roster_key = ?
+           ORDER BY saved_at DESC LIMIT 1""",
+        [week, _roster_key(ids)],
+    ).fetchone()
+    return row, when
+
+
+def saved_moves_response(
+    con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
+) -> dict | None:
+    """MovesResponse from the saved plan, or None when there is none for this week and roster
+    (the page then solves live). Acquisitions used come from the live matchup."""
+    cfg = cfg or settings()
+    row, when = _saved(con, cfg, now)
+    if row is None:
+        return None
+    resp = json.loads(row[0])
+    used = con.execute(
+        """SELECT acquisitions_used FROM yahoo_matchups WHERE team_id = ?
+           ORDER BY snapshot_at DESC LIMIT 1""",
+        [cfg.league.my_team_id],
+    ).fetchone()
+    # Unknown counts as 0, as in the live plan (whose moves list "acquisitions used" as missing).
+    resp["acquisitions"]["used"] = int(used[0]) if used and used[0] is not None else 0
+    resp["stale"] = bool(when - pd.Timestamp(row[2]) > STALE_AFTER)
+    resp["provenance"].append(
+        {
+            "module": "optimizer",
+            "as_of": pd.Timestamp(row[2]).isoformat(),
+            "run_id": None,
+            "note": "The plan saved by the last run; rostered % isn't shown (Yahoo data isn't kept)",
+        }
+    )
+    return resp
+
+
+def with_saved_recommended(
+    resp: dict, con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
+) -> dict | None:
+    """with_recommended from the saved plan, or None when there is none for this week and roster."""
+    cfg = cfg or settings()
+    row, _when = _saved(con, cfg, now)
+    if row is None:
+        return None
+    if resp.get("scenarios") and row[1]:
+        rec = json.loads(row[1])
+        resp["scenarios"].append(rec)
+        resp["recommended_move_ids"] = rec["move_ids"]
+    resp["provenance"].append(
+        {
+            "module": "optimizer",
+            "as_of": pd.Timestamp(row[2]).isoformat(),
+            "run_id": None,
+            "note": "The plan saved by the last run",
+        }
+    )
+    return resp

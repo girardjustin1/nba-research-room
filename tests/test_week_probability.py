@@ -1,13 +1,14 @@
 """End to end: GET /season/week/probability on a scratch store with a mid-season week."""
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from research_room import api, matchup, store
+from research_room import api, matchup, moves_api, store
 from research_room.ingest import yahoo_live
 from research_room.projections.baseline import STATS
 from tests.test_matchup import POS
@@ -148,3 +149,30 @@ def test_moves_need_players_csv_but_probability_still_answers(client):
     prob = c.get("/season/week/probability", params={"now": NOW}).json()
     assert [s["kind"] for s in prob["scenarios"]] == ["do_nothing"]
     assert any("players.csv" in (p["note"] or "") for p in prob["provenance"])
+
+
+def test_the_saved_plan_serves_the_moves_page_without_yahoo_fields(client):
+    c, db = client
+    con = store.connect(db)
+    _free_agents(con)
+    con.close()
+    live = c.get("/season/moves", params={"now": NOW}).json()          # no saved plan yet: solved live
+    con = store.connect(db)
+    yahoo_live.attach(con)                                             # what the nightly run reads
+    saved = moves_api.save_plan(con, now=datetime.fromisoformat(NOW))
+    stored = con.execute("SELECT moves FROM saved_plans").fetchone()[0]
+    con.close()
+    assert saved["moves"] == len(live["moves"]) and '"pct_rostered": null' in stored
+    page = c.get("/season/moves", params={"now": NOW}).json()
+    assert [m["move_id"] for m in page["moves"]] == [m["move_id"] for m in json.loads(stored)["moves"]]
+    assert page["acquisitions"]["used"] == live["acquisitions"]["used"]   # read live, not saved
+    assert all(m["player"]["pct_rostered"] is None for m in page["moves"])
+    assert any("saved by the last run" in (p["note"] or "") for p in page["provenance"])
+    prob = c.get("/season/week/probability", params={"now": NOW}).json()
+    assert [s["kind"] for s in prob["scenarios"]] == ["do_nothing", "recommended"]
+    assert any("saved by the last run" in (p["note"] or "") for p in prob["provenance"])
+    con = store.connect(db)
+    con.execute("UPDATE saved_plans SET roster_key = 'another roster'")   # my roster changed since
+    con.close()
+    again = c.get("/season/moves", params={"now": NOW}).json()
+    assert not any("saved by the last run" in (p["note"] or "") for p in again["provenance"])

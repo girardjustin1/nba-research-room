@@ -313,6 +313,7 @@ class OptimizerConfig(BaseModel):
     min_gain_per_acquisition: float
     relinearize_iterations: int
     solver_time_limit_s: float
+    saved_plan_hours: float = 2
 
 
 class SimulationConfig(BaseModel):

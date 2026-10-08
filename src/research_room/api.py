@@ -791,10 +791,15 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def get_week_probability(now: str | None = None) -> dict:
         """WinProbabilityResponse: this week's P(win) history and the do-nothing path.
         `now` (ISO time) is for testing and replay only."""
-        con = season_con(yahoo_live.ALL)
+        con = season_con(yahoo_live.PAGE)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
-            return moves_api.with_recommended(season_api.probability_response(con, now=when), con, now=when)
+            resp = season_api.probability_response(con, now=when)
+            saved = moves_api.with_saved_recommended(resp, con, now=when)   # the last run's plan
+            if saved is not None:
+                return saved
+            yahoo_live.attach(con, settings(), ("players",))                # no plan fits: solve live
+            return moves_api.with_recommended(resp, con, now=when)
         except season_api.NotReady as exc:
             raise HTTPException(409, str(exc)) from exc
         finally:
@@ -817,9 +822,14 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.get("/season/moves")
     def get_season_moves(now: str | None = None) -> dict:
         """MovesResponse: the optimizer's add/drop plan for the rest of the week."""
-        con = season_con(yahoo_live.ALL)
+        con = season_con(yahoo_live.PAGE)
         try:
-            return moves_api.moves_response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            saved = moves_api.saved_moves_response(con, now=when)            # the last run's plan
+            if saved is not None:
+                return saved
+            yahoo_live.attach(con, settings(), ("players",))                # no plan fits: solve live
+            return moves_api.moves_response(con, now=when)
         except season_api.NotReady as exc:
             raise HTTPException(409, str(exc)) from exc
         finally:

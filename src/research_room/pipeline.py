@@ -170,6 +170,12 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
         refresh_projections(con, cfg, day, step, report)
         report["matchup"] = step("matchup snapshot",
                                  lambda: _snapshot(con, cfg, event=("news", "Pre-game refresh")))
+        last = con.execute("SELECT max(saved_at) FROM saved_plans").fetchone()[0]
+        age = (pd.Timestamp(store.utcnow()) - pd.Timestamp(last)) / pd.Timedelta(hours=1) if last else None
+        if age is None or age >= cfg.optimizer.saved_plan_hours:   # the free agents: not every poll
+            report["plan"] = step("saved plan",
+                                  lambda: guarded("plan", "plan",
+                                                  lambda: _save_plan(con, cfg, read_free_agents=True)))
         report["alerts"] = step("alerts", lambda: guarded(
             "alerts", "alerts", lambda: alerts.generate(con, cfg, None, "pregame", since=now)))
         report["timings_s"] = timings
@@ -182,6 +188,19 @@ def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings, parts=None) -> dict:
     """Yahoo, live for this run only: the API once signed in (read only), else the CSV inbox, into
     this connection's in-memory tables. Nothing Yahoo is stored."""
     return yahoo_live.attach(con, cfg, parts)
+
+
+def _save_plan(con: duckdb.DuckDBPyConnection, cfg: Settings, read_free_agents: bool = False) -> dict:
+    """Save this week's plan (moves_api.save_plan; imported here: it imports from this module).
+    The pre-game run reads the free agents live first; the nightly run already has them."""
+    from research_room import moves_api, season_api
+
+    if read_free_agents:
+        _yahoo(con, cfg, ("players",))
+    try:
+        return moves_api.save_plan(con, cfg)
+    except season_api.NotReady as exc:   # no matchup or free agents yet: waiting on Yahoo, not broken
+        return {"status": "skipped", "reason": str(exc)}
 
 
 def _soft(fn) -> dict:
@@ -287,6 +306,8 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             report["calibration"] = step("calibration", lambda: calibration.write(
                 con, calibration.run(con, cfg)))
         report["matchup"] = step("matchup snapshot", lambda: _snapshot(con, cfg))
+        report["plan"] = step("saved plan",
+                              lambda: _guarded(con, "plan", lambda: _save_plan(con, cfg)))
         report["alerts"] = step("alerts", lambda: _guarded(
             con, "alerts", lambda: alerts.generate(con, cfg, None, "nightly", report)))
         report["parquet"] = step("parquet", lambda: len(store.export_parquet(con)))

@@ -4,7 +4,7 @@ Usage: make yahoo-purge            (asks first)
        make yahoo-purge ARGS="--yes"
 
 Removes, from the store: any stored Yahoo table and Yahoo name matches, and every analysis made
-from Yahoo data (week_outcomes, matchup_snapshots, decisions_log, notifications and their read
+from Yahoo data (week_outcomes, saved_plans, matchup_snapshots, decisions_log, notifications and their read
 state, draft_picks, draft_teams). From disk: the Yahoo CSV exports in data/inbox and the Yahoo
 sign-in file (oauth2.json). Projections, models and NBA data are kept: they never used Yahoo data.
 Prints what it removed.
@@ -22,6 +22,7 @@ from research_room.ingest import yahoo
 
 ANALYSES = (
     "week_outcomes",
+    "saved_plans",
     "matchup_snapshots",
     "decisions_log",
     "notifications",
