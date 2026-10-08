@@ -150,7 +150,7 @@ def news_rows(con: duckdb.DuckDBPyConnection, start: date, end: date) -> pd.Data
             WITH g AS ({base})
             SELECT 'x' AS source, e.status, g.game_date, g.player_id, g.did_play
             FROM g JOIN status_events e ON e.player_id = g.player_id AND e.ts < g.tip_utc
-             AND CAST(timezone('America/New_York', e.ts) AS DATE) = g.game_date
+             AND coalesce(e.game_date, CAST(timezone('America/New_York', e.ts) AS DATE)) = g.game_date
             QUALIFY row_number() OVER (PARTITION BY g.player_id, g.game_id ORDER BY e.ts DESC) = 1
         """,
                 [start, end],

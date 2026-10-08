@@ -8,12 +8,13 @@ notes:
     kind: update
     title: Alerts fixed after a second outside check
     body: >
-      An independent review of the alerts found ten problems; nine are fixed. The win-the-week
+      An independent review of the alerts found ten problems; all are fixed. The win-the-week
       change on an alert is now for this week's opponent and this news refresh only (and says it
       covers all the refresh's news, not one player). A player whose status changes again gets a
       new alert. Nothing fires once his game has started or for a postponed game, a report from a
       player's old team is ignored, the bell count updates right after you read, and checks run
-      until the last game tips. Still open: X posts are dated by the day they were posted.
+      until the last game tips. And an X post is now tied to the game it's about, so a late-night
+      post about tomorrow's game no longer counts for tonight.
     refs: [DECISIONS.md, src/research_room/alerts.py, docs/audits/2026-10-08-codex-astra.md]
 
   - id: 2026-10-08-bakeoff

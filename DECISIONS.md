@@ -880,10 +880,14 @@ engine and the bake-off on a clean clone (docs/audits/2026-10-08-codex-astra.md)
   instead of an error.
 - B09: the bell re-reads on every navigation and right after "Mark all as read" (it didn't:
   the data hook only reloads on refresh); a failed mark says so on the screen.
-- Not fixed, B10: an X post is dated to the day it was posted. A post about tomorrow's game, or a
-  late-night post about the next game, can land on the wrong day. Fixing it needs the target
-  game in the parser's output; until then treat an X-only status as about the day it was posted.
-  The NBA injury report names its game and has no such gap.
+- B10 (fixed the same day, after the rest): an X post was dated to the day it was posted, so a
+  post about tomorrow's game, or a late-night post about the next game, landed on the wrong day.
+  Now each status is tied to a game (`status_events.game_id`, `game_date`, `game_basis`): the
+  parser gives the game's date only when the post says it, reading "tomorrow" or "Friday" from
+  the post's Eastern time; the code takes his team's game that day after the post (`stated`), or
+  else his team's next game after the post (`next_game`). The overrides date the status by that
+  game (a stated absence still counts its days from the post); the live scoreboard grades it
+  against that game. Rows from before the change keep the post's date.
 
 **Model bake-off: Ridge, CatBoost, hierarchical and the ensemble. None adopted (2026-10-08).**
 `make bakeoff` (`jobs/model_bakeoff.py`), `projections/ridge.py`, `projections/catboost_model.py`

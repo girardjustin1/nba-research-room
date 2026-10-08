@@ -3,9 +3,9 @@
 Inputs: config/x_accounts.yaml (verified handles, team, tier), today's games, X API v2 recent search
 (X_BEARER_TOKEN), a small Anthropic model (LLM_API_KEY), settings.x_feed.
 Outputs: status_events rows {player, team, status, minutes_cap, starting, out_days_min/max (a stated
-time frame, in days from the post), confidence, account,
-authority_rank, ts}; x_feed_log (posts read per query, for the daily budget and to read only newer
-posts next time). Tables: writes status_events, x_feed_log, player_xref, unresolved_names; reads
+time frame, in days from the post), confidence, account, authority_rank, ts, game_id, game_date,
+game_basis}; x_feed_log (posts read per query, for the daily budget and to read only newer posts
+next time). Tables: writes status_events, x_feed_log, player_xref, unresolved_names; reads
 games, teams, players.
 
 How it reads (pay-per-use, so every read counts against settings.x_feed.daily_read_budget):
@@ -19,6 +19,12 @@ How it parses (build prompt): posts that mention availability words go to one sm
 with a forced tool, so the reply is always the fixed schema; the raw text is discarded after
 parsing and never stored. Status values are the overrides' own (Out ... Available). Unmatched
 player names are quarantined, never guessed. Authority: official 1, insider 2, beat 3, aggregator 4.
+Which game (audit B10): a status is about one game, not the day it was posted. The model gives the
+game's date only when the post says it ("tomorrow", "Friday", a date), from the post's Eastern
+time; the code then ties the status to his team's game that day after the post (`game_basis`
+stated), or to his team's next game after the post (`next_game`), so a late-night post about the
+next game never lands on tonight's. No team or no game after the post: no game (the overrides then
+date it by the post, as before).
 """
 
 from __future__ import annotations
@@ -78,6 +84,12 @@ TOOL = {
                             "description": "The most days from the post ('2-3 weeks' -> 21). Null when "
                             "only a minimum or no time frame is stated.",
                         },
+                        "game_date": {
+                            "type": ["string", "null"],
+                            "description": "YYYY-MM-DD of the game the status is for, only when the "
+                            "post says which ('tonight' -> the post's Eastern date, 'tomorrow' -> the "
+                            "next day, 'Friday' -> that date). Null when the post doesn't say.",
+                        },
                         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     },
                     "required": ["post_id", "player", "status", "confidence"],
@@ -91,7 +103,9 @@ SYSTEM = (
     "You extract NBA player availability from posts by team accounts and reporters. Record only "
     "statuses the post states as fact for the player's next game (ruled out, questionable, "
     "available, starting, a minutes limit). When the post gives a time frame for an absence, record it "
-    "in days; never infer one that isn't stated. Ignore rumors, opinions, trades, stats and highlights. "
+    "in days; never infer one that isn't stated. When the post says which game (tonight, tomorrow, a "
+    "weekday, a date), give its date, reading relative words from the post's Eastern time (at_et); "
+    "otherwise leave it null. Ignore rumors, opinions, trades, stats and highlights. "
     "One event per player per post. If a post states nothing usable, record nothing for it."
 )
 
@@ -114,7 +128,8 @@ class LlmParser:
         n = self.cfg.x_feed.max_posts_per_llm_call
         for i in range(0, len(posts), n):
             batch = [
-                {"post_id": p["id"], "account": p["handle"], "at": p["created_at"], "text": p["text"]}
+                {"post_id": p["id"], "account": p["handle"], "at": p["created_at"], "at_et": p["at_et"],
+                 "text": p["text"]}
                 for p in posts[i : i + n]
             ]
             msg = self.client.messages.create(
@@ -138,6 +153,42 @@ def _days(v) -> float | None:
     except (TypeError, ValueError):
         return None
     return d if d > 0 else None
+
+
+def _date(v) -> date | None:
+    try:
+        return date.fromisoformat(str(v)[:10]) if v else None
+    except ValueError:
+        return None
+
+
+def target_games(con: duckdb.DuckDBPyConnection, ev: pd.DataFrame) -> pd.DataFrame:
+    """For each event (team_id, ts, stated_date): the game it is about. His team's game on the
+    stated date after the post, else his team's next game after the post; columns game_id,
+    game_date, game_basis (None when there is no team or no later game)."""
+    out = pd.DataFrame({"game_id": None, "game_date": None, "game_basis": None}, index=ev.index, dtype=object)
+    teams = [int(t) for t in ev["team_id"].dropna().unique()]
+    if not teams:
+        return out
+    g = con.execute(
+        f"""SELECT game_id, game_date, tip_utc, home_team_id, visitor_team_id FROM games
+            WHERE (home_team_id IN ({",".join("?" * len(teams))}) OR visitor_team_id IN
+                   ({",".join("?" * len(teams))}))
+              AND tip_utc IS NOT NULL AND NOT coalesce(postponed, false) ORDER BY tip_utc""",
+        [*teams, *teams],
+    ).df()
+    for i, r in ev.iterrows():
+        if pd.isna(r["team_id"]):
+            continue
+        t = int(r["team_id"])
+        later = g[((g["home_team_id"] == t) | (g["visitor_team_id"] == t)) & (g["tip_utc"] > r["ts"])]
+        if later.empty:
+            continue
+        days = pd.to_datetime(later["game_date"]).dt.date
+        on = later[days == r["stated_date"]] if r["stated_date"] else later.iloc[:0]
+        hit, basis = (on.iloc[0], "stated") if not on.empty else (later.iloc[0], "next_game")
+        out.loc[i] = [int(hit["game_id"]), pd.Timestamp(hit["game_date"]).date(), basis]
+    return out
 
 
 def load_accounts(path=None) -> pd.DataFrame:
@@ -254,6 +305,7 @@ def poll(
                     "id": p["id"],
                     "handle": users.get(p.get("author_id"), ""),
                     "created_at": p["created_at"],
+                    "at_et": pd.Timestamp(p["created_at"]).tz_convert(ET).strftime("%A %Y-%m-%d %H:%M ET"),
                     "text": p.get("text", ""),
                 }
             )
@@ -279,6 +331,7 @@ def poll(
                 "starting": e.get("starting"),
                 "out_days_min": _days(e.get("out_days_min")),
                 "out_days_max": _days(e.get("out_days_max")),
+                "stated_date": _date(e.get("game_date")),
                 "confidence": float(e.get("confidence") or 0),
                 "account": post["handle"],
                 "authority_rank": RANK.get(handle_tier.get(post["handle"].lower(), "aggregator"), 4),
@@ -304,16 +357,17 @@ def poll(
         ev = ev[ev["player_id"].notna()].copy()
         if not ev.empty:
             team_ids = dict(con.execute("SELECT abbreviation, team_id FROM teams").fetchall())
+            current = dict(
+                con.execute("SELECT player_id, team_id FROM players WHERE team_id IS NOT NULL").fetchall()
+            )
             ev["event_id"] = ev["post_id"] + ":" + ev["player_id"].astype(int).astype(str)
+            ev["player_id"] = ev["player_id"].astype(int)
+            ev["team_id"] = ev["team_abbr"].map(team_ids).fillna(ev["player_id"].map(current))
+            ev[["game_id", "game_date", "game_basis"]] = target_games(con, ev)
             written = store.upsert(
                 con,
                 "status_events",
-                ev.assign(
-                    player_id=ev["player_id"].astype(int),
-                    team_id=ev["team_abbr"].map(team_ids),
-                    source=SOURCE,
-                    fetched_at=now,
-                )[
+                ev.assign(source=SOURCE, fetched_at=now)[
                     [
                         "event_id",
                         "player_id",
@@ -327,6 +381,9 @@ def poll(
                         "account",
                         "authority_rank",
                         "ts",
+                        "game_id",
+                        "game_date",
+                        "game_basis",
                         "source",
                         "fetched_at",
                     ]

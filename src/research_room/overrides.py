@@ -108,13 +108,15 @@ def _status_since(con: duckdb.DuckDBPyConnection, as_of: datetime) -> dict[int, 
 
 def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime,
                        cfg: Settings) -> pd.DataFrame:
-    """Parsed X posts (Phase 3). An event speaks to its own game date, except an absence with a
-    stated time frame: out (P(plays) 0) through the fewest days, then P(plays) rising in equal
-    steps to the most days, then no row (the model's own rate). Out For Season runs to `end`.
-    Rows after the post's date are `carried`: same-day news on those dates outranks them."""
+    """Parsed X posts (Phase 3). An event speaks to the date of the game it is about (x_feed ties
+    it to one: audit B10; older rows without one use the post's Eastern date), except an absence
+    with a stated time frame: out (P(plays) 0) through the fewest days from the post, then P(plays)
+    rising in equal steps to the most days, then no row (the model's own rate). Out For Season runs
+    to `end`. Rows after the game's date are `carried`: same-day news on those dates outranks them."""
     have = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name = 'status_events'").fetchall()}
-    days = ", ".join(c if c in have else f"NULL AS {c}" for c in ("out_days_min", "out_days_max"))
+    opt = ("out_days_min", "out_days_max", "game_date")
+    days = ", ".join(c if c in have else f"NULL AS {c}" for c in opt)
     ev = con.execute(f"""
         SELECT player_id, team_id, status, minutes_cap, account, ts, {days},
                CASE authority_rank WHEN 1 THEN 'official' WHEN 2 THEN 'insider' WHEN 3 THEN 'beat'
@@ -124,7 +126,8 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
     cap = cfg.overrides.max_carry_days
     rows = []
     for r in ev.itertuples(index=False):
-        d0 = pd.Timestamp(r.ts).tz_convert("America/New_York").date()
+        posted = pd.Timestamp(r.ts).tz_convert("America/New_York").date()
+        d0 = pd.Timestamp(r.game_date).date() if pd.notna(r.game_date) else posted
         status = str(r.status)
         lo = float(r.out_days_min) if pd.notna(r.out_days_min) else None
         hi = float(r.out_days_max) if pd.notna(r.out_days_max) else lo
@@ -132,10 +135,10 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
             plan = [(d0 + timedelta(days=k), 0.0) for k in range((end - d0).days + 1)]
         elif status.lower() == "out" and lo:
             lo_d, hi_d = int(min(lo, cap)), int(min(max(hi or lo, lo), cap))
-            plan = [(d0 + timedelta(days=k), 0.0) for k in range(lo_d)]
-            plan += [(d0 + timedelta(days=k), (k - lo_d + 1) / (hi_d - lo_d + 2))
+            plan = [(posted + timedelta(days=k), 0.0) for k in range(lo_d)]
+            plan += [(posted + timedelta(days=k), (k - lo_d + 1) / (hi_d - lo_d + 2))
                      for k in range(lo_d, hi_d + 1)] if hi_d > lo_d else []
-            plan = plan or [(d0, 0.0)]
+            plan = [(d, p) for d, p in plan if d >= d0] or [(d0, 0.0)]
         else:
             plan = [(d0, _prob(status, cfg))]
         span = f"out {lo:.0f}" + (f"-{hi:.0f}" if hi and hi > lo else "+") + " days" if lo else None

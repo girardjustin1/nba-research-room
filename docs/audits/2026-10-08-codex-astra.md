@@ -1,8 +1,7 @@
 > **Status (2026-10-08, after the audit).** Round 2, independent review by OpenAI Codex CLI 0.154.0
 > (model gpt-6-astra, reasoning xhigh) on a fresh clone plus a cleaned copy of the store (private
 > and licensed tables emptied). Each finding was re-checked against the code before fixing. Fixed
-> with tests: B01-B09 (DECISIONS.md, "Notifications: round-2 audit fixes"). B10 is noted, not
-> fixed. Part A (A01-A07) is handled in "Model bake-off: round-2 audit fixes".
+> with tests: B01-B10 (DECISIONS.md, "Notifications: round-2 audit fixes"). Part A (A01-A07) is handled in "Model bake-off: round-2 audit fixes".
 
 # Independent audit, round 2: models and in-app notifications
 

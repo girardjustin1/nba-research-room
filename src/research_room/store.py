@@ -87,7 +87,7 @@ SCHEMA: dict[str, Table] = {
         "event_id VARCHAR", "player_id INTEGER", "team_id INTEGER", "status VARCHAR",
         "minutes_cap DOUBLE", "starting BOOLEAN", "confidence DOUBLE", "account VARCHAR",
         "authority_rank INTEGER", "ts TIMESTAMPTZ", "out_days_min DOUBLE", "out_days_max DOUBLE",
-        *_INGEST),
+        "game_id INTEGER", "game_date DATE", "game_basis VARCHAR", *_INGEST),
     "nba_report_rows": _t(("report_ts", "game_id", "player_id"),
         "report_ts TIMESTAMPTZ", "game_id INTEGER", "team_id INTEGER", "player_id INTEGER",
         "status VARCHAR", "reason VARCHAR", *_INGEST),
