@@ -159,7 +159,7 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
         report["matchup"] = step("matchup snapshot",
                                  lambda: _snapshot(con, cfg, event=("news", "Pre-game refresh")))
         report["alerts"] = step("alerts", lambda: guarded(
-            "alerts", "alerts", lambda: alerts.generate(con, cfg, now, "pregame")))
+            "alerts", "alerts", lambda: alerts.generate(con, cfg, None, "pregame", since=now)))
         report["timings_s"] = timings
         run["rows"] = int(report.get("projections") or 0)
         run["detail"] = json.dumps(report, default=str)[:2000]

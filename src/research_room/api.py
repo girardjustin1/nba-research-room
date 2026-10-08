@@ -729,7 +729,10 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         """Mark notifications read in the app (local read state; nothing is sent anywhere)."""
         ids = list((body or {}).get("ids") or [])
         alerts.mark_read(settings(), ids, db_path=db_path)
-        con = read_con()
+        try:                                   # the mark is saved; the count needs the store, which a
+            con = read_con()                   # running job may hold (audit B08): say unknown, not 500
+        except Exception:  # noqa: BLE001
+            return {"unread": None}
         try:
             return {"unread": alerts.notifications_response(con, db_path=db_path)["unread"]}
         finally:

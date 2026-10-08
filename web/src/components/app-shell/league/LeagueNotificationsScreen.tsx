@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { errorMessage } from '../../../api/client';
 import type { RouteScreenProps } from '../../../app/types';
 import { useLiveOrMock } from '../../../app/useLiveOrMock';
 import { firstError, LEAGUE_NAV_HEIGHT, mockEndpoints, todayET } from '../../../app/league';
 import { SEASON_TAB_PATH } from '../../../app/experiences';
-import { actionPath } from '../../../app/notificationActions';
+import { actionPath, announceNotificationsChanged } from '../../../app/notificationActions';
 import { PrototypeDataChip } from '../PrototypeDataChip';
 import { NotificationsInbox } from '../../screens';
 import { notificationsNormal } from '../../../mocks/notifications/notifications';
@@ -12,6 +13,7 @@ import { SEASON_CATEGORIES, TODAY } from '../../../mocks/foundations/seasonCommo
 /** Notifications (header bell): GET /season/notifications, POST /season/notifications/read. Invented data is marked "Prototype data". */
 export function LeagueNotificationsScreen({ mode, apis, navigate }: RouteScreenProps) {
   const data = useLiveOrMock(useCallback(() => apis.season.notifications(), [apis]), notificationsNormal, mode);
+  const [markError, setMarkError] = useState<string | null>(null);
   return (
     <>
       <NotificationsInbox
@@ -21,8 +23,16 @@ export function LeagueNotificationsScreen({ mode, apis, navigate }: RouteScreenP
         loading={data.loading}
         error={firstError([data])}
         onRetry={data.refresh}
+        markError={markError}
         onMarkAllRead={() => {
-          apis.season.markNotificationsRead().then(data.refresh, () => {});
+          setMarkError(null);
+          apis.season.markNotificationsRead().then(
+            () => {
+              announceNotificationsChanged();
+              data.refresh();
+            },
+            (err: unknown) => setMarkError(`Couldn't mark alerts read: ${errorMessage(err)}`),
+          );
         }}
         onAction={(n) => navigate(actionPath(n))}
         onTabChange={(t) => navigate(SEASON_TAB_PATH[t] ?? '#/league/matchup')}

@@ -37,8 +37,10 @@ from research_room import store
 from research_room.config import CONFIG_DIR, Settings, settings
 from research_room.ingest.names import normalize_name
 
+# team_id: the team the report was filed for, when the source says (X posts, the NBA report);
+# alerts drop a report filed for a team the player has since left (audit B05).
 COLUMNS = ["player_id", "date", "play_prob", "minutes_cap", "status", "authority", "source", "ts", "note",
-           "carried"]
+           "carried", "team_id"]
 NOT_LISTED = "Not Listed"
 
 
@@ -114,7 +116,7 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
         "SELECT column_name FROM information_schema.columns WHERE table_name = 'status_events'").fetchall()}
     days = ", ".join(c if c in have else f"NULL AS {c}" for c in ("out_days_min", "out_days_max"))
     ev = con.execute(f"""
-        SELECT player_id, status, minutes_cap, account, ts, {days},
+        SELECT player_id, team_id, status, minutes_cap, account, ts, {days},
                CASE authority_rank WHEN 1 THEN 'official' WHEN 2 THEN 'insider' WHEN 3 THEN 'beat'
                     ELSE 'aggregator' END AS authority
         FROM status_events WHERE ts <= ? AND player_id IS NOT NULL
@@ -142,7 +144,8 @@ def from_status_events(con: duckdb.DuckDBPyConnection, start: date, end: date, a
                 rows.append({"player_id": int(r.player_id), "date": d, "play_prob": p,
                              "minutes_cap": r.minutes_cap if d == d0 else None, "status": status,
                              "authority": r.authority, "source": f"X @{r.account}", "ts": r.ts,
-                             "note": span, "carried": d > d0})
+                             "note": span, "carried": d > d0,
+                             "team_id": int(r.team_id) if pd.notna(r.team_id) else None})
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
@@ -182,7 +185,7 @@ def from_nba_report(con: duckdb.DuckDBPyConnection, start: date, end: date, as_o
              "play_prob": _prob(r.status, cfg), "minutes_cap": None, "status": r.status,
              "authority": "nba_report", "source": "NBA injury report",
              "ts": r.since if pd.notna(r.since) else ts, "note": (r.reason or "")[:200] or None,
-             "carried": False}
+             "carried": False, "team_id": int(r.team_id)}
             for r in listed.itertuples(index=False)]
     filed = con.execute("""
         SELECT t.team_id, g.game_date, p.player_id
@@ -195,7 +198,7 @@ def from_nba_report(con: duckdb.DuckDBPyConnection, start: date, end: date, as_o
         if (int(r.player_id), d) not in on_report:
             rows.append({"player_id": int(r.player_id), "date": d, "play_prob": None, "minutes_cap": None,
                          "status": NOT_LISTED, "authority": "nba_report", "source": "NBA injury report",
-                         "ts": ts, "note": None, "carried": False})
+                         "ts": ts, "note": None, "carried": False, "team_id": int(r.team_id)})
     return pd.DataFrame(rows, columns=COLUMNS)
 
 

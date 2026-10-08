@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import { EXPERIENCE_HOME, LEAGUE_TAB_PATH, lastPath, rememberPath } from '../../app/experiences';
+import { onNotificationsChanged } from '../../app/notificationActions';
 import { normalizePath } from '../../app/router';
 import { findRoute, routesFor } from '../../app/routes';
 import type { AppApis, Experience } from '../../app/types';
@@ -53,11 +54,21 @@ function useApiState(mode: DataMode, apis: AppApis): ApiState {
  * tabs) through AppShellContext. Screens render those parts in their own headers, so each
  * route shows exactly one ☰ and (in League) one bottom nav.
  */
-/** The bell's unread count (GET /season/notifications), re-read on every navigation; null outside League. */
+/**
+ * The bell's unread count (GET /season/notifications); null outside League. Re-read on every
+ * navigation and whenever a screen marks alerts read (audit B09: useLiveOrMock only reloads on
+ * refresh, not when its load function changes).
+ */
 function useUnread(path: string, mode: DataMode, apis: AppApis, inLeague: boolean): number | null {
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-read when the path changes
-  const load = useCallback(() => apis.season.notifications(), [apis, path]);
+  const load = useCallback(() => apis.season.notifications(), [apis]);
   const n = useLiveOrMock(load, notificationsNormal, inLeague ? mode : 'mock');
+  const { refresh } = n;
+  const [seen, setSeen] = useState(path);
+  if (seen !== path) {
+    setSeen(path);
+    refresh();
+  }
+  useEffect(() => onNotificationsChanged(refresh), [refresh]);
   return inLeague ? (n.data?.unread ?? null) : null;
 }
 

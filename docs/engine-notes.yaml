@@ -3,6 +3,19 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-08-alerts-audit
+    date: 2026-10-08
+    kind: update
+    title: Alerts fixed after a second outside check
+    body: >
+      An independent review of the alerts found ten problems; nine are fixed. The win-the-week
+      change on an alert is now for this week's opponent and this news refresh only (and says it
+      covers all the refresh's news, not one player). A player whose status changes again gets a
+      new alert. Nothing fires once his game has started or for a postponed game, a report from a
+      player's old team is ignored, the bell count updates right after you read, and checks run
+      until the last game tips. Still open: X posts are dated by the day they were posted.
+    refs: [DECISIONS.md, src/research_room/alerts.py, docs/audits/2026-10-08-codex-astra.md]
+
   - id: 2026-10-08-bakeoff
     date: 2026-10-08
     kind: finding
@@ -22,8 +35,8 @@ notes:
       The League bell's inbox is wired to the engine: one of your players ruled out or limited
       today (urgent when he's in your lineup), news about your opponent's players, a reminder when
       your Yahoo lineup isn't the recommended one before lock, a game-day note, add/drop moves worth
-      at least 2 points of win chance, and a note when projections refresh. Each shows how it
-      moves your win-the-week odds.
+      at least 2 points of win chance, and a note when projections refresh. News alerts show how
+      that refresh moved your win-the-week odds.
     refs: [DECISIONS.md, src/research_room/alerts.py]
 
   - id: 2026-10-06-live-tab

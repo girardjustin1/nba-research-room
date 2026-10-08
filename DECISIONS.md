@@ -854,8 +854,36 @@ aside in favour of the app's own inbox.
   alert. Titles and bodies restate engine values only.
 - Each alert's id is a key for what it says (player, day, status), so it is written once. Read
   state is a small file next to the store; the bell shows the unread count (re-read on every
-  navigation); demo mode keeps its own read state until reset.
+  navigation); demo mode keeps its own read state until reset. (Corrected by the round-2 audit
+  fixes below.)
 - Waiver claim status (pending, cleared, lost) waits for the Yahoo API's transactions.
+
+**Notifications: round-2 audit fixes (2026-10-08).** Codex (gpt-6-astra) audited the alerts
+engine and the bake-off on a clean clone (docs/audits/2026-10-08-codex-astra.md). Fixed:
+- B01, B02: the effect on my week was the two latest snapshots of any week and opponent, before
+  this run's own snapshot. Now it is this week and this opponent only: the news snapshot this
+  refresh saved minus the last snapshot before the refresh started, evaluated after the run's
+  snapshot. It is the refresh's total from all its news, and says so ("Not split by player");
+  without both snapshots there is no effect shown.
+- B03: one alert per status episode (player, day, status, minutes limit, report time), so a real
+  change (out, then questionable, then out again) alerts each time; a repeat keeps its time and
+  read state but takes the current priority and wording (benched since, say).
+- B04: no alert once his game has tipped, or for a postponed or finished game; an urgent or high
+  injury or lock alert reads as normal once its deadline has passed.
+- B05: a report filed for a team he has since left no longer describes tonight's game. Overrides
+  now carry the reporting team (X posts, the NBA report) and the alert is dropped on a mismatch.
+- B06: the pre-game schedule polls from 3 hours before the first tip until the last tip, not
+  only before the first.
+- B07: read state is written under a file lock and replaced atomically; "mark all" never moves
+  back; an unreadable file is set aside, not overwritten.
+- B08: marking read while a job holds the store saves the mark and returns `unread: null`
+  instead of an error.
+- B09: the bell re-reads on every navigation and right after "Mark all as read" (it didn't:
+  the data hook only reloads on refresh); a failed mark says so on the screen.
+- Not fixed, B10: an X post is dated to the day it was posted. A post about tomorrow's game, or a
+  late-night post about the next game, can land on the wrong day. Fixing it needs the target
+  game in the parser's output; until then treat an X-only status as about the day it was posted.
+  The NBA injury report names its game and has no such gap.
 
 **Model bake-off: Ridge, CatBoost, hierarchical and the ensemble. None adopted (2026-10-08).**
 `make bakeoff` (`jobs/model_bakeoff.py`), `projections/ridge.py`, `projections/catboost_model.py`

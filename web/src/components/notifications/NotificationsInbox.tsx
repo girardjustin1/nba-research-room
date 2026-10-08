@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -20,6 +21,8 @@ export interface NotificationsInboxProps {
   onRetry?: () => void;
   onAction?: (n: SeasonNotification) => void;
   onMarkAllRead?: () => void;
+  /** Why the last "Mark all as read" failed; shown above the list. */
+  markError?: string | null;
   onTabChange?: (tab: SeasonTab) => void;
   initialFilter?: InboxFilter;
 }
@@ -29,7 +32,7 @@ export interface NotificationsInboxProps {
  * my week, lineup-lock reminders and game-day notes. Sorted by priority, then newest; split
  * into Today and Earlier. Priority is a status color + icon + word on each card.
  */
-export function NotificationsInbox({ data, today, categories, loading, error, onRetry, onAction, onMarkAllRead, onTabChange, initialFilter = 'all' }: NotificationsInboxProps) {
+export function NotificationsInbox({ data, today, categories, loading, error, onRetry, onAction, onMarkAllRead, markError, onTabChange, initialFilter = 'all' }: NotificationsInboxProps) {
   const [filter, setFilter] = useState<InboxFilter>(initialFilter);
   const shown = useMemo(() => (data ? filterInbox(data.items, filter) : []), [data, filter]);
   const header = <ScreenHeader title="Alerts" subtitle={data ? `${data.unread} unread` : undefined} asOf={data?.as_of} stale={data?.stale} />;
@@ -68,6 +71,7 @@ export function NotificationsInbox({ data, today, categories, loading, error, on
             />
           ))}
         </Box>
+        {markError && <Alert severity="error">{markError}</Alert>}
         {data.unread > 0 && onMarkAllRead && (
           <Button onClick={onMarkAllRead} sx={{ alignSelf: 'flex-start' }}>
             Mark all as read

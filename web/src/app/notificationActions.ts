@@ -1,5 +1,18 @@
 import type { SeasonNotification } from '../api/season';
 
+const CHANGED = 'notifications:changed';
+
+/** Tell the frame's bell that read state changed (audit B09), so its count updates at once. */
+export function announceNotificationsChanged(): void {
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+/** Listen for announceNotificationsChanged; returns the unsubscribe. */
+export function onNotificationsChanged(cb: () => void): () => void {
+  window.addEventListener(CHANGED, cb);
+  return () => window.removeEventListener(CHANGED, cb);
+}
+
 /** Where an alert's action goes in the app. */
 export function actionPath(n: SeasonNotification): string {
   const a = n.action;

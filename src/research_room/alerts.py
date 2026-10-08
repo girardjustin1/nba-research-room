@@ -74,7 +74,10 @@ def _roster(con, team_id: int) -> pd.DataFrame:
 def _tips(con, day: date) -> dict[int, pd.Timestamp]:
     """team_id -> tip time of its game that day."""
     g = con.execute(
-        "SELECT home_team_id, visitor_team_id, tip_utc FROM games WHERE game_date = ?", [day]
+        """SELECT home_team_id, visitor_team_id, tip_utc FROM games
+           WHERE game_date = ? AND NOT coalesce(postponed, false)
+             AND coalesce(status_state, '') <> 'final'""",
+        [day],
     ).df()
     out = {}
     for r in g.itertuples(index=False):
@@ -103,37 +106,57 @@ def _opponent(con, cfg: Settings, day: date) -> int | None:
         return None
 
 
-def week_impact(con, cfg: Settings, now: datetime) -> dict | None:
-    """Impact of the latest news refresh: P(win week) after it minus the snapshot before it."""
+def week_impact(con, cfg: Settings, now: datetime, since: datetime | None) -> dict | None:
+    """What this refresh's news did to my week (audit B01, B02): P(win week) in the snapshot this
+    refresh saved (between `since` and `now`) minus the last snapshot before `since`, both for the
+    current week and opponent. None when either is missing. It is the refresh's total, from all its
+    news together, and says so; it is not credited to one player."""
+    from research_room import schedule
     from research_room.moves_api import _cat_deltas
 
-    snaps = con.execute(
-        """
-        SELECT ts, p_win_week, p_cats, event_kind FROM matchup_snapshots
-        WHERE ts <= ? ORDER BY ts DESC LIMIT 2
-    """,
-        [now],
-    ).df()
-    if len(snaps) < 2 or snaps.iloc[0]["event_kind"] != "news":
+    if since is None:
         return None
-    after, before = snaps.iloc[0], snaps.iloc[1]
-    d = float(after["p_win_week"]) - float(before["p_win_week"])
+    today = _today(now)
+    week, opp = schedule.week_of(today, cfg.season), _opponent(con, cfg, today)
+    if week is None or opp is None:
+        return None
+    q = """SELECT ts, p_win_week, p_cats FROM matchup_snapshots
+           WHERE week = ? AND opponent_team_id = ? AND ts {op} ? {extra} ORDER BY ts DESC LIMIT 1"""
+    after = con.execute(
+        q.format(op=">=", extra="AND ts <= ? AND event_kind = 'news'"), [week, opp, since, now]
+    ).df()
+    before = con.execute(q.format(op="<", extra=""), [week, opp, since]).df()
+    if after.empty or before.empty:
+        return None
+    a, b = after.iloc[0], before.iloc[0]
+    d = float(a["p_win_week"]) - float(b["p_win_week"])
     try:
-        cats = _cat_deltas(json.loads(after["p_cats"]), json.loads(before["p_cats"]), cfg)
+        cats = _cat_deltas(json.loads(a["p_cats"]), json.loads(b["p_cats"]), cfg)
     except (TypeError, ValueError, KeyError):
         cats = []
-    sev = next((s for t, s in SEVERITY if abs(d) >= t and (t > 0 or d != 0)), "none")
+    sev = next((sv for t, sv in SEVERITY if abs(d) >= t and (t > 0 or d != 0)), "none")
     return {
         "delta_p_win": d,
         "cat_deltas": cats,
         "summary": (
-            f"Your win-the-week chance {float(before['p_win_week']):.0%} -> {float(after['p_win_week']):.0%}."
+            f"All news in this refresh together moved your win-the-week chance "
+            f"{float(b['p_win_week']):.0%} -> {float(a['p_win_week']):.0%}."
         ),
         "suggestion": None,
         "move_id": None,
         "severity": sev,
-        "confidence": {"level": "medium", "score": None, "missing": []},
-        "computed_at": pd.Timestamp(after["ts"]).isoformat(),
+        "confidence": {
+            "level": "medium",
+            "score": None,
+            "missing": [
+                {
+                    "key": "per_player",
+                    "label": "Not split by player",
+                    "effect": "The change is for the whole refresh, not this player alone.",
+                }
+            ],
+        },
+        "computed_at": pd.Timestamp(a["ts"]).isoformat(),
     }
 
 
@@ -158,7 +181,10 @@ def _status_alerts(con, cfg: Settings, now: datetime, impact: dict | None) -> li
                 continue
             o = ov.loc[pid]
             o = o.iloc[0] if isinstance(o, pd.DataFrame) else o
-            status = str(o["status"] or "")
+            src_team = o.get("team_id")
+            if pd.notna(src_team) and int(src_team) != team_of.get(pid):
+                continue  # filed for a team he has since left: not about tonight's game (B05)
+            status = str(o["status"] or "").strip()
             cap = o["minutes_cap"] if pd.notna(o["minutes_cap"]) else None
             phrase = LIMITING.get(status.lower())
             if not phrase and cap is None:
@@ -166,6 +192,8 @@ def _status_alerts(con, cfg: Settings, now: datetime, impact: dict | None) -> li
             what = phrase or f"limited to {cap:.0f} minutes"
             active = str(r.selected_slot or "").upper() not in ("BN", "IL", "IL+", "")
             before_tip = pd.Timestamp(now) < tip
+            if not before_tip:
+                continue  # his game has started: nothing to act on (B04)
             hard = status.lower() in ("out", "out for season", "doubtful")
             if side == "mine":
                 kind = "injury"
@@ -184,7 +212,8 @@ def _status_alerts(con, cfg: Settings, now: datetime, impact: dict | None) -> li
                     f"Your opponent's player: {o['source']} reports {status or 'a minutes limit'} for today."
                 )
                 action = {"label": "See the matchup", "target": "feed", "ref": None}
-            key = f"{kind}:{pid}:{today}:{status}:{cap}"
+            since = pd.Timestamp(o["ts"]).isoformat() if pd.notna(o["ts"]) else ""
+            key = f"{kind}:{pid}:{today}:{status.lower()}:{cap}:{since}"  # one per status episode (B03)
             out.append(
                 {
                     "id": _id(key),
@@ -362,14 +391,18 @@ def generate(
     now: datetime | None = None,
     run: str = "pregame",
     report: dict | None = None,
+    since: datetime | None = None,
 ) -> dict:
-    """Build this run's notifications and store the new ones. Returns counts by kind."""
+    """Build this run's notifications and store the new ones; an alert already stored keeps its
+    time and read state but takes the current priority, title, body and deadline (audit B03).
+    `now` is when the run's inputs are complete (call after its snapshot); `since` is when the run
+    started, for the refresh's impact (audit B01). Returns counts by kind."""
     cfg = cfg or settings()
     now = pd.Timestamp(now or store.utcnow())
     now = now if now.tzinfo else now.tz_localize("UTC")
     items: list[dict] = []
     builders = [
-        lambda: _status_alerts(con, cfg, now, week_impact(con, cfg, now)),
+        lambda: _status_alerts(con, cfg, now, week_impact(con, cfg, now, since)),
         lambda: _lineup_alert(con, cfg, now),
         lambda: _game_day(con, cfg, now),
     ]
@@ -383,6 +416,18 @@ def generate(
             errors.append(f"{type(exc).__name__}: {exc}"[:200])
     have = {r[0] for r in con.execute("SELECT id FROM notifications").fetchall()} if items else set()
     new = [i for i in items if i["id"] not in have]
+    for i in items:
+        if i["id"] in have:  # same episode: refresh what it says now
+            con.execute(
+                "UPDATE notifications SET priority = ?, title = ?, body = ?, deadline = ? WHERE id = ?",
+                [
+                    i["priority"],
+                    i["title"],
+                    i["body"],
+                    json.dumps(i["deadline"]) if i["deadline"] else None,
+                    i["id"],
+                ],
+            )
     if new:
         store.upsert(
             con,
@@ -433,15 +478,33 @@ def mark_read(
     now: datetime | None = None,
     db_path: Path | str | None = None,
 ) -> dict:
-    """Mark these ids read, or everything up to now when ids is empty."""
-    st = read_state(cfg, db_path)
-    if ids:
-        st["ids"] = sorted(set(st.get("ids", [])) | set(ids))
-    else:
-        st["all_before"] = pd.Timestamp(now or store.utcnow()).isoformat()
+    """Mark these ids read, or everything up to now when ids is empty. Read, merge and write
+    happen under an exclusive file lock and the file is replaced atomically, so concurrent marks
+    never lose each other (audit B07); an unreadable file is set aside, not overwritten."""
+    import fcntl
+    import os
+
     p = _read_path(cfg, db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(st))
+    with open(p.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            st = json.loads(p.read_text()) if p.exists() else {"ids": [], "all_before": None}
+            if not isinstance(st, dict):
+                raise ValueError("not an object")
+        except (OSError, ValueError):
+            if p.exists():
+                p.rename(p.with_suffix(f".corrupt-{int(pd.Timestamp.now().timestamp())}"))
+            st = {"ids": [], "all_before": None}
+        if ids:
+            st["ids"] = sorted(set(st.get("ids") or []) | set(ids))
+        else:
+            mark = pd.Timestamp(now or store.utcnow())
+            old = st.get("all_before")
+            st["all_before"] = max(mark, pd.Timestamp(old)).isoformat() if old else mark.isoformat()
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(st))
+        os.replace(tmp, p)
     return st
 
 
@@ -480,11 +543,20 @@ def notifications_response(
                 player = None
         created = pd.Timestamp(r.created_at)
         read = r.id in read_ids or (all_before is not None and created <= pd.Timestamp(all_before))
+        deadline = _json(r.deadline)
+        priority = r.priority
+        if (
+            deadline
+            and priority in ("urgent", "high")
+            and r.kind in ("injury", "lineup_lock")
+            and pd.Timestamp(deadline["at"]) <= now
+        ):
+            priority = "normal"  # its deadline has passed: history, not a call to act (B04)
         items.append(
             {
                 "id": r.id,
                 "kind": r.kind,
-                "priority": r.priority,
+                "priority": priority,
                 "created_at": created.isoformat(),
                 "title": r.title,
                 "body": r.body,
@@ -492,7 +564,7 @@ def notifications_response(
                 "player": player,
                 "impact": _json(r.impact),
                 "action": _json(r.action),
-                "deadline": _json(r.deadline),
+                "deadline": deadline,
                 "claim": None,
                 "provenance": _json(r.provenance) or [],
             }

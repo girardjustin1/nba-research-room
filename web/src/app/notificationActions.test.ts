@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoApis, createDemoTransport } from '../api/demoTransport';
 import { notificationsNormal } from '../mocks/notifications/notifications';
-import { actionPath } from './notificationActions';
+import { actionPath, announceNotificationsChanged, onNotificationsChanged } from './notificationActions';
 
 describe('notification actions', () => {
+  it('tells listeners when read state changes, until they unsubscribe', () => {
+    let calls = 0;
+    const off = onNotificationsChanged(() => (calls += 1));
+    announceNotificationsChanged();
+    off();
+    announceNotificationsChanged();
+    expect(calls).toBe(1);
+  });
+
   it('sends each action to its screen', () => {
     const base = notificationsNormal.items[0];
+    if (!base) throw new Error('the mock has no alerts');
     const at = (target: 'move' | 'lineup' | 'pickups' | 'player' | 'feed') => actionPath({ ...base, action: { label: 'x', target, ref: null } });
     expect(at('move')).toBe('#/league/team/moves');
     expect(at('lineup')).toBe('#/league/team');
