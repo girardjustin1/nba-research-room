@@ -19,12 +19,14 @@ notes:
   - id: 2026-10-08-bakeoff
     date: 2026-10-08
     kind: finding
-    title: Four more models tried; the baseline still wins
+    title: Four more models tried; the baseline keeps the job
     body: >
-      Ridge, CatBoost, a position-based model and a blend of all five were each tested on last
-      season (weights chosen on the season before). None beat the baseline: the blend's errors were
-      about 1% larger on most stats. The baseline keeps driving projections; the gains this season
-      come from news, injuries, teammates out and the betting markets instead.
+      Ridge, CatBoost, a position-based model and a blend of all five were tested on last season.
+      After an outside review fixed a flaw that handicapped three of them, the blend makes slightly
+      smaller big misses on every stat (under half a percent) but is no better on typical error.
+      In a full replay of last season's weeks its win-the-week odds were just as accurate as the
+      baseline's, no better, so the baseline keeps driving projections. Its plans won slightly more
+      often, too little to be sure; we'll check again with this season's games.
     refs: [DECISIONS.md, jobs/model_bakeoff.py]
 
   - id: 2026-10-08-notifications

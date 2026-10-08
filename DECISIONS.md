@@ -903,7 +903,8 @@ engine and the bake-off on a clean clone (docs/audits/2026-10-08-codex-astra.md)
   every 95% range above zero) and better only on turnovers (−0.26%, 95% −0.41% to −0.12%).
   Hierarchical is about even (−0.2% to +0.8%). Ensemble 80% band coverage 0.83-0.91: too wide.
 - Why the blend can't help: the members' errors are so close in size that inverse-error weights
-  come out near 0.20 each, diluting the baseline with four weaker, correlated models.
+  come out near 0.20 each, diluting the baseline with four weaker, correlated models. (Superseded
+  by the round-2 audit re-run below: that claim was too broad, and the challengers were handicapped.)
 - Consistent with the LightGBM and context findings: projections from a player's own history are
   at their limit; the gains came from new information (teammates out, the injury report,
   markets). The baseline stays the driver; the ensemble is not gated on. The code stays as the
@@ -923,4 +924,38 @@ fitted on its own projections. The ensemble replaces the baseline as the driver 
 3. Guard: no predicted makes above attempts in the bake-off's test season.
 Anything else, including a lower Brier whose range crosses zero, keeps the baseline. The result
 is recorded below whichever way it goes.
+
+Result (run 2026-10-08, after the rule's commit f14f7c9): **keep the baseline.** 140 team-weeks
+over 20 weeks, paired. Brier doing nothing: baseline 0.1867, ensemble 0.1865, difference −0.0001
+(95% −0.0042 to +0.0036): the primary condition is not met. Win rate following the plans:
+baseline 0.882, ensemble 0.900, difference +0.018 (95% −0.007 to +0.043): the guard is met.
+Makes within attempts: met (zero rows for every model). Reading: on the weekly odds the two are
+indistinguishable at this sample size; the ensemble's plan edge is suggestive, not shown. The
+replay can tell apart differences of about ±0.004 in Brier; the bake-off's 0.2-0.5% RMSE gains
+are far smaller than that once they pass through a week of nine categories. Cost also counts
+against it: the ensemble replay took 689 s to the baseline's 478 s, and nightly fitting goes
+from seconds to about 3 minutes. Revisit with this season's own games (the scoreboard and the
+live backtest) if the plan edge holds up.
+
+**Model bake-off: round-2 audit fixes and the re-run (2026-10-08).** The audit
+(docs/audits/2026-10-08-codex-astra.md) found the challengers handicapped and the conclusion
+too broad. Fixed: A01, LightGBM, Ridge and CatBoost fitted teammates-out on games played only
+(no teammate ever missing), so their adjustment was broken; it is now fitted on every game, as
+the baseline's. A03, corrected rates kept makes within attempts (LightGBM had FTM above FTA in
+712 rows). A04-A06, the ensemble's weight floor, perfect members, missing numbers and expected
+minutes. Also found here: the baseline itself put threes above field goals made in 22 of 40,919
+rows; capped. A07 is documented, not fixed: the hierarchical model groups players by today's
+listed position for every season (no dated position history exists).
+Re-run, 2025-26 test, change vs the baseline (negative is better):
+- Ensemble MAE: rebounds −0.22% (95% −0.34 to −0.10), steals −0.20% (−0.34 to −0.06),
+  turnovers −0.93% (−1.07 to −0.79); worse on points +0.15% (+0.03 to +0.27), blocks +0.76%,
+  threes +0.60%; minutes, assists, FGA, FTA within ±0.1% with ranges across zero.
+- Ensemble RMSE: better on all ten stats, −0.12% (assists) to −0.49% (minutes). Ridge alone is
+  better on RMSE for eight of ten.
+- Weights are still near 0.20 each: the inverse-error rule cannot tell the members apart.
+Restated conclusion (A02): this inverse-error blend does not justify replacing the baseline
+under MAE, the criterion chosen beforehand; it does lower large misses slightly on every stat,
+so "blending can't help" was wrong. A blend with weights optimized on validation errors (allowed
+to drop members) is the better-specified test and is not built. The deciding question, whether
+it moves the weekly odds, is answered above: not measurably.
 
