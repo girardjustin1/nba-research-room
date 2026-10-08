@@ -29,6 +29,38 @@ def env_value(name: str) -> str | None:
     return None
 
 
+def exchange(path: Path, code: str, redirect: str) -> None:
+    """Swap the one-time code Yahoo shows for tokens, saved into oauth2.json (yahoo_oauth's format)."""
+    import json
+    import time
+
+    import requests
+
+    d = json.loads(path.read_text())
+    r = requests.post(
+        "https://api.login.yahoo.com/oauth2/get_token",
+        auth=(d["consumer_key"], d["consumer_secret"]),
+        data={"grant_type": "authorization_code", "code": code.strip(), "redirect_uri": redirect},
+        timeout=30,
+    )
+    if r.status_code != 200:
+        raise SystemExit(
+            f"Yahoo refused the code (HTTP {r.status_code}): it may have expired; get a new one."
+        )
+    tok = r.json()
+    d.update(
+        {
+            "access_token": tok["access_token"],
+            "refresh_token": tok["refresh_token"],
+            "token_type": tok.get("token_type", "bearer"),
+            "token_time": time.time(),
+            "guid": tok.get("xoauth_yahoo_guid"),
+        }
+    )
+    path.write_text(json.dumps(d, indent=2))
+    os.chmod(path, 0o600)
+
+
 def main() -> int:
     from yahoo_oauth import OAuth2
 
@@ -36,6 +68,8 @@ def main() -> int:
     if not path.exists():
         print("oauth2.json not found: it needs your app's consumer_key and consumer_secret.")
         return 1
+    if "--code" in sys.argv:  # a code copied from Yahoo's page (no prompt)
+        exchange(path, sys.argv[sys.argv.index("--code") + 1], env_value("YAHOO_REDIRECT_URI") or "oob")
     redirect = env_value("YAHOO_REDIRECT_URI")
     extra = {"callback_uri": redirect} if redirect else {}
     sc = OAuth2(None, None, from_file=str(path), **extra)
