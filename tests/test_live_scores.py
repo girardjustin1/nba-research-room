@@ -271,7 +271,14 @@ def test_news_and_weekly_odds(seeded):
             ]
         ),
     )
-    odds = live_scores.summary(seeded, cfg, since=DAY)["weekly_odds"]
+    # The nightly run grades the finished week once, from the live read, and keeps only the
+    # outcome (categories won and lost), never Yahoo's stats.
+    graded = live_scores.record_week_outcomes(seeded, cfg, today=date(2026, 11, 9))
+    assert graded == {"graded": [2]}
+    assert seeded.execute("SELECT week, cats_me, cats_opp FROM week_outcomes").fetchall() == [(2, 6, 0)]
+    assert live_scores.record_week_outcomes(seeded, cfg, today=date(2026, 11, 10)) == {"graded": []}
+    seeded.execute("DELETE FROM yahoo_matchups")                     # the live read is gone ...
+    odds = live_scores.summary(seeded, cfg, since=DAY)["weekly_odds"]  # ... the grading stays
     assert odds["weeks"] == 1
     assert odds["brier_first_snapshot"] == pytest.approx((0.6 - 1) ** 2)
     assert odds["brier_all_snapshots"] == pytest.approx(((0.6 - 1) ** 2 + (0.9 - 1) ** 2) / 2)

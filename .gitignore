@@ -11,3 +11,5 @@ __pycache__/
 .DS_Store
 # Paid third-party data (e.g. Basketball Monster exports): never publish
 reference/
+# Private notes (never published)
+docs/private/

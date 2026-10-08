@@ -2,7 +2,7 @@
 
 Inputs: projections (every stored run), game_logs and games (box scores, tips), status_events
 (X), nba_report_rows (the NBA report), injuries (BallDontLie), matchup_snapshots and
-yahoo_matchups (weekly odds and results), settings.
+week_outcomes (my finished weeks, graded by record_week_outcomes from the live Yahoo matchup), settings.
 Outputs: live_scores (per game day, stat and segment: n, MAE, RMSE, bias, 80% band coverage) and
 live_news_scores (per game day, source and status: listed, played), and `summary()` for the
 report and the System screen. Tables: writes live_scores, live_news_scores; reads the rest.
@@ -239,36 +239,56 @@ def update(
     return {"status": "ok", "from": str(start), "through": str(through), "score_rows": n, "news_rows": m}
 
 
-def week_results(con: duckdb.DuckDBPyConnection, cfg: Settings) -> pd.DataFrame:
-    """Per finished fantasy week: my categories won and the opponent's, from the latest Yahoo
-    matchup file saved after the week ended (TO: fewer wins; a tie wins for nobody)."""
-    weeks = schedule.fantasy_weeks(cfg.season)
-    snaps = con.execute("SELECT * FROM yahoo_matchups").df()
-    if snaps.empty:
-        return pd.DataFrame(columns=["week", "cats_me", "cats_opp"])
-    out = []
+def _cats(frame: pd.DataFrame, cfg: Settings) -> tuple[int, int] | None:
+    """(my categories won, lost) from a week's final matchup rows, or None without both sides.
+    TO: fewer wins; a tie wins for nobody."""
     me = cfg.league.my_team_id
+    mine = frame[frame["team_id"] == me]
+    if mine.empty:
+        return None
+    opp = frame[frame["team_id"] == int(mine["opponent_team_id"].iloc[0])]
+    if opp.empty:
+        return None
+    a, b, won, lost = mine.iloc[0], opp.iloc[0], 0, 0
+    for c in cfg.categories:
+        x, y = a.get(c.key), b.get(c.key)
+        if pd.isna(x) or pd.isna(y) or x == y:
+            continue
+        better = (x > y) if c.higher_is_better else (x < y)
+        won, lost = won + better, lost + (not better)
+    return won, lost
+
+
+def record_week_outcomes(con: duckdb.DuckDBPyConnection, cfg: Settings, final=None,
+                         today: date | None = None) -> dict:
+    """Grade each fantasy week that ended in the last 7 days and isn't graded yet: its final
+    matchup, read live (the connection's in-memory Yahoo tables when they hold that week after it
+    ended, else `final(week)`), kept as my categories won and lost only (week_outcomes)."""
+    today = today or pd.Timestamp.now(tz="America/New_York").date()
+    weeks = schedule.fantasy_weeks(cfg.season)
+    have = {r[0] for r in con.execute("SELECT week FROM week_outcomes").fetchall()}
+    live = con.execute("SELECT * FROM yahoo_matchups").df()
+    graded = {}
     for w in weeks.itertuples(index=False):
+        if w.week in have or not (w.end < today <= w.end + timedelta(days=7)):
+            continue
         end_ts = pd.Timestamp(w.end + timedelta(days=1), tz="America/New_York")
-        s = snaps[(snaps["week"] == w.week) & (pd.to_datetime(snaps["snapshot_at"], utc=True) >= end_ts)]
-        if s.empty:
-            continue
-        s = s[s["snapshot_at"] == s["snapshot_at"].max()]
-        mine = s[s["team_id"] == me]
-        if mine.empty:
-            continue
-        opp = s[s["team_id"] == int(mine["opponent_team_id"].iloc[0])]
-        if opp.empty:
-            continue
-        a, b, won, lost = mine.iloc[0], opp.iloc[0], 0, 0
-        for c in cfg.categories:
-            x, y = a.get(c.key), b.get(c.key)
-            if pd.isna(x) or pd.isna(y) or x == y:
-                continue
-            better = (x > y) if c.higher_is_better else (x < y)
-            won, lost = won + better, lost + (not better)
-        out.append({"week": int(w.week), "cats_me": won, "cats_opp": lost})
-    return pd.DataFrame(out, columns=["week", "cats_me", "cats_opp"])
+        rows = live[(live["week"] == w.week) & (pd.to_datetime(live["snapshot_at"], utc=True) >= end_ts)]
+        if rows.empty and final is not None:
+            rows = final(int(w.week))
+        res = _cats(rows, cfg) if rows is not None and not rows.empty else None
+        if res is not None:
+            graded[int(w.week)] = res
+    if graded:
+        at = store.utcnow()
+        rows = [{"week": k, "cats_me": a, "cats_opp": b, "graded_at": at} for k, (a, b) in graded.items()]
+        store.upsert(con, "week_outcomes", pd.DataFrame(rows))
+    return {"graded": sorted(graded)}
+
+
+def week_results(con: duckdb.DuckDBPyConnection, cfg: Settings) -> pd.DataFrame:
+    """Per graded fantasy week: my categories won and the opponent's (record_week_outcomes)."""
+    return con.execute("SELECT week, cats_me, cats_opp FROM week_outcomes ORDER BY week").df()
 
 
 def summary(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, since: date | None = None) -> dict:

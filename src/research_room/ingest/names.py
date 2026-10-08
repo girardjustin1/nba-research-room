@@ -122,6 +122,23 @@ def player_universe(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """).df()
 
 
+def resolve_only(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame,
+                 resolver: NameResolver | None = None) -> tuple[pd.Series, list[dict]]:
+    """Resolve `rows` (raw_name, team_abbr) without recording anything: for Yahoo names, which are
+    never stored (ingest/yahoo_live.py). Returns the player ids (nullable Int64) and the
+    names that didn't resolve, with the reason (reported by the job, not kept)."""
+    resolver = resolver or NameResolver(player_universe(con), load_aliases(), load_team_aliases())
+    ids, missed = [], []
+    for row in rows.itertuples(index=False):
+        team = getattr(row, "team_abbr", None)
+        res = resolver.resolve(row.raw_name, team)
+        ids.append(res.player_id)
+        if res.player_id is None:
+            missed.append({"raw_name": row.raw_name, "team_abbr": team, "reason": res.reason,
+                           "candidates": "; ".join(res.candidates)})
+    return pd.Series(ids, index=rows.index, dtype="Int64"), missed
+
+
 def resolve_and_record(con: duckdb.DuckDBPyConnection, source: str, rows: pd.DataFrame,
                        resolver: NameResolver | None = None) -> pd.Series:
     """Resolve `rows` (source_key, raw_name, team_abbr) and persist the outcome.

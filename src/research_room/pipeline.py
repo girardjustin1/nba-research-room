@@ -36,7 +36,7 @@ from research_room import (
     store,
 )
 from research_room.config import Settings, settings
-from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo, yahoo_api
+from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo, yahoo_live
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
@@ -157,6 +157,9 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
             return {"error": f"{type(exc).__name__}: {exc}"[:300]}
 
     with store.ingest_run(con, "pipeline", "pregame") as run:
+        # My team, this week's opponent and the matchup, live for this run only (never stored).
+        report["yahoo"] = step("yahoo", lambda: guarded("yahoo", "yahoo",
+                                                         lambda: _yahoo(con, cfg, yahoo_live.PAGE)))
         report["x_feed"] = step("x feed", lambda: guarded("x feed", "x", lambda: x_feed.poll(con, cfg)))
         report["nba_report"] = step("nba injury report", lambda: guarded(
             "nba injury report", "nba_report", lambda: nba_injury_report.sync(con, cfg)))
@@ -175,20 +178,10 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
     return report
 
 
-def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings) -> dict:
-    """Yahoo snapshots: read from the API once signed in (read only), else the CSV inbox. An API
-    failure is recorded and the CSV inbox is used instead."""
-    if yahoo_api.signed_in():
-        try:
-            with store.ingest_run(con, "yahoo_api", "read"):
-                backend = yahoo_api.auto_backend(cfg)
-                backend.available()                        # every read happens here
-            return yahoo.ingest_inbox(con, backend=backend, cfg=cfg)
-        except yahoo.YahooCsvError:
-            raise                                          # a snapshot that fails validation
-        except Exception:  # noqa: BLE001 - recorded in ingest_runs; the CSV inbox still works
-            pass
-    return yahoo.ingest_inbox(con, cfg=cfg)
+def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings, parts=None) -> dict:
+    """Yahoo, live for this run only: the API once signed in (read only), else the CSV inbox, into
+    this connection's in-memory tables. Nothing Yahoo is stored."""
+    return yahoo_live.attach(con, cfg, parts)
 
 
 def _soft(fn) -> dict:
@@ -264,6 +257,12 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
         return out
 
     with store.ingest_run(con, "pipeline", "nightly") as run:
+        # Yahoo first, live into this run's memory only (never stored).
+        try:
+            report["inbox"] = step("yahoo", lambda: _yahoo(con, cfg))
+        except yahoo.YahooCsvError as exc:
+            report["inbox"] = {"rejected": str(exc)}
+            echo(f"yahoo inbox REJECTED: {exc}")
         if sync:
             api = client or bdl.BdlClient.from_env()
             # An outage leaves yesterday's data: projections still run (recorded in ingest_runs).
@@ -273,14 +272,12 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             report["x_feed"] = step("x feed", lambda: _guarded(con, "x", lambda: x_feed.poll(con, cfg)))
             report["live_scores"] = step("live scoreboard", lambda: _guarded(
                 con, "live_scores", lambda: live_scores.update(con, cfg, day - timedelta(days=1))))
+            report["week_outcomes"] = step("week outcomes", lambda: _guarded(
+                con, "week_outcomes",
+                lambda: live_scores.record_week_outcomes(con, cfg, yahoo_live.final_matchup(cfg))))
             report["scorecard"] = step("scorecard", lambda: _guarded(
                 con, "scorecard", lambda: scorecard.run(con, cfg)))
             report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
-        try:
-            report["inbox"] = step("yahoo inbox", lambda: _yahoo(con, cfg))
-        except yahoo.YahooCsvError as exc:
-            report["inbox"] = {"rejected": str(exc)}
-            echo(f"yahoo inbox REJECTED: {exc}")
         seasons = sorted(cfg.bdl.backfill_seasons)
         proj = refresh_projections(con, cfg, day, step, report, refit_shadow=True)
         report["lineup"] = step("lineup", lambda: recommend_lineup(con, proj, day, cfg))

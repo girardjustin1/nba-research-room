@@ -55,12 +55,23 @@ make backtest-news               # replay that season day by day: does game-day 
 pages and requests only the missing ones. A full three-season backfill is about 2,000 requests
 and takes roughly 10 minutes on the BallDontLie GOAT plan.
 
-## Getting Yahoo data in (CSV inbox)
+## How Yahoo data is handled
 
-Yahoo API access is pending, so Yahoo data arrives as CSV files in `data/inbox/`, loaded by
-`make inbox`. Chrome saves downloads to `~/Downloads`, so `make inbox` first moves any newer
-`teams.csv`, `roster.csv`, `players.csv`, `matchup.csv` or `draft_results.csv` from there into the inbox. A file that doesn't match its schema is rejected with
-the offending line numbers, and nothing from that batch is written.
+Yahoo Fantasy data is read live and never stored, cached or indexed: each job and each page reads
+what it needs (the Fantasy API once signed in with `make yahoo-auth`, read only, else CSV files
+you export from the Yahoo website into `data/inbox/`), holds it in memory, and lets it go when it
+finishes. Only the app's own analyses are kept. Rosters are read for your team and this week's
+opponent only. Nothing that reads Yahoo data trains a model or reaches an AI service. Every page
+that can show Yahoo data carries "Fantasy data provided by Yahoo Fantasy" with Yahoo's logo and a
+link. `make yahoo-purge` deletes every Yahoo item on the machine (asks first).
+
+## Getting Yahoo data in without the API (CSV inbox)
+
+Export CSV files into `data/inbox/`; `make inbox` checks them (and lists names that don't match a
+player). Chrome saves downloads to `~/Downloads`, so `make inbox` first moves any newer
+`teams.csv`, `roster.csv`, `players.csv` or `matchup.csv` from there into the inbox. A file that
+doesn't match its schema is rejected with the offending line numbers, and none of the batch is
+read.
 
 ### Claude in Chrome shortcut
 
@@ -91,7 +102,7 @@ Columns marked * are required. Unknown columns are rejected.
 | `roster.csv` | `team_id`\*, `player_name`\*, `selected_slot`\*, `eligible_positions`\*, `status`, `team_abbr`, `yahoo_player_key` | slot ∈ PG SG G SF PF F C Util BN IL IL+ |
 | `players.csv` | `player_name`\*, `team_abbr`\*, `eligible_positions`\*, `pct_rostered`\*, `status`, `owner_team_id`, `yahoo_player_key` | `pct_rostered` 0–100; a trailing % is fine |
 | `matchup.csv` | `week`\*, `team_id`\*, `opponent_team_id`\*, `fg_pct`\*, `ft_pct`\*, `fg3m`\*, `pts`\*, `reb`\*, `ast`\*, `stl`\*, `blk`\*, `tov`\*, `acquisitions_used` | percentages as decimals (0.471); `acquisitions_used` = this week's adds so far (my team), else the optimizer assumes 0 and says so |
-| `draft_results.csv` | `pick_no`\*, `round`\*, `team_id`\*, `player_name`\*, `team_abbr`, `yahoo_player_key` | written by the draft tracker or exported from Yahoo |
+| `draft_results.csv` | `pick_no`\*, `round`\*, `team_id`\*, `player_name`\*, `team_abbr`, `yahoo_player_key` | not read: the draft's picks come from the draft-room listener |
 
 `eligible_positions` accepts `,`, `/` or `;` separators. `team_abbr` may be Yahoo's short form
 (`GS`, `NO`, `NY`, `SA`, `PHO`); `config/aliases.yaml` maps those to BallDontLie codes.

@@ -99,31 +99,19 @@ SCHEMA: dict[str, Table] = {
         "newest_at TIMESTAMPTZ", "events INTEGER"),
     # How far each watched account has been read completely, and the post ids read recently
     # (ids only, never text), so an overlapping read is never parsed twice (round-3 audit X02).
+    # My week's result as categories won and lost: the app's own grading of a finished week, read
+    # live from Yahoo once and kept as this count only (never Yahoo's stats: Yahoo data policy).
+    # Deleted with every other analysis by `make yahoo-purge`.
+    "week_outcomes": _t(("week",),
+        "week INTEGER", "cats_me INTEGER", "cats_opp INTEGER", "graded_at TIMESTAMPTZ"),
     "x_feed_cursor": _t(("handle",),
         "handle VARCHAR", "read_through TIMESTAMPTZ", "updated_at TIMESTAMPTZ"),
     "x_feed_seen": _t(("post_id",),
         "post_id VARCHAR", "seen_at TIMESTAMPTZ"),
-    "yahoo_league": _t(("league_id", "snapshot_at"),
-        "league_id INTEGER", "snapshot_at TIMESTAMPTZ", "settings JSON", *_INGEST),
-    "yahoo_rosters": _t(("snapshot_at", "team_id", "yahoo_player_key"),
-        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "yahoo_player_key VARCHAR",
-        "player_name VARCHAR", "player_id INTEGER", "selected_slot VARCHAR",
-        "eligible_positions VARCHAR", "status VARCHAR", *_INGEST),
-    "yahoo_players": _t(("snapshot_at", "yahoo_player_key"),
-        "snapshot_at TIMESTAMPTZ", "yahoo_player_key VARCHAR", "player_name VARCHAR",
-        "team_abbr VARCHAR", "eligible_positions VARCHAR", "pct_rostered DOUBLE",
-        "status VARCHAR", "owner_team_id INTEGER", "player_id INTEGER", *_INGEST),
-    "yahoo_matchups": _t(("snapshot_at", "week", "team_id"),
-        "snapshot_at TIMESTAMPTZ", "week INTEGER", "team_id INTEGER",
-        "opponent_team_id INTEGER", "fg_pct DOUBLE", "ft_pct DOUBLE", "fg3m DOUBLE",
-        "pts DOUBLE", "reb DOUBLE", "ast DOUBLE", "stl DOUBLE", "blk DOUBLE", "tov DOUBLE",
-        "acquisitions_used INTEGER", *_INGEST),
     "draft_picks": _t(("draft_id", "pick_no"),
         "draft_id VARCHAR", "pick_no INTEGER", "round INTEGER", "team_id INTEGER",
         "player_id INTEGER", "player_name VARCHAR", "is_keeper BOOLEAN",
         "entry_source VARCHAR", "picked_at TIMESTAMPTZ", "undone BOOLEAN"),
-    "yahoo_teams": _t(("snapshot_at", "team_id"),
-        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "team_name VARCHAR", *_INGEST),
     "draft_teams": _t(("draft_id", "team_id"),
         "draft_id VARCHAR", "team_id INTEGER", "name VARCHAR", "updated_at TIMESTAMPTZ"),
     "projections": _t(("model", "run_at", "player_id", "date", "stat"),
@@ -202,7 +190,33 @@ def connect(path: Path | str | None = None, read_only: bool = False) -> duckdb.D
     con.execute("SET TimeZone = 'UTC'")
     if not read_only:
         init_schema(con)
+    create_live_tables(con)   # empty until ingest/yahoo_live.attach fills them for this connection
     return con
+
+
+# Yahoo Fantasy information is never stored, cached or indexed (the Yahoo data policy in
+# ingest/yahoo_live.py). These tables exist only as TEMP tables inside one
+# connection, filled live for one job or one page request (ingest/yahoo_live.py) and gone when it
+# closes; unqualified queries find them first. init_schema drops any stored copy.
+LIVE_ONLY: dict[str, Table] = {
+    "yahoo_league": _t(("league_id", "snapshot_at"),
+        "league_id INTEGER", "snapshot_at TIMESTAMPTZ", "settings JSON", *_INGEST),
+    "yahoo_teams": _t(("snapshot_at", "team_id"),
+        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "team_name VARCHAR", *_INGEST),
+    "yahoo_rosters": _t(("snapshot_at", "team_id", "yahoo_player_key"),
+        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "yahoo_player_key VARCHAR",
+        "player_name VARCHAR", "player_id INTEGER", "selected_slot VARCHAR",
+        "eligible_positions VARCHAR", "status VARCHAR", *_INGEST),
+    "yahoo_players": _t(("snapshot_at", "yahoo_player_key"),
+        "snapshot_at TIMESTAMPTZ", "yahoo_player_key VARCHAR", "player_name VARCHAR",
+        "team_abbr VARCHAR", "eligible_positions VARCHAR", "pct_rostered DOUBLE",
+        "status VARCHAR", "owner_team_id INTEGER", "player_id INTEGER", *_INGEST),
+    "yahoo_matchups": _t(("snapshot_at", "week", "team_id"),
+        "snapshot_at TIMESTAMPTZ", "week INTEGER", "team_id INTEGER",
+        "opponent_team_id INTEGER", "fg_pct DOUBLE", "ft_pct DOUBLE", "fg3m DOUBLE",
+        "pts DOUBLE", "reb DOUBLE", "ast DOUBLE", "stl DOUBLE", "blk DOUBLE", "tov DOUBLE",
+        "acquisitions_used INTEGER", *_INGEST),
+}
 
 
 def init_schema(con: duckdb.DuckDBPyConnection) -> None:
@@ -216,6 +230,32 @@ def init_schema(con: duckdb.DuckDBPyConnection) -> None:
         for col, typ in table.columns:
             if col not in have:
                 con.execute(f"ALTER TABLE {name} ADD COLUMN {col} {typ.replace('NOT NULL', '').strip()}")
+    purge_stored_yahoo(con)
+
+
+def purge_stored_yahoo(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
+    """Remove every stored copy of Yahoo Fantasy information: the old snapshot tables and the
+    Yahoo player keys and names kept by name matching. Safe to call repeatedly."""
+    out = {}
+    stored = {r[0] for r in con.execute(
+        "SELECT table_name FROM duckdb_tables() WHERE schema_name = 'main' AND NOT temporary"
+    ).fetchall()}
+    for name in LIVE_ONLY:
+        if name in stored:
+            out[name] = con.execute(f"SELECT count(*) FROM main.{name}").fetchone()[0]
+            con.execute(f"DROP TABLE main.{name}")
+    for table in ("player_xref", "unresolved_names"):
+        if table in stored:
+            out[table] = con.execute(f"SELECT count(*) FROM {table} WHERE source = 'yahoo'").fetchone()[0]
+            con.execute(f"DELETE FROM {table} WHERE source = 'yahoo'")
+    return out
+
+
+def create_live_tables(con: duckdb.DuckDBPyConnection) -> None:
+    """The Yahoo tables as TEMP tables of this connection (in memory; gone when it closes)."""
+    for name, table in LIVE_ONLY.items():
+        cols = ", ".join(f"{c} {t}" for c, t in table.columns)
+        con.execute(f"CREATE TEMP TABLE IF NOT EXISTS {name} ({cols}, PRIMARY KEY ({', '.join(table.pk)}))")
 
 
 def upsert(con: duckdb.DuckDBPyConnection, table: str, df: pd.DataFrame) -> int:
@@ -226,7 +266,9 @@ def upsert(con: duckdb.DuckDBPyConnection, table: str, df: pd.DataFrame) -> int:
     """
     if df.empty:
         return 0
-    spec = SCHEMA[table]
+    spec = SCHEMA[table] if table in SCHEMA else LIVE_ONLY[table]
+    if table in LIVE_ONLY:
+        create_live_tables(con)  # never a stored table (see LIVE_ONLY)
     extra = set(df.columns) - set(spec.names)
     if extra:
         raise ValueError(f"{table}: unknown columns {sorted(extra)}")

@@ -3,6 +3,17 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-08-yahoo-live
+    date: 2026-10-08
+    kind: update
+    title: Yahoo data is read live, never kept
+    body: >
+      The app now reads your Yahoo league fresh every time it needs it (your roster, your
+      opponent's, the free agents, the matchup) and lets it go when it's done; only the app's own
+      analysis is kept. Pages that show Yahoo data say "Fantasy data provided by Yahoo Fantasy".
+      Pages may take a moment longer to load.
+    refs: [DECISIONS.md, src/research_room/ingest/yahoo_live.py]
+
   - id: 2026-10-08-x-feed-audit
     date: 2026-10-08
     kind: update
@@ -83,8 +94,8 @@ notes:
     kind: update
     title: Ready to read the league straight from Yahoo
     body: >
-      Once Yahoo grants API access and you sign in once (make yahoo-auth), the app reads every
-      roster, the free agents, this week's matchup totals and the draft picks itself, so no more
+      Once you sign in (make yahoo-auth), the app reads your roster, your opponent's, the free
+      agents and this week's matchup totals itself, live each time and never stored, so no more
       CSV exports, and make yahoo-check confirms the draft rounds, order and week dates against our
       settings. It can only read: anything that would act inside Yahoo is blocked.
     refs: [DECISIONS.md, src/research_room/ingest/yahoo_api.py]

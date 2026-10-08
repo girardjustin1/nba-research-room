@@ -55,6 +55,30 @@ POSITIONS = ("PG", "SG", "SF", "PF", "C")  # free-agent queries, one per base po
 DETAIL_BATCH = 25  # player_details ids per call
 
 
+THROTTLED = ("999", "429", "too many requests", "request denied", "rate limit", "temporarily unavailable")
+BACKOFF_S = (2, 4, 8, 16)   # exponential backoff when Yahoo throttles
+
+
+def _with_backoff(fn, sleep=None):
+    """Retry a read when Yahoo throttles it, waiting 2, 4, 8, 16 s; any other error raises at once,
+    and the last throttled attempt raises too. Never more than five calls for one read."""
+    import time
+
+    sleep = sleep or time.sleep
+
+    def call(*a, **k):
+        for wait in (*BACKOFF_S, None):
+            try:
+                return fn(*a, **k)
+            except Exception as exc:  # noqa: BLE001 - only throttling is retried
+                if wait is None or not any(t in str(exc).lower() for t in THROTTLED):
+                    raise
+                sleep(wait)
+        return None
+
+    return call
+
+
 class YahooWriteBlocked(RuntimeError):
     """Something tried to act inside Yahoo. This app only reads."""
 
@@ -71,7 +95,8 @@ class ReadOnly:
             raise YahooWriteBlocked(f"'{name}' is not a read call; this app never acts inside Yahoo")
         if name == "to_team":
             return lambda key: ReadOnly(self._inner.to_team(key), READ_TEAM)
-        return getattr(self._inner, name)
+        attr = getattr(self._inner, name)
+        return _with_backoff(attr) if callable(attr) else attr
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise YahooWriteBlocked("the Yahoo client is read only")
@@ -162,10 +187,13 @@ class ApiBackend:
         cfg: Settings | None = None,
         week: int | None = None,
         now: datetime | None = None,
+        team_ids: list[int] | None = None,
     ) -> None:
         self.lg, self.game, self.cfg = league, game_key, cfg or settings()
         self.week, self.now = week, now
-        self._cache: dict[str, pd.DataFrame] = {}
+        self.team_ids = set(team_ids) if team_ids else None   # rosters of these teams only
+        # Each snapshot read once for this one load (one job or page); never kept beyond it.
+        self._frames: dict[str, pd.DataFrame] = {}
         self._teams: dict | None = None
 
     # ---------------------------------------------------------------- raw reads
@@ -192,6 +220,8 @@ class ApiBackend:
     def roster(self) -> pd.DataFrame:
         rows = []
         for key in self.teams_raw():
+            if self.team_ids is not None and _team_id(key) not in self.team_ids:
+                continue
             for p in self.lg.to_team(key).roster() or []:
                 rows.append(
                     {
@@ -282,15 +312,16 @@ class ApiBackend:
 
     # ---------------------------------------------------------------- the inbox interface
     def _get(self, name: str) -> pd.DataFrame:
-        if name not in self._cache:
+        if name not in self._frames:
             df = getattr(self, name)()
             df["snapshot_at"] = (self.now or datetime.now(UTC)).replace(microsecond=0)
-            self._cache[name] = df
-        return self._cache[name]
+            self._frames[name] = df
+        return self._frames[name]
 
-    def available(self) -> dict[str, datetime]:
+    def available(self, parts=None) -> dict[str, datetime]:
+        """Only the snapshots asked for are read (a page needs a few calls, not the whole league)."""
         out = {}
-        for name in SCHEMAS:
+        for name in parts or SCHEMAS:
             df = self._get(name)
             if not df.empty:
                 out[name] = df["snapshot_at"].iloc[0]

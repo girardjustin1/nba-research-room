@@ -2,8 +2,8 @@
 
 Inputs: the store (read-only), data/inbox/ file listing.
 Outputs: tables and the per-team per-week schedule matrix.
-Tables: reads ingest_runs, games, game_logs, advanced_stats, teams, unresolved_names,
-yahoo_rosters, yahoo_players, yahoo_matchups, draft_picks.
+Tables: reads ingest_runs, games, game_logs, advanced_stats, teams, unresolved_names. Yahoo data is
+never stored: this page lists the export files only.
 """
 
 from __future__ import annotations
@@ -69,24 +69,16 @@ with st.expander("Row counts per table"):
 st.subheader("Yahoo inbox")
 backend = CsvBackend(cfg.paths.inbox_dir)
 present = backend.available()
-last = {
-    "teams": q("SELECT max(snapshot_at) AS t FROM yahoo_teams"),
-    "roster": q("SELECT max(snapshot_at) AS t FROM yahoo_rosters"),
-    "players": q("SELECT max(snapshot_at) AS t FROM yahoo_players"),
-    "matchup": q("SELECT max(snapshot_at) AS t FROM yahoo_matchups"),
-    "draft_results": q("SELECT max(picked_at) AS t FROM draft_picks WHERE entry_source = 'yahoo_csv'"),
-}
 inbox_rows = []
 for name, schema in SCHEMAS.items():
-    ingested = last[name]["t"].iloc[0]
     inbox_rows.append({
         "file": f"{name}.csv",
-        "in inbox": present.get(name),
-        "last ingested snapshot": ingested if pd.notna(ingested) else None,
+        "saved at": present.get(name),
         "columns (required*)": ", ".join(c.name + ("*" if c.required else "") for c in schema),
     })
 st.dataframe(pd.DataFrame(inbox_rows), hide_index=True, width="stretch")
-st.caption(f"Inbox folder: `{cfg.paths.inbox_dir}`")
+st.caption(f"Inbox folder: `{cfg.paths.inbox_dir}`. Each job and page reads these files live; "
+           "nothing from them is stored. `make inbox` checks them and lists names that don't match.")
 
 # ------------------------------------------------------------------ quarantine
 st.subheader("Name quarantine")

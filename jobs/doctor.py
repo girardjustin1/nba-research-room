@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 from research_room import readiness, store
+from research_room.ingest import yahoo_live
 
 MARK = {"ok": "ok  ", "warn": "WARN", "error": "FAIL"}
 
@@ -16,6 +17,7 @@ MARK = {"ok": "ok  ", "warn": "WARN", "error": "FAIL"}
 def main() -> int:
     con = store.connect(read_only=True)
     try:
+        yahoo_live.attach(con, parts=("teams", "players"))   # read live into memory, never stored
         report = readiness.readiness(con)
     finally:
         con.close()

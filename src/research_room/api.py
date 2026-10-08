@@ -35,6 +35,7 @@ from research_room.draft.availability import expected_pick, picks_for_slot, slot
 from research_room.draft.board import DraftBoard, slot_assignment, split_starters
 from research_room.draft.bots import BOT_POSITION_CAP, bot_choice
 from research_room.draft.value import category_balance, compute_values
+from research_room.ingest import yahoo_live
 from research_room.ingest.external_proj import blend_preseason
 from research_room.ingest.names import NameResolver
 
@@ -161,6 +162,9 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         pool = blend_preseason(con, cfg)
         gpw = schedule.games_per_week(schedule.load_games(con, cfg.season.nba_season), cfg.season)
         extras = load_extras(con, cfg)
+        # Team names and eligibility, read live once for this draft session and held in its
+        # memory only (never written; a few calls, not one per pick).
+        yahoo_live.attach(con, cfg, ("teams", "players"))
         yahoo_elig = eligibility.load_yahoo(con)
         log = mock.con if mock else con
         order = cfg.draft.order
@@ -752,18 +756,29 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
 
     @app.get("/system/readiness")
     def get_system_readiness() -> dict:
-        con = read_con()
+        con = season_con(("teams", "players"))
         try:
             return readiness.readiness(con, check_api=False)  # answering this request means it's up
         finally:
             con.close()
 
     # ---------------------------------------------------------------- season (Phase 1+)
+    def season_con(parts):
+        """A read connection with this request's Yahoo data loaded live into memory (only the
+        parts the page needs; nothing Yahoo is stored)."""
+        con = read_con()
+        try:
+            yahoo_live.attach(con, settings(), parts)
+        except Exception:
+            con.close()
+            raise
+        return con
+
     @app.get("/season/lineup")
     def get_season_lineup(now: str | None = None) -> dict:
         """LineupResponse (web/src/api/season.ts): today's and the rest of the week's lineups.
         `now` (ISO time) is for testing and replay only."""
-        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        con = season_con(yahoo_live.PAGE)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return season_api.lineup_response(con, now=when)
@@ -776,7 +791,7 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def get_week_probability(now: str | None = None) -> dict:
         """WinProbabilityResponse: this week's P(win) history and the do-nothing path.
         `now` (ISO time) is for testing and replay only."""
-        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        con = season_con(yahoo_live.ALL)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return moves_api.with_recommended(season_api.probability_response(con, now=when), con, now=when)
@@ -788,7 +803,7 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.get("/season/players/{player_id}")
     def get_season_player(player_id: int, now: str | None = None) -> dict:
         """PlayerAnalysisResponse: where his projection comes from, and what to do with him."""
-        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        con = season_con(yahoo_live.ALL)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return moves_api.player_response(con, player_id, now=when)
@@ -802,7 +817,7 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.get("/season/moves")
     def get_season_moves(now: str | None = None) -> dict:
         """MovesResponse: the optimizer's add/drop plan for the rest of the week."""
-        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        con = season_con(yahoo_live.ALL)
         try:
             return moves_api.moves_response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
         except season_api.NotReady as exc:
@@ -813,7 +828,7 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.post("/season/scenario")
     def post_season_scenario(body: ScenarioIn, now: str | None = None) -> dict:
         """ScenarioResponse: re-simulate the moves the user toggled on."""
-        con = store.connect(db_path, read_only=True) if db_path is None else store.connect(db_path)
+        con = season_con(yahoo_live.ALL)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return moves_api.scenario_response(con, body.move_ids, now=when)

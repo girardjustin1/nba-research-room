@@ -802,7 +802,7 @@ Fixes to how the backtests replay time, then every benchmark re-run (2025-26, 14
 
 **Yahoo Fantasy API, read only (2026-10-06).** `ingest/yahoo_api.py`; `make yahoo-auth` (once,
 in your own terminal), `make yahoo-check`, `make yahoo-pull`. Written and tested on recorded-shape
-fakes while API access is pending; the first live `make yahoo-check` is the check against Yahoo.
+fakes; the first live `make yahoo-check` is the check against Yahoo.
 - `ApiBackend` is a drop-in for the CSV inbox: teams, every team's roster, free agents (with NBA
   team codes from player details), this week's matchup totals (Yahoo's stat ids, now in
   `categories[].yahoo_stat_id`) with acquisitions used, and draft picks. They go through the same
@@ -1058,4 +1058,29 @@ restriction in all three; the audit's end-to-end check (asking as of just after 
 the first-seen rule now requires) is 57 of 59, the two misses being the held nickname and
 initials. The forward test with and without X (rules above) still decides whether X keeps its
 place.
+
+**Yahoo data policy: read live, never stored (2026-10-08).** Yahoo Fantasy data is read live for
+each job and each page, held in memory, and let go when it finishes; only the app's own analyses
+are kept. The owner chose this over keeping a local copy.
+- `store.LIVE_ONLY`: the Yahoo tables exist only as TEMP tables of one connection (in memory,
+  gone when it closes; unqualified queries find them first, so the readers didn't change). Every
+  connection starts with them empty; `ingest/yahoo_live.attach` fills them for a job (nightly:
+  everything; pre-game: my team, my opponent, the matchup) or a page (the parts it needs: most
+  pages a few calls; moves and a player's page also read the free agents). Any stored copy from
+  before is dropped on start, with the Yahoo rows of the name matches.
+- Rosters are read for my team and this week's opponent only. Name matching for Yahoo records
+  nothing; names that don't match are printed by `make inbox`, never logged.
+- A finished week is graded once by the nightly run (the live final matchup) and kept as
+  categories won and lost only (`week_outcomes`); the live scoreboard reads that.
+- Reads back off when Yahoo throttles (2, 4, 8, 16 s); other errors raise.
+- Nothing that reads Yahoo data fits a model or reaches an AI service (tests check the model
+  code and the X reader's payload); audits run on copies without Yahoo tables.
+- Attribution: "Fantasy data provided by Yahoo Fantasy" with Yahoo's logo and a link, in the
+  footer of every live League and Draft page (the demo shows invented data and carries none).
+- `make yahoo-purge` deletes every Yahoo item: any stored copy, every analysis made from Yahoo
+  data, the CSV exports and the sign-in. `make inbox` and `make yahoo-pull` now check and report;
+  they store nothing.
+- Cost: pages read Yahoo on each load (slower), and a Yahoo outage means no roster until it's
+  back (the CSV inbox is the fallback). The draft room reads team names and eligibility once per
+  draft session and holds them in that session's memory.
 

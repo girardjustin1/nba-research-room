@@ -1,9 +1,9 @@
-"""Load Yahoo CSV snapshots from data/inbox/ into the store.
+"""Check the Yahoo CSV exports in data/inbox/: validate them, match the names, report.
 
-Inputs: data/inbox/{teams,roster,players,matchup,draft_results}.csv; with --from-downloads, any of
-those files in ~/Downloads that are newer than the inbox copy are moved in first.
-Outputs: yahoo_* tables, draft_picks, player_xref, unresolved_names.
-Tables: see research_room.ingest.yahoo.ingest_inbox.
+Inputs: data/inbox/{teams,roster,players,matchup}.csv; with --from-downloads, any of those files in
+~/Downloads that are newer than the inbox copy are moved in first.
+Outputs: a printed report (rows per file, names that didn't match). Nothing is written to the
+store: every job and page reads the files live (ingest/yahoo_live.py).
 
 Usage: `make inbox` or `.venv/bin/python jobs/ingest_inbox.py --from-downloads`.
 """
@@ -41,15 +41,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.from_downloads:
         moved = pull_from_downloads(cfg.paths.inbox_dir, Path.home() / "Downloads")
         print(f"moved from Downloads: {moved or 'nothing newer'}")
-    con = store.connect()
+    con = store.connect(read_only=True)
     try:
-        counts = yahoo.ingest_inbox(con)
+        out = yahoo.load_live(con, yahoo.CsvBackend(cfg.paths.inbox_dir), cfg, show_names=True)
     except yahoo.YahooCsvError as exc:
-        print(f"REJECTED, nothing written: {exc}", file=sys.stderr)
+        print(f"REJECTED: {exc}", file=sys.stderr)
         return 1
-    unresolved = con.execute("SELECT count(*) FROM unresolved_names WHERE source = 'yahoo'").fetchone()[0]
-    print(f"ingested: {counts or 'no files in inbox'}; names in quarantine: {unresolved}")
-    con.close()
+    finally:
+        con.close()
+    print(f"read: {out['loaded'] or 'no files in inbox'}; names that didn't match: {out['unresolved']}")
+    for line in out.get("unresolved_names", []):
+        print(f"  {line}  (add it to config/aliases.yaml)")
     return 0
 
 

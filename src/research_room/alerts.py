@@ -63,7 +63,8 @@ def _today(now: datetime) -> date:
 def _roster(con, team_id: int) -> pd.DataFrame:
     return con.execute(
         """
-        SELECT r.player_id, r.player_name, r.selected_slot FROM yahoo_rosters r
+        SELECT r.player_id, coalesce(p.full_name, 'Player ' || r.player_id) AS player_name, r.selected_slot
+        FROM yahoo_rosters r LEFT JOIN players p USING (player_id)
         WHERE r.team_id = ? AND r.player_id IS NOT NULL
           AND r.snapshot_at = (SELECT max(snapshot_at) FROM yahoo_rosters WHERE team_id = ?)
     """,

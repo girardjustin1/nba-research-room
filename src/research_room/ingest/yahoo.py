@@ -2,14 +2,17 @@
 data/inbox/, and the Fantasy API (ingest/yahoo_api.py `ApiBackend`, used by the nightly run once
 `make yahoo-auth` has signed in).
 
-Inputs: data/inbox/{teams,roster,players,matchup,draft_results}.csv (column schemas in `SCHEMAS`
-and the README), settings.league.
-Outputs: validated snapshot frames written to the store, names resolved to BDL ids.
-Tables: writes yahoo_league, yahoo_teams, yahoo_rosters, yahoo_players, yahoo_matchups, draft_picks,
-player_xref, unresolved_names, ingest_runs; reads players, teams.
+Inputs: data/inbox/{teams,roster,players,matchup}.csv (column schemas in `SCHEMAS` and the
+README), settings.league.
+Outputs: validated snapshot frames loaded into the connection's in-memory Yahoo tables
+(store.LIVE_ONLY), names resolved to BDL ids without recording them.
+Tables: fills the TEMP yahoo_league, yahoo_teams, yahoo_rosters, yahoo_players, yahoo_matchups of
+one connection; reads players, teams. Writes nothing to the store.
 
-Nothing here performs any action inside Yahoo. Each file's snapshot time is its modification
-time (UTC), so re-ingesting an unchanged file is a no-op.
+Yahoo Fantasy information is never stored, cached or indexed (ingest/yahoo_live.py):
+each job or page request loads what it needs (ingest/yahoo_live.py) and it is gone when the
+connection closes. Nothing here performs any action inside Yahoo. Each file's snapshot time is its
+modification time (UTC). Draft results are not loaded: picks come from the draft-room listener.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ import pandas as pd
 
 from research_room import store
 from research_room.config import Settings, settings
-from research_room.ingest.names import normalize_name, resolve_and_record
+from research_room.ingest.names import normalize_name, resolve_only
 
 SOURCE = "yahoo"
 
@@ -34,31 +37,43 @@ SOURCE = "yahoo"
 @dataclass(frozen=True)
 class Column:
     name: str
-    kind: str              # str | int | float | positions
+    kind: str  # str | int | float | positions
     required: bool = True
 
 
 SCHEMAS: dict[str, tuple[Column, ...]] = {
     "teams": (Column("team_id", "int"), Column("team_name", "str")),
     "roster": (
-        Column("team_id", "int"), Column("player_name", "str"), Column("selected_slot", "str"),
-        Column("eligible_positions", "positions"), Column("status", "str", required=False),
-        Column("team_abbr", "str", required=False), Column("yahoo_player_key", "str", required=False),
+        Column("team_id", "int"),
+        Column("player_name", "str"),
+        Column("selected_slot", "str"),
+        Column("eligible_positions", "positions"),
+        Column("status", "str", required=False),
+        Column("team_abbr", "str", required=False),
+        Column("yahoo_player_key", "str", required=False),
     ),
     "players": (
-        Column("player_name", "str"), Column("team_abbr", "str"),
-        Column("eligible_positions", "positions"), Column("pct_rostered", "float"),
-        Column("status", "str", required=False), Column("owner_team_id", "int", required=False),
+        Column("player_name", "str"),
+        Column("team_abbr", "str"),
+        Column("eligible_positions", "positions"),
+        Column("pct_rostered", "float"),
+        Column("status", "str", required=False),
+        Column("owner_team_id", "int", required=False),
         Column("yahoo_player_key", "str", required=False),
     ),
     "matchup": (
-        Column("week", "int"), Column("team_id", "int"), Column("opponent_team_id", "int"),
+        Column("week", "int"),
+        Column("team_id", "int"),
+        Column("opponent_team_id", "int"),
         *(Column(c, "float") for c in ("fg_pct", "ft_pct", "fg3m", "pts", "reb", "ast", "stl", "blk", "tov")),
         Column("acquisitions_used", "int", required=False),
     ),
     "draft_results": (
-        Column("pick_no", "int"), Column("round", "int"), Column("team_id", "int"),
-        Column("player_name", "str"), Column("team_abbr", "str", required=False),
+        Column("pick_no", "int"),
+        Column("round", "int"),
+        Column("team_id", "int"),
+        Column("player_name", "str"),
+        Column("team_abbr", "str", required=False),
         Column("yahoo_player_key", "str", required=False),
     ),
 }
@@ -71,7 +86,7 @@ class YahooCsvError(ValueError):
 
 
 class YahooBackend(Protocol):
-    def available(self) -> dict[str, datetime]: ...
+    def available(self, parts=None) -> dict[str, datetime]: ...
     def read(self, name: str) -> pd.DataFrame: ...
 
 
@@ -107,7 +122,7 @@ def validate(name: str, raw: pd.DataFrame) -> pd.DataFrame:
         series = df[col.name]
         blank = series.isna() | (series.astype(str).str.strip() == "")
         if col.required and blank.any():
-            rows = (series.index[blank] + 2).tolist()            # +2: header line, 1-based
+            rows = (series.index[blank] + 2).tolist()  # +2: header line, 1-based
             problems.append(f"{col.name}: blank in required column at line(s) {rows[:10]}")
         if col.kind == "int":
             conv = pd.to_numeric(series.where(~blank), errors="coerce")
@@ -129,7 +144,7 @@ def validate(name: str, raw: pd.DataFrame) -> pd.DataFrame:
             out[col.name] = vals
             for idx, msg in bad_idx[:10]:
                 problems.append(f"{col.name} line {idx + 2}: {msg}")
-            bad = pd.Series(False, index=series.index)            # reported line by line above
+            bad = pd.Series(False, index=series.index)  # reported line by line above
         else:
             out[col.name] = series.where(~blank).astype("string").str.strip()
             bad = pd.Series(False, index=series.index)
@@ -155,10 +170,10 @@ class CsvBackend:
     def path(self, name: str) -> Path:
         return self.inbox / f"{name}.csv"
 
-    def available(self) -> dict[str, datetime]:
+    def available(self, parts=None) -> dict[str, datetime]:
         """Snapshot name -> file modification time (UTC, whole seconds) for files present."""
         out = {}
-        for name in SCHEMAS:
+        for name in parts or SCHEMAS:
             p = self.path(name)
             if p.exists():
                 out[name] = datetime.fromtimestamp(int(p.stat().st_mtime), tz=UTC)
@@ -178,56 +193,77 @@ def _source_keys(df: pd.DataFrame) -> pd.Series:
     return df["yahoo_player_key"].fillna(fallback).astype(str)
 
 
-def _resolve(con, df: pd.DataFrame) -> pd.Series:
-    rows = pd.DataFrame({"source_key": df["yahoo_player_key"], "raw_name": df["player_name"],
-                         "team_abbr": df["team_abbr"]})
-    return resolve_and_record(con, SOURCE, rows)
+def _resolve(con, df: pd.DataFrame, missed: list) -> pd.Series:
+    rows = pd.DataFrame({"raw_name": df["player_name"], "team_abbr": df["team_abbr"]}, index=df.index)
+    ids, miss = resolve_only(con, rows)
+    missed += miss
+    return ids
 
 
-def ingest_inbox(con: duckdb.DuckDBPyConnection, backend: YahooBackend | None = None,
-                 cfg: Settings | None = None) -> dict[str, int]:
-    """Validate and load every snapshot present. A bad file raises before anything is written."""
+LIVE = ("teams", "roster", "players", "matchup")
+
+
+def load_live(
+    con: duckdb.DuckDBPyConnection,
+    backend: YahooBackend | None = None,
+    cfg: Settings | None = None,
+    parts: tuple[str, ...] | None = None,
+    show_names: bool = False,
+) -> dict:
+    """Validate and load the snapshots asked for (default all) into this connection's in-memory
+    Yahoo tables. A bad file raises before anything is loaded. Returns counts, and with
+    `show_names` the names that didn't resolve (for printing only: run reports are logged, and
+    Yahoo's names must not be)."""
     cfg = cfg or settings()
     backend = backend or CsvBackend(cfg.paths.inbox_dir)
-    present = backend.available()
-    frames = {name: backend.read(name) for name in present}          # validate all first
+    want = [n for n in (parts or LIVE) if n in LIVE]
+    present = backend.available(want)
+    frames = {name: backend.read(name) for name in want if name in present}  # validate all first
     now = store.utcnow()
     counts: dict[str, int] = {}
-    with store.ingest_run(con, SOURCE, "ingest_inbox") as run:
-        league = {k: v for k, v in cfg.model_dump(mode="json").items()
-                  if k not in ("paths", "bdl", "x_feed")}
-        store.upsert(con, "yahoo_league", pd.DataFrame([{
-            "league_id": cfg.league.league_id, "snapshot_at": now, "settings": json.dumps(league),
-            "source": "settings_yaml", "fetched_at": now}]))
-        for name, df in frames.items():
-            df = df.copy()
-            if "team_abbr" not in df:
-                df["team_abbr"] = None
-            if "yahoo_player_key" in df:
-                df["yahoo_player_key"] = _source_keys(df)
-            df["source"], df["fetched_at"] = SOURCE, now
-            if name == "teams":
-                bad = df[(df["team_id"] < 1) | (df["team_id"] > cfg.league.teams)]
-                if not bad.empty:
-                    raise YahooCsvError(f"teams.csv: team_id must be 1..{cfg.league.teams}, "
-                                        f"got {bad['team_id'].tolist()}")
-                counts[name] = store.upsert(con, "yahoo_teams", df.drop(columns=["team_abbr"]))
-            elif name == "roster":
-                df["player_id"] = _resolve(con, df)
-                counts[name] = store.upsert(con, "yahoo_rosters", df.drop(columns=["team_abbr"]))
-            elif name == "players":
-                df["player_id"] = _resolve(con, df)
-                counts[name] = store.upsert(con, "yahoo_players", df)
-            elif name == "matchup":
-                counts[name] = store.upsert(con, "yahoo_matchups", df.drop(columns=["team_abbr"]))
-            elif name == "draft_results":
-                ids = _resolve(con, df)
-                picks = pd.DataFrame({
-                    "draft_id": f"yahoo-{cfg.league.league_id}-{cfg.season.nba_season}",
-                    "pick_no": df["pick_no"], "round": df["round"], "team_id": df["team_id"],
-                    "player_id": ids, "player_name": df["player_name"], "is_keeper": False,
-                    "entry_source": "yahoo_csv", "picked_at": df["snapshot_at"], "undone": False})
-                counts[name] = store.upsert(con, "draft_picks", picks)
-        run["rows"] = sum(counts.values())
-        run["detail"] = json.dumps(counts)
-    return counts
+    missed: list[dict] = []
+    store.create_live_tables(con)
+    league = {k: v for k, v in cfg.model_dump(mode="json").items() if k not in ("paths", "bdl", "x_feed")}
+    store.upsert(
+        con,
+        "yahoo_league",
+        pd.DataFrame(
+            [
+                {
+                    "league_id": cfg.league.league_id,
+                    "snapshot_at": now,
+                    "settings": json.dumps(league),
+                    "source": "settings_yaml",
+                    "fetched_at": now,
+                }
+            ]
+        ),
+    )
+    for name, df in frames.items():
+        df = df.copy()
+        if "team_abbr" not in df:
+            df["team_abbr"] = None
+        if "yahoo_player_key" in df:
+            df["yahoo_player_key"] = _source_keys(df)
+        df["source"], df["fetched_at"] = SOURCE, now
+        if name == "teams":
+            bad = df[(df["team_id"] < 1) | (df["team_id"] > cfg.league.teams)]
+            if not bad.empty:
+                raise YahooCsvError(
+                    f"teams.csv: team_id must be 1..{cfg.league.teams}, got {bad['team_id'].tolist()}"
+                )
+            counts[name] = store.upsert(con, "yahoo_teams", df.drop(columns=["team_abbr"]))
+        elif name == "roster":
+            df["player_id"] = _resolve(con, df, missed)
+            counts[name] = store.upsert(con, "yahoo_rosters", df.drop(columns=["team_abbr"]))
+        elif name == "players":
+            df["player_id"] = _resolve(con, df, missed)
+            counts[name] = store.upsert(con, "yahoo_players", df)
+        elif name == "matchup":
+            counts[name] = store.upsert(con, "yahoo_matchups", df.drop(columns=["team_abbr"]))
+    out = {"loaded": counts, "unresolved": len(missed)}
+    if show_names:
+        out["unresolved_names"] = [
+            f"{m['raw_name']} ({m['team_abbr'] or '?'}): {m['reason']}" for m in missed
+        ]
+    return out

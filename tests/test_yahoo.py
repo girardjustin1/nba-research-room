@@ -73,51 +73,50 @@ def test_validate_rejects_bad_files_with_readable_errors(text, message):
         yahoo.validate("roster", raw)
 
 
-def test_ingest_inbox_writes_tables_resolves_names_and_quarantines(universe, inbox, tmp_path):
+def test_load_live_fills_memory_resolves_names_and_records_nothing(universe, inbox):
     folder, write = inbox
     write("roster", ROSTER)
     write("players", PLAYERS)
     write("matchup", MATCHUP)
     write("draft_results", DRAFT)
-    counts = yahoo.ingest_inbox(universe, yahoo.CsvBackend(folder))
-    assert counts == {"roster": 3, "players": 2, "matchup": 1, "draft_results": 1}
+    out = yahoo.load_live(universe, yahoo.CsvBackend(folder), show_names=True)
+    assert out["loaded"] == {"roster": 3, "players": 2, "matchup": 1}   # draft results: the listener's
     roster = dict(universe.execute("SELECT player_name, player_id FROM yahoo_rosters").fetchall())
     assert roster == {"Nikola Jokic": 7, "Jalen Williams": 10, "Mystery Man": None}
     fa = universe.execute("SELECT player_id FROM yahoo_players WHERE player_name='Jalen Williams'").fetchone()
     assert fa[0] == 11                                       # Yahoo "GS" -> BDL GSW tie-break
-    q = universe.execute("SELECT raw_name, reason FROM unresolved_names").fetchall()
-    assert q == [("Mystery Man", "no_match")]
+    assert out["unresolved"] == 1 and out["unresolved_names"][0].startswith("Mystery Man")
     snap = universe.execute("SELECT DISTINCT snapshot_at FROM yahoo_rosters").fetchone()[0]
     assert snap == datetime.fromtimestamp(1_790_000_000, tz=UTC)
-    assert universe.execute("SELECT player_id FROM draft_picks").fetchone()[0] == 7
-    # Every rostered player is either matched or in quarantine (acceptance criterion).
-    unmatched = universe.execute("""
-        SELECT count(*) FROM yahoo_rosters r
-        WHERE r.player_id IS NULL AND NOT EXISTS (
-            SELECT 1 FROM unresolved_names u WHERE u.source='yahoo' AND u.source_key=r.yahoo_player_key)
-    """).fetchone()[0]
-    assert unmatched == 0
+    # Nothing Yahoo is recorded anywhere (the Yahoo data policy).
+    assert universe.execute("SELECT count(*) FROM player_xref WHERE source = 'yahoo'").fetchone()[0] == 0
+    assert universe.execute("SELECT count(*) FROM unresolved_names").fetchone()[0] == 0
+    assert universe.execute("SELECT count(*) FROM draft_picks").fetchone()[0] == 0
+    temp = dict(universe.execute(
+        "SELECT table_name, temporary FROM duckdb_tables() WHERE table_name LIKE 'yahoo_%'").fetchall())
+    assert temp and all(temp.values())
+    assert "unresolved_names" not in yahoo.load_live(universe, yahoo.CsvBackend(folder))   # never logged
 
 
-def test_reingesting_unchanged_files_is_a_no_op(universe, inbox):
+def test_reloading_unchanged_files_is_a_no_op(universe, inbox):
     folder, write = inbox
     write("roster", ROSTER)
-    yahoo.ingest_inbox(universe, yahoo.CsvBackend(folder))
-    yahoo.ingest_inbox(universe, yahoo.CsvBackend(folder))
+    yahoo.load_live(universe, yahoo.CsvBackend(folder))
+    yahoo.load_live(universe, yahoo.CsvBackend(folder))
     assert universe.execute("SELECT count(*) FROM yahoo_rosters").fetchone()[0] == 3
 
 
-def test_one_bad_file_writes_nothing(universe, inbox):
+def test_one_bad_file_loads_nothing(universe, inbox):
     folder, write = inbox
     write("roster", ROSTER)
     write("matchup", "week,team_id\n1,11\n")
     with pytest.raises(yahoo.YahooCsvError, match="matchup.csv"):
-        yahoo.ingest_inbox(universe, yahoo.CsvBackend(folder))
+        yahoo.load_live(universe, yahoo.CsvBackend(folder))
     assert universe.execute("SELECT count(*) FROM yahoo_rosters").fetchone()[0] == 0
 
 
-def test_empty_inbox_ingests_only_league_settings(universe, tmp_path):
-    assert yahoo.ingest_inbox(universe, yahoo.CsvBackend(tmp_path)) == {}
+def test_empty_inbox_loads_only_league_settings(universe, tmp_path):
+    assert yahoo.load_live(universe, yahoo.CsvBackend(tmp_path))["loaded"] == {}
     assert universe.execute("SELECT count(*) FROM yahoo_league").fetchone()[0] == 1
 
 
@@ -145,10 +144,10 @@ def test_teams_csv_loads_names_and_rejects_bad_ids(con, tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
     (inbox / "teams.csv").write_text("team_id,team_name\n1,Invented Alpha\n2,Made-Up Beta 🤠\n")
-    counts = yahoo.ingest_inbox(con, yahoo.CsvBackend(inbox))
+    counts = yahoo.load_live(con, yahoo.CsvBackend(inbox))["loaded"]
     assert counts["teams"] == 2
     assert tracker.league_team_names(con) == {1: "Invented Alpha", 2: "Made-Up Beta 🤠"}
 
     (inbox / "teams.csv").write_text("team_id,team_name\n15,Too Many\n")
     with pytest.raises(yahoo.YahooCsvError, match="team_id must be 1..14"):
-        yahoo.ingest_inbox(con, yahoo.CsvBackend(inbox))
+        yahoo.load_live(con, yahoo.CsvBackend(inbox))

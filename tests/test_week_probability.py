@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from research_room import api, matchup, store
+from research_room.ingest import yahoo_live
 from research_room.projections.baseline import STATS
 from tests.test_matchup import POS
 
@@ -73,6 +74,7 @@ def test_probability_endpoint_end_to_end(client):
     assert {p["module"] for p in j["provenance"]} == {"projections", "simulate", "yahoo", "optimizer"}
 
     con = store.connect(db)
+    yahoo_live.attach(con)                       # every run reads Yahoo live first (never stored)
     out = matchup.snapshot(con, now=datetime.fromisoformat(NOW))
     con.close()
     assert out["week"] == 2

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import { EXPERIENCE_HOME, LEAGUE_TAB_PATH, lastPath, rememberPath } from '../../app/experiences';
 import { onNotificationsChanged } from '../../app/notificationActions';
+import { LEAGUE_NAV_HEIGHT } from '../../app/league';
 import { normalizePath } from '../../app/router';
 import { findRoute, routesFor } from '../../app/routes';
 import type { AppApis, Experience } from '../../app/types';
@@ -13,6 +14,7 @@ import { ExperienceDrawer, type ApiState } from './nav/ExperienceDrawer';
 import { LeagueBottomNav } from './nav/LeagueBottomNav';
 import { BellButton, MenuButton } from './nav/ShellButtons';
 import { DemoBadge } from './DemoBadge';
+import { YahooAttribution } from './YahooAttribution';
 import { PrototypeDataChip } from './PrototypeDataChip';
 
 export interface AppFrameProps {
@@ -132,6 +134,9 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         <Box key={route.path} sx={{ position: 'relative', minHeight: '100dvh' }}>
           {route.render({ mode, apis, navigate, query })}
         </Box>
+        {mode === 'live' && !demo && (experience === 'league' || experience === 'draft') && (
+          <YahooAttribution bottomOffset={experience === 'league' ? LEAGUE_NAV_HEIGHT : 0} />
+        )}
         {mode === 'mock' && experience === 'draft' && <PrototypeDataChip endpoints={['Sample draft (Storybook mock API)']} bottomOffset={112} />}
         <ExperienceDrawer
           open={drawer}

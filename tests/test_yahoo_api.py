@@ -238,10 +238,15 @@ def test_the_api_feeds_the_same_ingest_as_the_csvs(con, lg):
             ]
         ),
     )
-    counts = yahoo.ingest_inbox(con, backend=yahoo_api.ApiBackend(lg, GAME, settings(), now=NOW))
+    from research_room.ingest import yahoo_live
+
+    api = yahoo_api.ApiBackend(lg, GAME, settings(), now=NOW)
+    out = yahoo.load_live(con, yahoo_live._Limited(api, settings().league.my_team_id), settings())
+    counts = out["loaded"]
     assert counts["teams"] == 2 and counts["roster"] == 2 and counts["matchup"] == 2
     ids = dict(con.execute("SELECT player_name, player_id FROM yahoo_rosters").fetchall())
     assert ids == {"Invented Guard": 1, "Made Up Center": 2}
+    assert con.execute("SELECT count(*) FROM player_xref").fetchone()[0] == 0     # nothing recorded
 
 
 def test_league_facts_are_set_beside_our_settings(lg):
@@ -271,20 +276,19 @@ def test_no_write_call_is_on_the_allowed_lists():
     assert not writes & (yahoo_api.READ_LEAGUE | yahoo_api.READ_TEAM)
 
 
-def test_the_nightly_falls_back_to_the_csv_inbox_when_the_api_fails(con, monkeypatch):
-    from research_room import pipeline
+def test_the_live_read_falls_back_to_the_csv_inbox_when_the_api_fails(con, monkeypatch, tmp_path):
+    from research_room.ingest import yahoo_live
+    from tests.conftest import REAL_ATTACH
 
     monkeypatch.setattr(yahoo_api, "signed_in", lambda: True)
 
     def broken(cfg=None):
         raise ConnectionError("Yahoo is down")
 
-    monkeypatch.setattr(yahoo_api, "auto_backend", broken)
-    used = {}
-    monkeypatch.setattr(
-        yahoo, "ingest_inbox", lambda con, backend=None, cfg=None: used.setdefault("backend", backend) or {}
-    )
-    pipeline._yahoo(con, settings())
-    assert used["backend"] is None  # the CSV inbox
-    err = con.execute("SELECT status, detail FROM ingest_runs WHERE source = 'yahoo_api'").fetchone()
-    assert err[0] == "error" and "Yahoo is down" in err[1]
+    monkeypatch.setattr(yahoo_api, "connect", broken)
+    (tmp_path / "teams.csv").write_text("team_id,team_name\n1,Invented Alpha\n")
+    cfg = settings()
+    cfg = cfg.model_copy(update={"paths": cfg.paths.model_copy(update={"inbox_dir": tmp_path})})
+    out = REAL_ATTACH(con, cfg, yahoo_live.PAGE)
+    assert out["source"] == "csv" and "Yahoo is down" in out["api_error"]
+    assert out["loaded"] == {"teams": 1}

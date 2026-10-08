@@ -28,7 +28,7 @@ After setup, run `git status` and show me that `.env` and `oauth2.json` are NOT 
 
 **Constraints that shape the design:**
 
-- Yahoo's Fantasy API is read-only and my access application is pending. `ingest/yahoo.py` must work from CSV snapshots in `data/inbox/` on day one (produced by Claude in Chrome or manual export). The OAuth path is an optional second backend writing to the same tables. Nothing may block on Yahoo approval.  
+- Yahoo's Fantasy API is read-only. `ingest/yahoo.py` must work from CSV snapshots in `data/inbox/` on day one (produced by Claude in Chrome or manual export). The OAuth path is an optional second backend with the same interface. Nothing may block on the API. Yahoo data is read live and never stored (README, "How Yahoo data is handled").  
 - Never automate actions inside Yahoo (no adds, drops, lineup clicks, draft picks). Read only.  
 - Every projection model, including the ensemble, must beat the EWMA baseline out-of-sample in the backtest before it drives recommendations. Keep a scoreboard.  
 - The first learned model predicts **minutes**, not fantasy points. Per-minute rates come from EWMA; stat \= rate × projected minutes.  
@@ -167,7 +167,7 @@ Start with Phase 0\. Before writing code, print the proposed `store.py` schema a
 - Python 3.12; `uv venv` and `uv pip install -r requirements.txt`; `uv.lock` committed.  
 - `requirements.txt` (pin exact versions on first install): balldontlie, yahoo\_fantasy\_api, yahoo\_oauth, tweepy, requests, pandas, numpy, duckdb, pyarrow, pyyaml, pydantic, pydantic-settings, scikit-learn, lightgbm, catboost, xgboost, shap, pulp, streamlit, plotly, fastapi, uvicorn, apscheduler, anthropic (or openai) for X parsing, pytest, ruff.  
 - `.env.example` keys: `BDL_API_KEY`, `RUNDOWN_API_KEY`, `X_BEARER_TOKEN`, `LLM_API_KEY`, `YAHOO_LEAGUE_ID`, `YAHOO_TEAM_ID`.  
-- `oauth2.json` (Yahoo consumer key and secret) only when API access is approved; keep the CSV backend as default until then.  
+- `oauth2.json` (Yahoo consumer key and secret) only when the API is used; the CSV backend works without it.  
 - Makefile targets: `setup`, `backfill`, `nightly`, `pregame`, `draft-api`, `app`, `test`, `lint`.  
 - Scheduling: `apscheduler` inside `jobs/nightly.py` for 6:30 pm local daily and `jobs/pregame.py` on game days; document a cron alternative in the README.  
 - README must include: first-run steps, the Claude in Chrome shortcut prompt that saves `roster.csv`, `matchup.csv`, `players.csv` into `data/inbox/`, the CSV column schemas, and the Tampermonkey install steps.
