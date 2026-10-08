@@ -1,8 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { OpponentRosterRequest } from '../../api/season';
-import { opponentRosterEmpty, opponentRosterFilled, sampleSave, sampleSearch } from '../../mocks/team-profiles/opponentRoster';
+import type { OpponentRosterRequest, TeamNamesRequest } from '../../api/season';
+import { opponentRosterEmpty, opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../../mocks/team-profiles/opponentRoster';
 import { renderWithTheme } from '../../test/render';
 import { OpponentRosterEditor } from './OpponentRosterEditor';
 
@@ -14,7 +14,7 @@ describe("this week's opponent", () => {
       saved.push(b);
       return sampleSave(opponentRosterEmpty, b);
     });
-    renderWithTheme(<OpponentRosterEditor data={opponentRosterEmpty} onSearch={async (q) => sampleSearch(q)} onSave={onSave} />);
+    renderWithTheme(<OpponentRosterEditor data={opponentRosterEmpty} onSearch={async (q) => sampleSearch(q)} onSave={onSave} onSaveNames={async (b) => sampleSaveNames(opponentRosterEmpty, b)} />);
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
     await user.click(screen.getByRole('combobox', { name: /Who are you playing/ }));
@@ -38,7 +38,28 @@ describe("this week's opponent", () => {
   });
 
   it('shows how the entry is kept', () => {
-    renderWithTheme(<OpponentRosterEditor data={opponentRosterFilled} onSearch={async () => []} onSave={async () => opponentRosterFilled} />);
-    expect(screen.getByText(/One opponent at a time, replaced each week/)).toBeInTheDocument();
+    renderWithTheme(<OpponentRosterEditor data={opponentRosterFilled} onSearch={async () => []} onSave={async () => opponentRosterFilled} onSaveNames={async () => opponentRosterFilled} />);
+    expect(screen.getByText(/one opponent's roster at a time, replaced each week/)).toBeInTheDocument();
+  });
+
+  it('registers a team by name with the roster, and names every team at once', async () => {
+    const user = userEvent.setup();
+    let data = opponentRosterEmpty;
+    const onSave = vi.fn(async (b: OpponentRosterRequest) => (data = sampleSave(data, b)));
+    const onSaveNames = vi.fn(async (b: TeamNamesRequest) => (data = sampleSaveNames(data, b)));
+    renderWithTheme(<OpponentRosterEditor data={data} onSearch={async (q) => sampleSearch(q)} onSave={onSave} onSaveNames={onSaveNames} />);
+    await user.click(screen.getByRole('combobox', { name: /Who are you playing/ }));
+    await user.click(await screen.findByRole('option', { name: 'Team 6' }));
+    await user.type(screen.getByRole('textbox', { name: 'Team name' }), 'Invented Rivals');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0]![0].team_name).toBe('Invented Rivals');
+    expect(screen.getByRole('combobox', { name: /Who are you playing/ })).toHaveTextContent('Invented Rivals');
+
+    await user.click(screen.getByRole('button', { name: 'Name all teams' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Team 2' }), 'Second Invented');
+    await user.click(screen.getByRole('button', { name: 'Save names' }));
+    await waitFor(() => expect(onSaveNames).toHaveBeenCalledOnce());
+    expect(onSaveNames.mock.calls[0]![0]).toEqual({ teams: [{ team_id: 2, name: 'Second Invented' }] });
   });
 });

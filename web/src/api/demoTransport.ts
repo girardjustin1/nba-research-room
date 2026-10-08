@@ -1,5 +1,5 @@
 import type { FetchLike } from './client';
-import type { MovesResponse, NotificationsResponse, OpponentRoster, OpponentRosterRequest, ScenarioRequest } from './season';
+import type { MovesResponse, NotificationsResponse, OpponentRoster, OpponentRosterRequest, ScenarioRequest, TeamNamesRequest } from './season';
 import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
@@ -12,7 +12,7 @@ import { gcMidweekClose } from '../mocks/matchup-analysis/gamecenter';
 import { mockScenarioEngine, probNormal } from '../mocks/matchup-analysis/probability';
 import { weekNormal } from '../mocks/matchup-analysis/week';
 import { notificationsNormal } from '../mocks/notifications/notifications';
-import { opponentRosterFilled, sampleSave, sampleSearch } from '../mocks/team-profiles/opponentRoster';
+import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../mocks/team-profiles/opponentRoster';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
 import { playerBramwell, playerHargreaveLastDay, playerPellham, playerRosswell } from '../mocks/player-profiles/player';
 import { resultsNormal } from '../mocks/results/results';
@@ -160,6 +160,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['GET', /^\/season\/opponent_roster$/, () => state.opponent],
     ['POST', /^\/season\/opponent_roster$/, ({ body }) => (state.opponent = sampleSave(state.opponent, body as OpponentRosterRequest))],
     ['GET', /^\/season\/player_search$/, ({ query }) => ({ players: sampleSearch(query.get('q') ?? '') })],
+    ['POST', /^\/season\/league_team_names$/, ({ body }) => (state.opponent = sampleSaveNames(state.opponent, body as TeamNamesRequest))],
     // ---- system
     ['GET', /^\/system\/health$/, () => healthWarn],
     ['GET', /^\/system\/readiness$/, () => readinessWarn],

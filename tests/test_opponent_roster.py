@@ -21,6 +21,7 @@ def cfg(tmp_path, monkeypatch):
     c = settings()
     c = c.model_copy(update={"paths": c.paths.model_copy(update={"inbox_dir": tmp_path})})
     monkeypatch.setattr(opponent_roster, "_path", lambda cfg=None: tmp_path / "opponent.json")
+    monkeypatch.setattr(opponent_roster, "_names_path", lambda cfg=None: tmp_path / "league_teams.json")
     return c
 
 
@@ -116,6 +117,37 @@ def test_routes(tmp_path, monkeypatch, cfg):
     )
     assert r.status_code == 200 and r.json()["players"][0]["name"] == "Invented Guard"
     got = client.get("/season/opponent_roster", params={"now": NOW.isoformat()}).json()
-    assert got["opponent_team_id"] == opp and "never in the database" in got["policy"]
+    assert got["opponent_team_id"] == opp and "never in the database" in got["policy"] and "one opponent" in got["policy"]
     bad = client.post("/season/opponent_roster", json={"team_id": settings().league.my_team_id})
+    assert bad.status_code == 422
+
+
+def test_teams_are_registered_by_name_and_renamed_or_cleared(nba, cfg, tmp_path):
+    me = settings().league.my_team_id
+    opp = 5 if me != 5 else 6
+    out = opponent_roster.save(nba, opp, [1], [], cfg, NOW, team_name="  Invented   Rivals ")
+    team = next(t for t in out["teams"] if t["team_id"] == opp)
+    assert team == {"team_id": opp, "label": "Invented Rivals", "name": "Invented Rivals"}
+    assert me not in [t["team_id"] for t in out["teams"]]
+    opponent_roster.set_team_names({opp: "Renamed Club", 2: "Second Invented"}, cfg)
+    assert opponent_roster.team_names(cfg) == {2: "Second Invented", opp: "Renamed Club"}
+    opponent_roster.set_team_names({2: ""}, cfg)  # blank clears
+    labels = {t["team_id"]: t["label"] for t in opponent_roster.response(nba, cfg, NOW)["teams"]}
+    assert labels[2] == "Team 2" and labels[opp] == "Renamed Club"
+    with pytest.raises(ValueError):
+        opponent_roster.set_team_names({me: "Mine"}, cfg)
+    assert not (tmp_path / "league_teams.json").read_text().count("player")  # names only, no rosters
+
+
+def test_the_names_route(tmp_path, cfg):
+    db = tmp_path / "names.duckdb"
+    store.connect(db).close()
+    client = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
+    opp = 5 if settings().league.my_team_id != 5 else 6
+    r = client.post(
+        "/season/league_team_names", json={"teams": [{"team_id": opp, "name": "Invented Rivals"}]}
+    )
+    assert r.status_code == 200
+    assert next(t for t in r.json()["teams"] if t["team_id"] == opp)["label"] == "Invented Rivals"
+    bad = client.post("/season/league_team_names", json={"teams": [{"team_id": 99, "name": "x"}]})
     assert bad.status_code == 422

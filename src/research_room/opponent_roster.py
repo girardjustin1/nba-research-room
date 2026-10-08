@@ -8,9 +8,10 @@ connection get the opponent's roster and the week's pairing when Yahoo itself di
 (`apply`, called by ingest/yahoo_live.attach). Tables: none; the entry is one small file,
 data/inbox/opponent.json.
 
-Kept to the Yahoo data policy (ingest/yahoo_live.py): one opponent at a time, replaced by the
-next week's entry (never an archive of past opponents or a log of every team), read live, never
-written to the store, deleted by `make yahoo-purge`. Names and positions come from the NBA data.
+Kept to the Yahoo data policy (ingest/yahoo_live.py): team names (league_teams.json), and one
+opponent's roster at a time, replaced by the next week's entry (never an archive of past opponents,
+never every team's roster), read live, never written to the store, deleted by `make yahoo-purge`.
+Players' names and positions come from the NBA data.
 """
 
 from __future__ import annotations
@@ -28,14 +29,58 @@ from research_room.config import Settings, settings
 from research_room.ingest.names import NameResolver, load_aliases, load_team_aliases, player_universe
 
 FILE = "opponent.json"
+NAMES_FILE = "league_teams.json"
 POLICY = (
-    "One opponent at a time, replaced each week. Kept on this computer only and never in the "
-    "database; names and positions come from the NBA data."
+    "Team names, and one opponent's roster at a time, replaced each week. Kept on this computer "
+    "only and never in the database; players' names and positions come from the NBA data."
 )
+MAX_NAME = 40
 
 
 def _path(cfg: Settings) -> Path:
     return Path(cfg.paths.inbox_dir) / FILE
+
+
+def _names_path(cfg: Settings) -> Path:
+    return Path(cfg.paths.inbox_dir) / NAMES_FILE
+
+
+def _write(p: Path, obj: dict) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj))
+    os.replace(tmp, p)
+
+
+def team_names(cfg: Settings | None = None) -> dict[int, str]:
+    """team_id -> the name I gave it (league teams other than mine; unnamed ones absent)."""
+    cfg = cfg or settings()
+    try:
+        raw = json.loads(_names_path(cfg).read_text())
+    except (OSError, ValueError):
+        return {}
+    return {int(k): str(v) for k, v in (raw.get("teams") or {}).items() if str(v).strip()}
+
+
+def _clean(name: str | None) -> str | None:
+    n = " ".join(str(name or "").split())[:MAX_NAME]
+    return n or None
+
+
+def set_team_names(names: dict[int, str | None], cfg: Settings | None = None) -> dict[int, str]:
+    """Register or rename league teams (a blank name removes it). Returns all names."""
+    cfg = cfg or settings()
+    out = team_names(cfg)
+    for t, n in names.items():
+        t = int(t)
+        if not 1 <= t <= cfg.league.teams or t == cfg.league.my_team_id:
+            raise ValueError(f"a league team is 1..{cfg.league.teams} other than yours")
+        if _clean(n):
+            out[t] = _clean(n)
+        else:
+            out.pop(t, None)
+    _write(_names_path(cfg), {"teams": {str(k): v for k, v in sorted(out.items())}})
+    return out
 
 
 def _week(cfg: Settings, now: datetime | None) -> dict | None:
@@ -112,10 +157,11 @@ def response(
     wk = _week(cfg, now)
     e = read(cfg)
     current = e if e and wk and e.get("week") == wk["week"] else None
+    names = team_names(cfg)
     return {
         "week": wk,
         "teams": [
-            {"team_id": t, "label": f"Team {t}"}
+            {"team_id": t, "label": names.get(t) or f"Team {t}", "name": names.get(t)}
             for t in range(1, cfg.league.teams + 1)
             if t != cfg.league.my_team_id
         ],
@@ -134,9 +180,11 @@ def save(
     names: list[str],
     cfg: Settings | None = None,
     now: datetime | None = None,
+    team_name: str | None = None,
 ) -> dict:
     """Replace the entry with this week's opponent: picked players plus pasted names matched to NBA
-    players (names that don't match come back with suggestions, and aren't kept)."""
+    players (names that don't match come back with suggestions, and aren't kept). `team_name`
+    registers or renames that team."""
     cfg = cfg or settings()
     if not 1 <= int(team_id) <= cfg.league.teams or int(team_id) == cfg.league.my_team_id:
         raise ValueError(f"the opponent is a team 1..{cfg.league.teams} other than yours")
@@ -165,11 +213,9 @@ def save(
         "player_ids": ids,
         "saved_at": pd.Timestamp(now or store.utcnow()).isoformat(),
     }
-    p = _path(cfg)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(entry))
-    os.replace(tmp, p)
+    _write(_path(cfg), entry)
+    if team_name is not None:
+        set_team_names({int(team_id): team_name}, cfg)
     return response(con, cfg, now, unmatched)
 
 

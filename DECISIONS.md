@@ -1103,4 +1103,9 @@ time in one small file (`data/inbox/opponent.json`), replaced by the next week's
 the database, never an archive of past opponents and never every team's roster (asked for, and
 declined for that reason); deleted by `make yahoo-purge`. In Storybook (Team Profiles / This
 week's opponent) and the prototype; with sample data, saving and search work in memory.
+- Team names (same day): the league's teams can be registered by name, inline when picking this
+  week's opponent or all at once ("Name all teams"); pickers then show names. Names only, in one
+  small file beside the entry (`data/inbox/league_teams.json`), never in the database, deleted by
+  `make yahoo-purge`. Rosters stay one opponent at a time: a registry of every team's roster was
+  asked for and the owner chose this narrower version.
 

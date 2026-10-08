@@ -6,6 +6,7 @@ import {
   opponentRosterFilled,
   opponentRosterUnmatched,
   sampleSave,
+  sampleSaveNames,
   sampleSearch,
 } from '../../mocks/team-profiles/opponentRoster';
 import { OpponentRosterEditor, type OpponentRosterEditorProps } from './OpponentRosterEditor';
@@ -18,6 +19,7 @@ const meta = {
     data: opponentRosterFilled,
     onSearch: async (q: string) => sampleSearch(q),
     onSave: async (b) => sampleSave(opponentRosterFilled, b),
+    onSaveNames: async (b) => sampleSaveNames(opponentRosterFilled, b),
     onOpenPlayer: () => {},
   },
   render: (args) => <Interactive {...args} />,
@@ -35,6 +37,11 @@ function Interactive(args: OpponentRosterEditorProps) {
         setData(r);
         return r;
       }}
+      onSaveNames={async (b) => {
+        const r = sampleSaveNames(data ?? opponentRosterEmpty, b);
+        setData(r);
+        return r;
+      }}
     />
   );
 }
@@ -46,6 +53,8 @@ type Story = StoryObj<typeof meta>;
 export const Empty: Story = { args: { data: opponentRosterEmpty } };
 /** This week's opponent saved. */
 export const Saved: Story = {};
+/** Naming the league's teams (names only, never rosters). */
+export const NameAllTeams: Story = { args: { initialNamesOpen: true } };
 /** After a paste where two names didn't match an NBA player. */
 export const NamesDidNotMatch: Story = { args: { data: opponentRosterUnmatched } };
 export const Loading: Story = { args: { data: null, loading: true } };

@@ -263,6 +263,16 @@ class OpponentIn(BaseModel):
     team_id: int
     player_ids: list[int] = Field(default_factory=list)
     names: list[str] = Field(default_factory=list)
+    team_name: str | None = None
+
+
+class TeamNameIn(BaseModel):
+    team_id: int
+    name: str | None = None
+
+
+class TeamNamesIn(BaseModel):
+    teams: list[TeamNameIn] = Field(default_factory=list)
 
 
 class ScenarioIn(BaseModel):
@@ -879,7 +889,20 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         con = read_con()
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
-            return opponent_roster.save(con, body.team_id, body.player_ids, body.names, now=when)
+            return opponent_roster.save(con, body.team_id, body.player_ids, body.names, now=when,
+                                        team_name=body.team_name)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.post("/season/league_team_names")
+    def post_league_team_names(body: TeamNamesIn, now: str | None = None) -> dict:
+        """Register or rename league teams (blank removes a name); returns the OpponentRoster."""
+        con = read_con()
+        try:
+            opponent_roster.set_team_names({t.team_id: t.name for t in body.teams})
+            return opponent_roster.response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:

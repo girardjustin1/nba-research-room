@@ -1,4 +1,4 @@
-import type { OpponentRoster, OpponentRosterRequest, PlayerRef, RosterSlot } from '../../api/season';
+import type { OpponentRoster, OpponentRosterRequest, PlayerRef, RosterSlot, TeamNamesRequest } from '../../api/season';
 import { THEIRS } from '../foundations/seasonPlayers';
 
 /** This week's opponent, entered by hand. Invented teams and players (ids 200+). */
@@ -29,16 +29,24 @@ export const SEARCHABLE: PlayerRef[] = [
   more(209, 'Jasper Kilgannon', 'IND', ['SF', 'PF']),
 ];
 
+/** Invented team names (a few left unnamed, as before anyone registers them). */
+const NAMES: Record<number, string> = {
+  1: 'Paint Protectors', 2: 'Glass Cleaners', 3: 'Corner Threes', 4: 'Late Rotation',
+  5: 'Backdoor Cutters', 6: 'Full Court Press', 7: 'Pick and Pop', 9: 'Second Unit',
+  10: 'Shot Clock', 12: 'Bench Mob',
+};
+const label = (t: number, names: Record<number, string>) => ({ team_id: t, label: names[t] ?? `Team ${t}`, name: names[t] ?? null });
 const TEAMS = Array.from({ length: 14 }, (_, i) => i + 1)
   .filter((t) => t !== 11)
-  .map((t) => ({ team_id: t, label: `Team ${t}` }));
+  .map((t) => label(t, NAMES));
+const NO_NAMES = TEAMS.map((t) => ({ ...t, label: `Team ${t.team_id}`, name: null }));
 
 const POLICY =
-  'One opponent at a time, replaced each week. Kept on this computer only and never in the database; names and positions come from the NBA data.';
+  "Team names, and one opponent's roster at a time, replaced each week. Kept on this computer only and never in the database; players' names and positions come from the NBA data.";
 
 export const opponentRosterEmpty: OpponentRoster = {
   week: { week: 5, start: '2026-11-16', end: '2026-11-22' },
-  teams: TEAMS,
+  teams: NO_NAMES,
   opponent_team_id: null,
   players: [],
   unmatched: [],
@@ -48,6 +56,7 @@ export const opponentRosterEmpty: OpponentRoster = {
 
 export const opponentRosterFilled: OpponentRoster = {
   ...opponentRosterEmpty,
+  teams: TEAMS,
   opponent_team_id: 4,
   players: OPPONENT,
   saved_at: '2026-11-16T09:12:00-05:00',
@@ -79,5 +88,18 @@ export function sampleSave(prev: OpponentRoster, body: OpponentRosterRequest, no
     else unmatched.push({ name, suggestions: sampleSearch(name.split(' ').pop() ?? '').map((p) => p.name).slice(0, 3) });
   }
   const players = [...new Set(ids)].map((id) => SEARCHABLE.find((p) => p.player_id === id)).filter((p): p is PlayerRef => !!p);
-  return { ...prev, opponent_team_id: body.team_id, players, unmatched, saved_at: now };
+  const named = body.team_name === undefined ? prev : sampleSaveNames(prev, { teams: [{ team_id: body.team_id, name: body.team_name }] });
+  return { ...named, opponent_team_id: body.team_id, players, unmatched, saved_at: now };
+}
+
+/** The sample naming: register, rename, or clear (blank) team names. */
+export function sampleSaveNames(prev: OpponentRoster, body: TeamNamesRequest): OpponentRoster {
+  const names: Record<number, string> = {};
+  for (const t of prev.teams) if (t.name) names[t.team_id] = t.name;
+  for (const t of body.teams) {
+    const n = (t.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    if (n) names[t.team_id] = n;
+    else delete names[t.team_id];
+  }
+  return { ...prev, teams: prev.teams.map((t) => label(t.team_id, names)) };
 }
