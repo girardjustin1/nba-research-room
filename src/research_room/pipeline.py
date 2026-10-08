@@ -22,6 +22,7 @@ import duckdb
 import pandas as pd
 
 from research_room import (
+    alerts,
     calibration,
     features,
     lineup,
@@ -157,6 +158,8 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
         refresh_projections(con, cfg, day, step, report)
         report["matchup"] = step("matchup snapshot",
                                  lambda: _snapshot(con, cfg, event=("news", "Pre-game refresh")))
+        report["alerts"] = step("alerts", lambda: guarded(
+            "alerts", "alerts", lambda: alerts.generate(con, cfg, now, "pregame")))
         report["timings_s"] = timings
         run["rows"] = int(report.get("projections") or 0)
         run["detail"] = json.dumps(report, default=str)[:2000]
@@ -265,6 +268,8 @@ def run_nightly(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, day
             report["calibration"] = step("calibration", lambda: calibration.write(
                 con, calibration.run(con, cfg)))
         report["matchup"] = step("matchup snapshot", lambda: _snapshot(con, cfg))
+        report["alerts"] = step("alerts", lambda: _guarded(
+            con, "alerts", lambda: alerts.generate(con, cfg, None, "nightly", report)))
         report["parquet"] = step("parquet", lambda: len(store.export_parquet(con)))
         report["timings_s"] = timings
         run["rows"] = int(report["projections"])

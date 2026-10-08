@@ -3,6 +3,18 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-08-notifications
+    date: 2026-10-08
+    kind: update
+    title: The bell now rings for real
+    body: >
+      The League bell's inbox is wired to the engine: one of your players ruled out or limited
+      today (urgent when he's in your lineup), news about your opponent's players, a reminder when
+      your Yahoo lineup isn't the recommended one before lock, a game-day note, add/drop moves worth
+      at least 2 points of win chance, and a note when projections refresh. Each shows how it
+      moves your win-the-week odds.
+    refs: [DECISIONS.md, src/research_room/alerts.py]
+
   - id: 2026-10-06-live-tab
     date: 2026-10-06
     kind: update

@@ -28,7 +28,7 @@ def test_every_ingested_table_has_source_and_fetched_at():
     not_ingested = {"draft_picks", "draft_teams", "projections", "model_scores", "sim_calibration",
                     "sim_correlation", "matchup_snapshots", "backtest_results", "x_feed_log",
                     "decisions_log", "player_xref", "unresolved_names", "api_responses", "ingest_runs",
-                    "live_scores", "live_news_scores"}
+                    "live_scores", "live_news_scores", "notifications"}
     for name, table in store.SCHEMA.items():
         if name not in not_ingested:
             assert {"source", "fetched_at"} <= set(table.names), name

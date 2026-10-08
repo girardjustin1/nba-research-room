@@ -296,7 +296,11 @@ The same `ResultsResponse`, plus the scoreboard:
 
 ## Notifications
 
-### `GET /season/notifications` → `NotificationsResponse` (proposed)
+### `GET /season/notifications` → `NotificationsResponse` (implemented, `alerts.py`)
+
+`POST /season/notifications/read` with `{ids: [...]}` marks those read, or all of them with an
+empty list, and returns `{unread}`. Read state is kept next to the store
+(`notifications_read.json`), so marking read never waits on a job holding the database.
 
 `items[]` (`SeasonNotification`) fields:
 
@@ -310,8 +314,10 @@ The same `ResultsResponse`, plus the scoreboard:
 - `claim` (`WaiverClaimStatus`: pending, cleared, lost or cancelled; `clears_in_days`;
   `acquisitions_left`), from Yahoo transactions and the waiver clock.
 
-Sources: `ingest/x_feed.py`, `overrides.py`, `ingest/yahoo.py`, `optimizer.py`, and
-`jobs/pregame.py` alerts.
+Sources: `alerts.py`, run by the pre-game job (injury, news, lineup_lock, game_day) and the
+nightly run (waiver, model), from `overrides.py` (X posts, the NBA injury report, BallDontLie,
+manual), the lineup response, `moves_api.py` and the matchup snapshots. `claim` stays null until
+waiver claims can be read from the Yahoo API.
 
 ---
 

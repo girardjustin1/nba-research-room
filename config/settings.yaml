@@ -239,6 +239,11 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     days_ahead: 2              # today plus this many days of events per nightly run
     requests_per_second: 5
 
+alerts:                        # in-app notifications (research_room/alerts.py, League bell)
+  lookback_days: 14            # how far back the inbox shows
+  waiver_min_gain: 0.02        # add/drop alert only when the move adds at least 2 pts of P(win week)
+  lock_window_hours: 3         # lineup-lock reminder only in the 3 hours before the first lock
+
 nba_report:                    # the NBA's official injury report (ingest/nba_injury_report.py)
   base_url: https://ak-static.cms.nba.com/referee/injury/
   lookback_minutes: 180        # look this far back for the newest published report

@@ -838,3 +838,21 @@ fakes while API access is pending; the first live `make yahoo-check` is the chec
   season, loading, API down, refresh failed), `App Shell/System/Screen/Live`, and the prototype
   route `Prototype/System Live` (the route sync test covers it). Demo mode serves the mid-season
   sample.
+
+**In-app notifications, wired to the engine (2026-10-08).** The prototype's Notifications inbox
+(League bell, `#/league/notifications`, `Notifications/*` stories) now reads real alerts:
+`alerts.py`, `GET /season/notifications`, `POST /season/notifications/read`. Phone push was set
+aside in favour of the app's own inbox.
+- The pre-game job writes injury alerts (one of my players with a game today ruled out,
+  doubtful, questionable, day-to-day or minutes-limited; urgent when he's in my lineup before his
+  tip and out or doubtful), news (the same for my opponent's players), a lineup-lock reminder (in
+  the 3 hours before the first lock, when today's recommended lineup differs from my Yahoo
+  lineup) and a game-day note. The nightly run writes add/drop alerts (a move worth at least 2
+  pts of P(win week), `alerts.waiver_min_gain`) and a projections-updated note.
+- Effect on my week: the change in P(win week) and per-category odds between the matchup
+  snapshot before the news refresh and after it (simulate.py), never a number computed in the
+  alert. Titles and bodies restate engine values only.
+- Each alert's id is a key for what it says (player, day, status), so it is written once. Read
+  state is a small file next to the store; the bell shows the unread count (re-read on every
+  navigation); demo mode keeps its own read state until reset.
+- Waiver claim status (pending, cleared, lost) waits for the Yahoo API's transactions.

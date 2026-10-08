@@ -208,6 +208,12 @@ class OverridesConfig(BaseModel):
     max_carry_days: int = 60          # a stated absence is carried at most this many days
 
 
+class AlertsConfig(BaseModel):
+    lookback_days: int = 14            # notifications shown in the inbox
+    waiver_min_gain: float = 0.02      # an add/drop alert needs at least this P(win week) gain
+    lock_window_hours: float = 3.0     # lineup-lock reminders only this close to the first lock
+
+
 class NbaReportConfig(BaseModel):
     base_url: str = "https://ak-static.cms.nba.com/referee/injury/"
     lookback_minutes: int = 180
@@ -343,6 +349,7 @@ class Settings(BaseModel):
     markets: MarketsConfig
     x_feed: XFeedConfig
     nba_report: NbaReportConfig = Field(default_factory=NbaReportConfig)
+    alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig

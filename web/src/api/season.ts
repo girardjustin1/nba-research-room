@@ -1367,6 +1367,8 @@ export interface SeasonApi {
   /** Implemented today. */
   teamDays(team: string, start?: IsoDate, end?: IsoDate): Promise<TeamDaysResponse>;
   notifications(): Promise<NotificationsResponse>;
+  /** Mark these read, or all of them when ids is omitted (local app state). */
+  markNotificationsRead(ids?: string[]): Promise<{ unread: number }>;
   leagueTeam(teamId: number): Promise<LeagueTeamProfile>;
   nbaTeam(abbr: string): Promise<NbaTeamProfile>;
 }
@@ -1389,6 +1391,7 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     teamWeeks: () => get('/schedule/team_weeks'),
     teamDays: (team, start, end) => get('/schedule/team_days', { team, start, end }),
     notifications: () => get('/season/notifications'),
+    markNotificationsRead: (ids) => seasonPost<{ unread: number }>(base, '/season/notifications/read', { ids: ids ?? [] }, fetchImpl),
     leagueTeam: (id) => get(`/season/league_teams/${id}`),
     nbaTeam: (abbr) => get(`/season/nba_teams/${abbr}`),
   };

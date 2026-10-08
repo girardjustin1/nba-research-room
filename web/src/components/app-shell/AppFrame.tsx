@@ -4,7 +4,8 @@ import { EXPERIENCE_HOME, LEAGUE_TAB_PATH, lastPath, rememberPath } from '../../
 import { normalizePath } from '../../app/router';
 import { findRoute, routesFor } from '../../app/routes';
 import type { AppApis, Experience } from '../../app/types';
-import type { DataMode } from '../../app/useLiveOrMock';
+import { useLiveOrMock, type DataMode } from '../../app/useLiveOrMock';
+import { notificationsNormal } from '../../mocks/notifications/notifications';
 import { Adopted } from './Adopted';
 import { AppShellContext, ShellAdoptionContext, type AppShellValue, type ShellPart } from './AppShellContext';
 import { ExperienceDrawer, type ApiState } from './nav/ExperienceDrawer';
@@ -52,6 +53,14 @@ function useApiState(mode: DataMode, apis: AppApis): ApiState {
  * tabs) through AppShellContext. Screens render those parts in their own headers, so each
  * route shows exactly one ☰ and (in League) one bottom nav.
  */
+/** The bell's unread count (GET /season/notifications), re-read on every navigation; null outside League. */
+function useUnread(path: string, mode: DataMode, apis: AppApis, inLeague: boolean): number | null {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-read when the path changes
+  const load = useCallback(() => apis.season.notifications(), [apis, path]);
+  const n = useLiveOrMock(load, notificationsNormal, inLeague ? mode : 'mock');
+  return inLeague ? (n.data?.unread ?? null) : null;
+}
+
 export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false, demo }: AppFrameProps) {
   const normalized = normalizePath(path || '');
   const route = findRoute(normalized);
@@ -75,6 +84,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
   }, []);
 
   const experience: Experience = route?.experience ?? 'draft';
+  const unread = useUnread(normalized, mode, apis, experience === 'league');
   const query = useMemo(() => new URLSearchParams(normalized.split('?')[1] ?? ''), [normalized]);
   const openDrawer = useCallback(() => setDrawer(true), []);
 
@@ -92,7 +102,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
       headerActions: (
         <Adopted part="actions">
           {demoBadge}
-          <BellButton onClick={() => navigate('#/league/notifications')} />
+          <BellButton onClick={() => navigate('#/league/notifications')} unread={unread} />
         </Adopted>
       ),
       bottomNav: (
@@ -101,7 +111,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         </Adopted>
       ),
     };
-  }, [experience, openDrawer, navigate, route?.leagueTab, demo]);
+  }, [experience, openDrawer, navigate, route?.leagueTab, demo, unread]);
 
   if (!route) return null;
 

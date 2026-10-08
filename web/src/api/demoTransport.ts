@@ -1,5 +1,5 @@
 import type { FetchLike } from './client';
-import type { MovesResponse, ScenarioRequest } from './season';
+import type { MovesResponse, NotificationsResponse, ScenarioRequest } from './season';
 import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
@@ -54,7 +54,19 @@ type Handler = (m: { params: string[]; query: URLSearchParams; body: unknown; dr
 
 const SEASON_PLAYERS = [playerBramwell, playerPellham, playerRosswell, playerHargreaveLastDay];
 
-function routes(): [string, RegExp, Handler][] {
+/** Demo notifications: "mark read" sticks until the demo is reset. */
+interface DemoNotes {
+  notes: NotificationsResponse;
+}
+const freshNotes = (): NotificationsResponse => JSON.parse(JSON.stringify(notificationsNormal)) as NotificationsResponse;
+
+function markRead(state: DemoNotes, ids: string[]): { unread: number } {
+  const items = state.notes.items.map((n) => (ids.length === 0 || ids.includes(n.id) ? { ...n, read: true } : n));
+  state.notes = { ...state.notes, items, unread: items.filter((n) => !n.read).length };
+  return { unread: state.notes.unread };
+}
+
+function routes(state: DemoNotes): [string, RegExp, Handler][] {
   return [
     // ---- health
     ['GET', /^\/health$/, () => ({ ok: true, session: 'demo-sample-draft' })],
@@ -139,7 +151,8 @@ function routes(): [string, RegExp, Handler][] {
     ['GET', /^\/season\/compare$/, ({ query }) => (query.get('decision') === 'add_drop' ? compareAddDrop : compareStartSit)],
     ['GET', /^\/season\/waivers$/, () => waiversNormal],
     ['GET', /^\/season\/results$/, () => resultsNormal],
-    ['GET', /^\/season\/notifications$/, () => notificationsNormal],
+    ['GET', /^\/season\/notifications$/, () => state.notes],
+    ['POST', /^\/season\/notifications\/read$/, ({ body }) => markRead(state, (body as { ids?: string[] } | undefined)?.ids ?? [])],
     ['GET', /^\/season\/league_teams\/(\d+)$/, ({ params }) => (Number(params[0]) === leagueTeamMe.team.team_id ? leagueTeamMe : leagueTeamOpponent)],
     ['GET', /^\/season\/nba_teams\/([A-Za-z]+)$/, () => nbaTeamNOP],
     // ---- system
@@ -153,7 +166,8 @@ function routes(): [string, RegExp, Handler][] {
 
 export function createDemoTransport(base = '/api'): DemoTransport {
   let draft = initialDemoDraft();
-  const table = routes();
+  const state: DemoNotes = { notes: freshNotes() };
+  const table = routes(state);
   const unhandled: string[] = [];
   const fetchImpl: FetchLike = async (input, init) => {
     const url = new URL(input, 'http://demo.invalid');
@@ -180,6 +194,7 @@ export function createDemoTransport(base = '/api'): DemoTransport {
     unhandled,
     reset: () => {
       draft = initialDemoDraft();
+      state.notes = freshNotes();
     },
   };
 }

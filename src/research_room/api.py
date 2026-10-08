@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from research_room import images, moves_api, readiness, schedule, season_api, store, system
+from research_room import alerts, images, moves_api, readiness, schedule, season_api, store, system
 from research_room.config import Settings, settings
 from research_room.draft import eligibility, tracker
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
@@ -713,6 +713,25 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         con = read_con()
         try:
             return system.models(con)
+        finally:
+            con.close()
+
+    @app.get("/season/notifications")
+    def get_season_notifications() -> dict:
+        con = read_con()
+        try:
+            return alerts.notifications_response(con, db_path=db_path)
+        finally:
+            con.close()
+
+    @app.post("/season/notifications/read")
+    def post_notifications_read(body: dict | None = None) -> dict:
+        """Mark notifications read in the app (local read state; nothing is sent anywhere)."""
+        ids = list((body or {}).get("ids") or [])
+        alerts.mark_read(settings(), ids, db_path=db_path)
+        con = read_con()
+        try:
+            return {"unread": alerts.notifications_response(con, db_path=db_path)["unread"]}
         finally:
             con.close()
 
