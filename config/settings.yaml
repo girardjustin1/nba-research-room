@@ -263,7 +263,7 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     requests_per_second: 8
   overlay:                     # market-informed projections (projections/market.py)
     enabled: true
-    stats: [pts, reb, ast]     # tested 2026-10-05: the market beat the baseline here (threes tied; others untested)
+    stats: [pts, reb, ast]     # tested 2026-10-05; threes, steals, blocks re-tested 2026-10-09: not shown (DECISIONS.md)
     sd_bounds: [0.5, 2.0]      # market spread kept within these multiples of the baseline's
     max_age_hours: 30          # ignore ladders older than this
   rundown:                     # sportsbook lines + player props (RUNDOWN_API_KEY)
@@ -299,6 +299,22 @@ scorecard:                     # in-season checks (scorecard.py); the rules are 
   status_gap: [0.10, 0.15]     # |played rate - the P(plays) we assume for that status|
   min_weeks: 15                # one result a week (my matchup): too few to judge before this
   weekly_brier: [0.22, 0.25]   # 0.25 is a coin flip; the backtest's was 0.187
+
+props_test:                    # Kalshi props vs the baseline, both if he plays (make props-test); the rule is in
+                               # DECISIONS.md, "Props test for threes, steals and blocks", written before the run
+  season: 2025                 # BallDontLie season tested (2025-26 regular season)
+  train_seasons: [2023, 2024]  # the baseline is fitted on these only
+  judged: [fg3m, stl, blk]     # the rule decides these
+  reference: [pts, reb, ast]   # scored the same way, no rule (already overlaid)
+  seed: 20261009               # shuffles the sample of games once
+  first_games: 60
+  step_games: 20               # added while a judged stat has too few liquid rungs ...
+  max_games: 200               # ... up to this many games
+  min_rungs: 150               # liquid rungs (to extend the sample) and scored rungs (to decide) per stat
+  draws: 2000                  # resamples of whole games for each range
+  level: 0.80
+  prob_clip: [0.01, 0.99]      # log loss only
+  requests_per_second: 5       # Kalshi's public API, kept polite (the live ingest uses 8)
 
 x_forward_test:                # the X forward test (make x-forward-test); the rule is in DECISIONS.md,
                                # "In-season scorecard and the forward tests", written before opening night

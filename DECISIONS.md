@@ -1246,3 +1246,87 @@ refused as of today: signed in, but Yahoo won't show the league to the app).
   even if it was saved for a different roster, marked `yahoo_unavailable` with a note saying it
   assumes the roster at the time. Before, an unknown roster meant no saved plan and a live solve
   with no data. If my own roster entry is there, the plan for that roster is shown as usual.
+
+**Props test for threes, steals and blocks: the rule, written before the run (2026-10-09).**
+The 2026-10-05 props test left threes even and steals and blocks untested, and the audit (F17)
+found it compared Kalshi's lines (if he plays) with the baseline's P(plays) x P(over | plays).
+This re-runs it with both sides if he plays, as a committed job (`make props-test`,
+`jobs/props_test.py`), not scratch. Fixed now, before any price is scored:
+- Sample: 2025-26 regular-season games (BallDontLie, not postseason) for which Kalshi listed at
+  least one player-prop event in the six series (points, rebounds, assists, threes, steals,
+  blocks; matched by date and teams). Shuffled once with seed 20261009; the first 60 games are
+  taken. While threes, steals or blocks has fewer than 150 liquid rungs with a matched player
+  (counted before any outcome or baseline is looked at), the next 20 are added, up to 200 games.
+  The earlier test's 40 games were drawn in scratch and not kept, so this draw can't exclude
+  them; it is independent of them only through the new seed.
+- Price: per rung, the last hourly candlestick from `/historical/markets/{ticker}/candlesticks`
+  that ends at or before tip. Liquid only under the live rule (`kalshi._mid`): both quotes above
+  zero, spread at most 10¢, and at least 100 contracts traded up to that candle. Probability =
+  the mid. Steals and blocks props only began in January 2026, so their sample is January-April.
+- Both sides if he plays: the market's mid against the baseline's P(stat > line | plays). The
+  baseline is the production `BaselineModel` fitted on 2023-24 and 2024-25 only, projecting each
+  2025-26 game from the pre-game feature state (no game-day news, as in the bake-off), turned
+  into its line if he plays (`market.conditional`). The engine treats every stat as a normal
+  with that mean and spread (simulator and overlay), so P(over) is the normal tail above the
+  rung's x.5 line for all six stats. A negative binomial with the same mean and variance is
+  reported for each stat too, shown, not judged. Only player-games where he played (box score
+  minutes > 0) are scored.
+- Primary: Brier score per rung, per stat. Paired by game: 2,000 resamples of whole games give
+  the 80% range of (market Brier - baseline Brier). Also log loss (probabilities clipped to
+  0.01-0.99) and calibration in five 20-point bands.
+- Rule, per stat: the market leads that stat's projection (added to `markets.overlay.stats`)
+  only if the 80% range lies entirely below zero and at least 150 rungs are scored. Otherwise
+  the baseline keeps it. A range that includes zero means "not shown", not "no difference".
+  Points, rebounds and assists are scored the same way as a reference (no rule applied: they are
+  already overlaid); the baseline's old P(plays) x P(over | plays) is scored on the same rungs to
+  show how much F17 mattered.
+- Secondary (shown, not judged): market-implied mean (`market.fit` on the liquid ladder) vs
+  actual, RMSE on games played, against the baseline's line if he plays, with an 80% range by
+  game, as in the earlier test.
+
+Result (run 2026-10-09, after the rule's commit 3b20471): **no change; the baseline keeps threes,
+steals and blocks.** `make props-test`, about 10,600 requests to Kalshi's public API (cached, so a
+re-run with `ARGS=--offline` gives the same numbers, checked).
+- Sample: 1,010 of 1,237 regular-season games had a Kalshi prop event. Steals and blocks stayed
+  short of 150 liquid rungs, so the sample grew to the 200-game cap. 179 games had a scored rung.
+  Every liquid rung's player matched; box scores and Kalshi's settlement disagreed on 1 of 4,220.
+- Liquidity is the story for steals and blocks. Rungs listed in the 200 games: steals 929, blocks
+  552; liquid pre-tip: 51 and 38. 561 steals and 356 blocks rungs never traded 100 contracts in
+  their whole life; at tip, 179 and 85 had both quotes within 10¢, and of those 128 and 47 had
+  fewer than 100 contracts traded by then. Ladders are 0.5 / 1.5 / 2.5, mostly one liquid rung per
+  player-game.
+
+| Stat | Scored rungs (games) | Brier market | Brier baseline | Market - baseline, 80% | Decision |
+|---|---|---|---|---|---|
+| Threes | 665 (125) | 0.1893 | 0.1926 | -0.0033 (-0.0069 to +0.0002) | baseline keeps: not shown |
+| Steals | 51 (39) | 0.2148 | 0.2246 | -0.0098 (-0.0229 to +0.0030) | baseline keeps: too few rungs |
+| Blocks | 38 (26) | 0.2373 | 0.2270 | +0.0103 (-0.0076 to +0.0277) | baseline keeps: too few rungs |
+| Points (reference) | 1,850 (176) | 0.1842 | 0.1896 | -0.0054 (-0.0083 to -0.0026) | already overlaid |
+| Rebounds (reference) | 932 (152) | 0.2062 | 0.2098 | -0.0036 (-0.0074 to +0.0002) | already overlaid |
+| Assists (reference) | 684 (150) | 0.2040 | 0.2128 | -0.0088 (-0.0132 to -0.0043) | already overlaid |
+
+- How much F17 mattered: on the same rungs, the old comparison (baseline P(plays) x P(over | plays))
+  gives market minus baseline of -0.0196 for points, -0.0116 rebounds, -0.0176 assists, -0.0075
+  threes. If he plays, the gaps are -0.0054, -0.0036, -0.0088, -0.0033: between a half and three
+  quarters of the market's earlier edge was the baseline carrying availability risk the props
+  don't. The market still leads on points and assists (80% ranges below zero); rebounds' range now
+  touches zero.
+- Log loss tells the same story (market vs baseline): threes 0.556 vs 0.562, steals 0.618 vs
+  0.640, blocks 0.676 vs 0.650, points 0.546 vs 0.559, rebounds 0.596 vs 0.605, assists 0.592 vs
+  0.613.
+- Shown, not judged: a count-family baseline (negative binomial or Poisson, same mean and spread)
+  scores threes 0.1883, below the market's 0.1893; steals 0.2277, blocks 0.2300. For threes, the
+  normal's shape costs the baseline more (0.0043) than the market's edge over it (0.0033).
+- Calibration: both run high on threes in the middle band (market 50% priced, 41% happened;
+  baseline 50% and 38%). Points, rebounds and assists are close to honest on both sides.
+- Market-implied mean vs actual, games played (RMSE market vs baseline, 80% range of the
+  squared-error difference): assists 2.51 vs 2.59 (-0.55 to -0.18), points 7.19 vs 7.27
+  (-2.69 to +0.42), rebounds 2.90 vs 2.94 (-0.45 to +0.01), threes 1.67 vs 1.68 (-0.10 to
+  +0.02), steals 0.81 vs 0.88 (46 player-games), blocks 1.28 vs 1.24 (31).
+- Caveats: the baseline has no game-day news, the market does; 2025-26 has been used before to
+  choose settings (F14); steals and blocks props ran only January-April. Steals and blocks can't be
+  judged on last season at all: 200 games gave a quarter to a third of the 150 rungs needed. This
+  season's archive (`make markets`) is the next source; re-run when it holds enough liquid rungs.
+- Not acted on, for the owner: rebounds are overlaid on the 2026-10-05 result, and under the fixed
+  comparison their 80% range touches zero (+0.0002). The rule here covered threes, steals and
+  blocks only, so `markets.overlay.stats` stays [pts, reb, ast].
