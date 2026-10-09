@@ -229,6 +229,15 @@ class ScorecardConfig(BaseModel):
     weekly_brier: tuple[float, float] = (0.22, 0.25)
 
 
+class XForwardTestConfig(BaseModel):
+    """The X forward test (backtest_news.x_forward_test); the rule is in DECISIONS.md."""
+    min_weeks: int = 3                # replayed game days must span at least this many weeks
+    min_statuses: int = 150           # and hold at least this many X statuses tied to a game
+    draws: int = 2000                 # resamples of whole game days for each range
+    level: float = 0.95               # the range the rule reads
+    seed: int = 0
+
+
 class NbaReportConfig(BaseModel):
     base_url: str = "https://ak-static.cms.nba.com/referee/injury/"
     lookback_minutes: int = 180
@@ -399,6 +408,7 @@ class Settings(BaseModel):
     nba_report: NbaReportConfig = Field(default_factory=NbaReportConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     scorecard: ScorecardConfig = Field(default_factory=ScorecardConfig)
+    x_forward_test: XForwardTestConfig = Field(default_factory=XForwardTestConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
     backtest: BacktestConfig

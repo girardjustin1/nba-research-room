@@ -280,18 +280,22 @@ def _drop_overtaken(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def resolve(con: duckdb.DuckDBPyConnection, start: date, end: date, as_of: datetime | None = None,
-            cfg: Settings | None = None, manual_path: Path | None = None) -> pd.DataFrame:
+            cfg: Settings | None = None, manual_path: Path | None = None, *, x: bool = True,
+            manual: bool = True) -> pd.DataFrame:
     """One row per player-date: the winning source's play_prob and minutes_cap. Absences are
     worked out over the days before `start` too (as far back as one can be carried), then cut
     to the dates asked for, so a return that ended an absence still ends it when the dates asked
-    for start after the return (round-3 audit X07)."""
+    for start after the return (round-3 audit X07). `x=False` leaves out X statuses and
+    `manual=False` the hand entries (the X forward test's replay: backtest_news.x_arms)."""
     cfg = cfg or settings()
     as_of = as_of or store.utcnow()
     early = start - timedelta(days=cfg.overrides.max_carry_days)
-    parts = [f for f in (from_injuries(con, early, end, as_of, cfg),
-                         from_nba_report(con, early, end, as_of, cfg),
-                         from_status_events(con, early, end, as_of, cfg),
-                         from_manual(con, early, end, cfg, manual_path)) if not f.empty]
+    parts = [from_injuries(con, early, end, as_of, cfg), from_nba_report(con, early, end, as_of, cfg)]
+    if x:
+        parts.append(from_status_events(con, early, end, as_of, cfg))
+    if manual:
+        parts.append(from_manual(con, early, end, cfg, manual_path))
+    parts = [f for f in parts if not f.empty]
     if not parts:
         return pd.DataFrame(columns=COLUMNS)
     allrows = pd.concat(parts, ignore_index=True)

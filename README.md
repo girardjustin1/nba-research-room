@@ -47,6 +47,7 @@ make yahoo-pull                  # rosters, free agents, matchup totals, draft p
 make scoreboard-live             # grade what the app said before each game against what happened
 make report-backfill SEASONS="2025"  # store a past season's NBA injury reports (for the news backtest)
 make backtest-news               # replay that season day by day: does game-day news make the weekly odds more honest?
+make x-forward-test              # mid-November: this season replayed with and without X statuses, verdict by the rule
 ```
 
 `.env`, `oauth2.json` and `data/` are gitignored and must never be committed.

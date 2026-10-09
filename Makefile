@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 SEASONS ?= 2023 2024 2025
 
-.PHONY: yahoo-purge dry-run bakeoff ensemble-replay shadow-report yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
+.PHONY: yahoo-purge dry-run bakeoff ensemble-replay shadow-report yahoo-keys yahoo-auth yahoo-check yahoo-pull scoreboard-live backtest backtest-news x-forward-test report-backfill doctor markets pregame-schedule setup backfill inbox projections nightly nightly-schedule pregame draft-api app web storybook mock-draft images test lint
 
 setup:  ## create .venv and install the locked dependencies (needs: brew install libomp cbc)
 	uv venv --python 3.12 .venv
@@ -58,6 +58,9 @@ backtest:  ## replay last season week by week: are the win odds honest, do the p
 
 backtest-news:  ## replay last season day by day with the NBA injury reports: does game-day news help?
 	$(PY) jobs/backtest_news.py $(ARGS)
+
+x-forward-test:  ## the X forward test: this season replayed with and without X statuses, verdict by the rule (read only)
+	$(PY) jobs/x_forward_test.py $(ARGS)
 
 yahoo-keys:  ## save your Yahoo app's Client ID and Secret into oauth2.json (asks in your terminal, hidden)
 	$(PY) jobs/yahoo_keys.py

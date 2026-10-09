@@ -283,6 +283,14 @@ scorecard:                     # in-season checks (scorecard.py); the rules are 
   min_weeks: 15                # one result a week (my matchup): too few to judge before this
   weekly_brier: [0.22, 0.25]   # 0.25 is a coin flip; the backtest's was 0.187
 
+x_forward_test:                # the X forward test (make x-forward-test); the rule is in DECISIONS.md,
+                               # "In-season scorecard and the forward tests", written before opening night
+  min_weeks: 3                 # no verdict before the replayed game days span 3 weeks ...
+  min_statuses: 150            # ... and hold 150 X statuses tied to a game
+  draws: 2000                  # resamples of whole game days for each 95% range
+  level: 0.95
+  seed: 0
+
 nba_report:                    # the NBA's official injury report (ingest/nba_injury_report.py)
   base_url: https://ak-static.cms.nba.com/referee/injury/
   lookback_minutes: 180        # look this far back for the newest published report

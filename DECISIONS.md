@@ -1005,6 +1005,42 @@ anything, is fixed before any 2026-27 game is played.
   zero): X is switched off until fixed. The replay is not built yet; the parser test from the
   round-3 audit (docs/audits) is read alongside it.
 
+**X forward test: the replay is built (2026-10-09).** `make x-forward-test`
+(`jobs/x_forward_test.py`, `backtest_news.x_forward_test`). The rule above is unchanged.
+- What it does: the news replay's day-by-day setup (each morning's states, the baseline fitted on
+  the earlier seasons with teammates out on, each game decided at 5:30 PM Eastern or 30 minutes
+  before its tip) on this season's finished game days, with the overrides resolved as the live
+  app resolves them (`overrides.resolve`) at each game's decision time, twice: with X, and without
+  (the NBA report and BallDontLie only). Hand entries (overrides.yaml) are left out of both, since
+  they carry no time they were known. Only what was known counts: X by `first_seen_at` (and post
+  time), the report by its publishing time, BallDontLie by snapshot time. Unmatched and
+  team_conflict statuses never count, as in the overrides.
+- Scored per player-game with a box-score row (BallDontLie lists inactive players too, so a game
+  he sat counts: did not play, 0 points). Primary: the P(plays) Brier, with X minus without, on
+  the player-games X gave a status for by the decision time (statuses carried from an earlier
+  game included, and counted apart). Guard: the points average miss on every graded player-game,
+  since X moves teammates' minutes too; the same on X's player-games is shown, not judged. 95%
+  ranges resample whole game days, 2,000 draws (`settings.x_forward_test`).
+- Verdict, as the job reads the rule: either range entirely above zero is "worse with X" (X is
+  switched off; a failed guard counts here); otherwise a Brier range entirely below zero passes;
+  anything else means X drops below the NBA report. The job prints the verdict and changes
+  nothing; the authority order is changed by hand.
+- Not enough data (under 3 weeks of finished game days, or under 150 X statuses tied to one of
+  their games): it says so and replays nothing. `ARGS=--force` replays anyway, numbers only, no
+  verdict. Results go to data/x_forward_test/<date>/ (summary.json, player_games.csv).
+- What it can't check yet: no X status is stored, so on the real store it ends at "not enough
+  data". The X arm is tested on invented data only. A forced run on 2025-26's first three weeks
+  (no X statuses) graded 4,525 player-games in 8 s with identical arms (difference 0, as it must
+  be); 90% of the player-games where he played were graded and 72% of those where he sat (the
+  rest had too little history to project, or a team the replay couldn't place).
+- Known differences from the live app: no preseason prior (in-season EWMA only, as in the other
+  replays); a player with no game yet this season is placed on his team in today's players table,
+  and the report's "not listed" uses today's rosters too, so a trade inside the replayed weeks is
+  placed by today's team.
+- Also changed: the replays' decision time is now read on the Eastern wall clock. It was midnight
+  plus 17.5 hours, an hour early on the day the clocks go back, so the news backtest moves on
+  that one day a season.
+
 **X news pipeline: round-3 audit fixes (2026-10-08).** Codex (gpt-6-astra) audited the X
 pipeline on a clean clone with public tables only (docs/audits/2026-10-08-x-feed-astra.md) and
 wrote 60 invented posts with their right answers, kept out of the repo. Its test could not call
