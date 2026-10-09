@@ -24,6 +24,15 @@ def con():
 
 
 @pytest.fixture(autouse=True)
+def opponent_static(monkeypatch):
+    """Tests don't follow the owner's live choice: the opponent's roster is fixed unless a test
+    turns streaming on itself (settings.opponent.streaming is a production setting)."""
+    from research_room.config import settings
+
+    monkeypatch.setattr(settings().opponent, "streaming", False)
+
+
+@pytest.fixture(autouse=True)
 def fake_yahoo(monkeypatch):
     """What "Yahoo" returns in this test: every frame the test wrote to a Yahoo table."""
     seeded: list[tuple[str, pd.DataFrame]] = []

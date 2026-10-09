@@ -1215,3 +1215,10 @@ backtest's "48% → 88%" was against an opponent who never adds anyone. `streami
   unchanged. The season's live scoreboard (weekly-odds Brier) is the check of whether the odds run
   high against real opponents, which would be the case for turning it on.
 
+**Opponent streaming switched on (2026-10-09, owner's call).** `opponent.streaming: true`, with
+`adds_per_week: 4`: the owner reads this league as active, most managers using the full weekly
+limit. In the backtest that setting gave: doing nothing wins 15.4% of weeks (47.9% against a
+fixed roster), following the plan 51.4%, a lift of +36 points (80% range +31 to +41); odds that
+assume a fixed roster were too optimistic. The number is a judgment, not measured: revisit at the
+week-3 review against what opponents actually add (Yahoo's matchup shows each side's adds).
+

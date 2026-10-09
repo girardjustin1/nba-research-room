@@ -38,8 +38,8 @@ def opp_week(cfg, opp_idle=lambda pid, d: pid == 112, fa_scale=1.0, fa_games=lam
     return inp, fa
 
 
-def test_off_by_default():
-    assert settings().opponent.streaming is False
+def test_tests_run_with_a_fixed_opponent_unless_they_switch_it_on():
+    assert settings().opponent.streaming is False                         # conftest, whatever settings say
 
 
 def test_his_idle_player_is_swapped_for_a_free_agent_with_a_game(cfg):
