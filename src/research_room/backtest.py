@@ -21,8 +21,10 @@ onto every scheduled game of his team that week, with a model and calibration fi
 seasons. Nothing peeks ahead, including who will be available: an earlier version projected only
 games a player later appeared in, which let the optimizer "know" injuries in advance.
 Approximations, stated in the report: positions come from BallDontLie (G, F, C and combos) mapped
-to Yahoo-style eligibility; the opponent does nothing; a plan is made once per week (Monday), not
-re-planned mid-week; rosters don't carry plans from week to week.
+to Yahoo-style eligibility; the opponent does nothing, unless `opponent_streams` (or
+settings.opponent.streaming): then he streams by streaming.py's rule, decided on Sunday's
+projections like my plan, and his streamed rosters play; a plan is made once per week (Monday),
+not re-planned mid-week; rosters don't carry plans from week to week.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from research_room import calibration, features, lineup, matchup, optimizer, store
+from research_room import calibration, features, lineup, matchup, optimizer, store, streaming
 from research_room.config import Settings, settings
 from research_room.projections.baseline import STATS, BaselineModel
 
@@ -190,13 +192,18 @@ def run(
     test_season: int | None = None,
     echo=print,
     make_model=None,
+    opponent_streams: bool | None = None,
 ) -> pd.DataFrame:
     """Replay `test_season` (default: the latest in `logs`). Returns one row per team-week.
     `make_model(cfg)`: the projection model to replay (default the baseline); it drives the odds,
     lineups and plans, with a calibration fitted on its own projections. The simulated draft and
-    the sampled team-weeks always come from the baseline, so two replays are paired."""
+    the sampled team-weeks always come from the baseline, so two replays are paired.
+    `opponent_streams` (default settings.opponent.streaming): the opponent picks up free agents by
+    the rule in streaming.py; the odds and the plan assume it, and his streamed rosters play. Each
+    row then also has the plan made with his roster fixed (`*_plan_static`), played against him."""
     cfg = cfg or settings()
     bt = cfg.backtest
+    streams = cfg.opponent.streaming if opponent_streams is None else opponent_streams
     built = features.build(logs, team_ctx, cfg)
     built = built[built["min_played_ewma"].notna()]
     test_season = test_season or int(built["season"].max())
@@ -242,7 +249,6 @@ def run(
             a, b = pairs[int(k)]
             me_r, opp_r = roster_frame(league[a], elig, names), roster_frame(league[b], elig, names)
             me_td, opp_td = matchup.team_days(me_r, pw, days, cfg), matchup.team_days(opp_r, pw, days, cfg)
-            dn = matchup.matchup_now(me_td, opp_td, z0, z0, var_mult, cfg, corr)
             now = datetime.combine(start - timedelta(days=1), datetime.min.time(), matchup.ET) + timedelta(
                 hours=bt.plan_hour_et
             )
@@ -259,12 +265,20 @@ def run(
                 "var_mult": var_mult,
                 "corr": corr,
             }
-            plan = optimizer.optimize(inp, pool, cfg.transactions.max_acquisitions_per_week, cfg)
+            dn_static = matchup.matchup_now(me_td, opp_td, z0, z0, var_mult, cfg, corr)
+            acq = cfg.transactions.max_acquisitions_per_week
+            if streams:
+                # The opponent streams by the rule (Sunday's projections, like my plan): the odds and
+                # the plan face his streamed days, and his adds aren't free agents for me.
+                inp = streaming.apply(inp, pool, cfg)
+            dn = matchup.matchup_now(me_td, inp["opp"], z0, z0, var_mult, cfg, corr) if streams else dn_static
+            plan = optimizer.optimize(inp, pool, acq, cfg)
             plan_rosters = plan.rosters or [me_r] * len(days)
+            opp_rosters = inp.get("opp_rosters") or [opp_r] * len(days)
             # What happened: each day's lineup set from the players who actually suited up (a manager
             # sees the injury report before lock), or the Monday lineups as projected.
             src = played if bt.react_to_absences else pw
-            opp_act = actual_totals(matchup.team_days(opp_r, src, days, cfg), aw, cfg)
+            opp_act = actual_totals(matchup.team_days(opp_rosters, src, days, cfg), aw, cfg)
             me_act = actual_totals(matchup.team_days(me_r, src, days, cfg), aw, cfg)
             plan_act = actual_totals(matchup.team_days(plan_rosters, src, days, cfg), aw, cfg)
             cats_dn, opp_dn = categories_won(me_act, opp_act, cfg), categories_won(opp_act, me_act, cfg)
@@ -272,6 +286,17 @@ def run(
                 categories_won(plan_act, opp_act, cfg),
                 categories_won(opp_act, plan_act, cfg),
             )
+            static = {}
+            if streams:
+                # The plan made as before (his roster fixed; his adds still gone), played against the
+                # opponent who streams: does valuing moves against his pickups change the result?
+                sp = optimizer.optimize({**inp, "opp": inp["opp_static"]}, pool, acq, cfg)
+                sp_act = actual_totals(
+                    matchup.team_days(sp.rosters or [me_r] * len(days), src, days, cfg), aw, cfg)
+                cs, co = categories_won(sp_act, opp_act, cfg), categories_won(opp_act, sp_act, cfg)
+                static = {"p_plan_static": sp.p_win_week, "cats_plan_static": cs, "cats_opp_plan_static": co,
+                          "won_plan_static": cs > co, "tie_plan_static": cs == co,
+                          "n_moves_static": len(sp.moves)}
             rows.append(
                 {
                     "season": test_season,
@@ -290,6 +315,11 @@ def run(
                     "tie_plan": cats_plan == opp_plan,
                     "n_moves": len(plan.moves),
                     "solve_ms": plan.solve_ms,
+                    # The opponent: did he stream (and how many adds); the odds with his roster fixed.
+                    "opp_streams": bool(streams),
+                    "opp_adds": len(inp.get("opp_moves", [])),
+                    "p_dn_static": dn_static.p_win_week,
+                    **static,
                     # Per category, doing nothing: P(win), both sides' projected final and sd, and
                     # what happened, so the spreads can be checked and refitted offline.
                     "cats_detail": json.dumps({
@@ -325,7 +355,7 @@ def summarize(res: pd.DataFrame) -> dict:
     cats = (res["cats_plan"] - res["cats_dn"]).to_numpy(float)
     boot = [rng.choice(lift, len(lift)).mean() for _ in range(2000)]
     top = res["p_dn"] >= 0.9
-    return {
+    out = {
         "team_weeks": len(res),
         "brier_do_nothing": brier,
         "reliability": rel.rename_axis("predicted").reset_index().to_dict("records"),
@@ -343,9 +373,25 @@ def summarize(res: pd.DataFrame) -> dict:
         "moves_per_week": float(res["n_moves"].mean()),
         "solve_s": float(res["solve_ms"].mean() / 1000),
     }
+    if "opp_streams" in res and res["opp_streams"].fillna(False).astype(bool).any():
+        # The opponent streamed: the odds with his roster fixed, and the plan made that way, against
+        # what happened with him streaming.
+        y_static = res["won_plan_static"].astype(float) + 0.5 * res["tie_plan_static"].astype(float)
+        diff = (y_plan - y_static).to_numpy()
+        boot_s = [rng.choice(diff, len(diff)).mean() for _ in range(2000)]
+        out |= {
+            "opp_adds_per_week": float(res["opp_adds"].mean()),
+            "brier_do_nothing_static_odds": float(((res["p_dn_static"] - y) ** 2).mean()),
+            "win_rate_plan_static": float(y_static.mean()),
+            "plan_vs_static_plan": float(diff.mean()),
+            "plan_vs_static_plan_80": [float(np.quantile(boot_s, 0.1)), float(np.quantile(boot_s, 0.9))],
+            "moves_per_week_static": float(res["n_moves_static"].mean()),
+        }
+    return out
 
 
-def run_from_store(con, cfg: Settings | None = None, echo=print) -> tuple[pd.DataFrame, dict]:
+def run_from_store(con, cfg: Settings | None = None, echo=print,
+                   opponent_streams: bool | None = None) -> tuple[pd.DataFrame, dict]:
     cfg = cfg or settings()
     seasons = sorted(cfg.bdl.backfill_seasons)
     logs, team_ctx = features.load_logs(con, seasons), features.team_context(con, seasons)
@@ -356,7 +402,7 @@ def run_from_store(con, cfg: Settings | None = None, echo=print) -> tuple[pd.Dat
     positions = dict(zip(pl["player_id"], pl["position"], strict=True))
     names = dict(zip(pl["player_id"], pl["full_name"], strict=True))
     t0 = time.perf_counter()
-    res = run(logs, team_ctx, games, positions, names, cfg, echo=echo)
+    res = run(logs, team_ctx, games, positions, names, cfg, echo=echo, opponent_streams=opponent_streams)
     echo(f"backtest: {len(res)} team-weeks in {time.perf_counter() - t0:.0f}s")
     return res, summarize(res)
 

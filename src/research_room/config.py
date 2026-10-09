@@ -325,6 +325,13 @@ class OptimizerConfig(BaseModel):
     saved_plan_hours: float = 2
 
 
+class OpponentConfig(BaseModel):
+    """The opponent's in-week pickups (streaming.py); every number in settings.yaml."""
+    streaming: bool                   # off: his roster is fixed for the week
+    adds_per_week: int                # adds a typical opponent makes in a week
+    adds_per_day: int                 # at most this many swaps on one day
+
+
 class SimulationConfig(BaseModel):
     calibration_teams: int
     team_size: int
@@ -411,6 +418,7 @@ class Settings(BaseModel):
     x_forward_test: XForwardTestConfig = Field(default_factory=XForwardTestConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
+    opponent: OpponentConfig
     backtest: BacktestConfig
     simulation: SimulationConfig
     system: SystemConfig

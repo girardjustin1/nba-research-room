@@ -24,6 +24,8 @@ Method (weekly MILP, PuLP/CBC), linearized around the current matchup:
 - The plan is then scored exactly by the matchup engine. The weights are recomputed at the plan
   and the MILP re-solved (`relinearize_iterations`); the plan with the best exact P(win week)
   is kept, and it must beat doing nothing or the plan is empty.
+- The opponent is whatever the week's inputs say: his fixed roster, or with settings.opponent
+  streaming on, his streamed one (streaming.py), whose adds are then not free agents for me.
 """
 
 from __future__ import annotations
@@ -295,10 +297,13 @@ def optimize(
     cfg: Settings | None = None,
     punts: set[str] | None = None,
 ) -> Plan:
-    """Best plan for the rest of the week (see module doc). `pool`: free agents (roster columns)."""
+    """Best plan for the rest of the week (see module doc). `pool`: free agents (roster columns).
+    With a streaming opponent (streaming.apply) the plan is valued against his streamed days, and
+    the free agents he adds are not in my pool."""
     cfg = cfg or settings()
     t0 = time.perf_counter()
     base, days = inp["me_roster"], inp["days"]
+    pool = pool[~pool["player_id"].isin([m.add for m in inp.get("opp_moves", [])])]
     baseline = matchup.matchup_now(
         inp["me"], inp["opp"], inp["me_done"], inp["opp_done"], inp["var_mult"], cfg, inp["corr"]
     )

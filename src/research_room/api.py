@@ -823,7 +823,7 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def get_week_probability(now: str | None = None) -> dict:
         """WinProbabilityResponse: this week's P(win) history and the do-nothing path.
         `now` (ISO time) is for testing and replay only."""
-        con = season_con(yahoo_live.PAGE)
+        con = season_con(yahoo_live.odds_parts())
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             resp = season_api.probability_response(con, now=when)

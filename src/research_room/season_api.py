@@ -262,6 +262,15 @@ def _team_ref(con, team_id: int) -> dict:
             "record": None, "logo_url": None}
 
 
+def _opponent_note(inp: dict) -> str:
+    """The opponent's assumed pickups (settings.opponent.streaming), when the odds include them."""
+    if "opp_moves" not in inp:
+        return ""
+    adds = inp["opp_moves"]
+    when = " (" + ", ".join(f"{m.effective:%a}" for m in adds) + ")" if adds else ""
+    return f"; opponent assumed to stream: {len(adds)} of {inp['opp_adds_allowed']} adds left{when}"
+
+
 def probability_response(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
                          now: datetime | None = None) -> dict:
     """WinProbabilityResponse: snapshot history for this week plus the do-nothing path.
@@ -321,7 +330,8 @@ def probability_response(con: duckdb.DuckDBPyConnection, cfg: Settings | None = 
             {"module": "simulate", "as_of": now.isoformat(), "run_id": None,
              "note": (f"10 active slots per day; calibrated weekly spreads; categories drawn together "
                       f"({sim.week_draws:,} draws); path from {sim.path_draws:,} simulated weeks")
-                     + ("" if inp["corr"] is not None else "; correlation not fitted yet (independent)")},
+                     + ("" if inp["corr"] is not None else "; correlation not fitted yet (independent)")
+                     + _opponent_note(inp)},
             {"module": "yahoo", "as_of": _iso(inp["cats_as_of"]), "run_id": None,
              "note": "matchup.csv totals; FG%/FT% attempts so far estimated from box scores"},
         ],
