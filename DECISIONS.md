@@ -1222,3 +1222,40 @@ fixed roster), following the plan 51.4%, a lift of +36 points (80% range +31 to 
 assume a fixed roster were too optimistic. The number is a judgment, not measured: revisit at the
 week-3 review against what opponents actually add (Yahoo's matchup shows each side's adds).
 
+
+**Props test for threes, steals and blocks: the rule, written before the run (2026-10-09).**
+The 2026-10-05 props test left threes even and steals and blocks untested, and the audit (F17)
+found it compared Kalshi's lines (if he plays) with the baseline's P(plays) x P(over | plays).
+This re-runs it with both sides if he plays, as a committed job (`make props-test`,
+`jobs/props_test.py`), not scratch. Fixed now, before any price is scored:
+- Sample: 2025-26 regular-season games (BallDontLie, not postseason) for which Kalshi listed at
+  least one player-prop event in the six series (points, rebounds, assists, threes, steals,
+  blocks; matched by date and teams). Shuffled once with seed 20261009; the first 60 games are
+  taken. While threes, steals or blocks has fewer than 150 liquid rungs with a matched player
+  (counted before any outcome or baseline is looked at), the next 20 are added, up to 200 games.
+  The earlier test's 40 games were drawn in scratch and not kept, so this draw can't exclude
+  them; it is independent of them only through the new seed.
+- Price: per rung, the last hourly candlestick from `/historical/markets/{ticker}/candlesticks`
+  that ends at or before tip. Liquid only under the live rule (`kalshi._mid`): both quotes above
+  zero, spread at most 10¢, and at least 100 contracts traded up to that candle. Probability =
+  the mid. Steals and blocks props only began in January 2026, so their sample is January-April.
+- Both sides if he plays: the market's mid against the baseline's P(stat > line | plays). The
+  baseline is the production `BaselineModel` fitted on 2023-24 and 2024-25 only, projecting each
+  2025-26 game from the pre-game feature state (no game-day news, as in the bake-off), turned
+  into its line if he plays (`market.conditional`). The engine treats every stat as a normal
+  with that mean and spread (simulator and overlay), so P(over) is the normal tail above the
+  rung's x.5 line for all six stats. A negative binomial with the same mean and variance is
+  reported for each stat too, shown, not judged. Only player-games where he played (box score
+  minutes > 0) are scored.
+- Primary: Brier score per rung, per stat. Paired by game: 2,000 resamples of whole games give
+  the 80% range of (market Brier - baseline Brier). Also log loss (probabilities clipped to
+  0.01-0.99) and calibration in five 20-point bands.
+- Rule, per stat: the market leads that stat's projection (added to `markets.overlay.stats`)
+  only if the 80% range lies entirely below zero and at least 150 rungs are scored. Otherwise
+  the baseline keeps it. A range that includes zero means "not shown", not "no difference".
+  Points, rebounds and assists are scored the same way as a reference (no rule applied: they are
+  already overlaid); the baseline's old P(plays) x P(over | plays) is scored on the same rungs to
+  show how much F17 mattered.
+- Secondary (shown, not judged): market-implied mean (`market.fit` on the liquid ladder) vs
+  actual, RMSE on games played, against the baseline's line if he plays, with an 80% range by
+  game, as in the earlier test.
