@@ -238,6 +238,23 @@ class XForwardTestConfig(BaseModel):
     seed: int = 0
 
 
+class PropsTestConfig(BaseModel):
+    """The props test (jobs/props_test.py); the rule is in DECISIONS.md (2026-10-09)."""
+    season: int = 2025                    # BallDontLie season tested
+    train_seasons: list[int] = Field(default_factory=lambda: [2023, 2024])
+    judged: list[str] = Field(default_factory=lambda: ["fg3m", "stl", "blk"])
+    reference: list[str] = Field(default_factory=lambda: ["pts", "reb", "ast"])
+    seed: int = 20261009
+    first_games: int = 60
+    step_games: int = 20
+    max_games: int = 200
+    min_rungs: int = 150
+    draws: int = 2000
+    level: float = 0.80
+    prob_clip: tuple[float, float] = (0.01, 0.99)
+    requests_per_second: float = 3
+
+
 class NbaReportConfig(BaseModel):
     base_url: str = "https://ak-static.cms.nba.com/referee/injury/"
     lookback_minutes: int = 180
@@ -416,6 +433,7 @@ class Settings(BaseModel):
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     scorecard: ScorecardConfig = Field(default_factory=ScorecardConfig)
     x_forward_test: XForwardTestConfig = Field(default_factory=XForwardTestConfig)
+    props_test: PropsTestConfig = Field(default_factory=PropsTestConfig)
     models: ModelsConfig
     optimizer: OptimizerConfig
     opponent: OpponentConfig

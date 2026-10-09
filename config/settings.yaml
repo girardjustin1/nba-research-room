@@ -294,6 +294,22 @@ scorecard:                     # in-season checks (scorecard.py); the rules are 
   min_weeks: 15                # one result a week (my matchup): too few to judge before this
   weekly_brier: [0.22, 0.25]   # 0.25 is a coin flip; the backtest's was 0.187
 
+props_test:                    # Kalshi props vs the baseline, both if he plays (make props-test); the rule is in
+                               # DECISIONS.md, "Props test for threes, steals and blocks", written before the run
+  season: 2025                 # BallDontLie season tested (2025-26 regular season)
+  train_seasons: [2023, 2024]  # the baseline is fitted on these only
+  judged: [fg3m, stl, blk]     # the rule decides these
+  reference: [pts, reb, ast]   # scored the same way, no rule (already overlaid)
+  seed: 20261009               # shuffles the sample of games once
+  first_games: 60
+  step_games: 20               # added while a judged stat has too few liquid rungs ...
+  max_games: 200               # ... up to this many games
+  min_rungs: 150               # liquid rungs (to extend the sample) and scored rungs (to decide) per stat
+  draws: 2000                  # resamples of whole games for each range
+  level: 0.80
+  prob_clip: [0.01, 0.99]      # log loss only
+  requests_per_second: 5       # Kalshi's public API, kept polite (the live ingest uses 8)
+
 x_forward_test:                # the X forward test (make x-forward-test); the rule is in DECISIONS.md,
                                # "In-season scorecard and the forward tests", written before opening night
   min_weeks: 3                 # no verdict before the replayed game days span 3 weeks ...
