@@ -87,10 +87,12 @@ def attach(
 
 
 def _with_manual_opponent(con, cfg: Settings, want: tuple[str, ...], out: dict) -> dict:
-    """This week's opponent entered by hand fills in when Yahoo didn't supply him (opponent_roster)."""
+    """My roster and this week's opponent, entered by hand, fill in when Yahoo didn't supply them
+    (opponent_roster)."""
     from research_room import opponent_roster
 
     if "roster" in want:
+        out["manual_mine"] = opponent_roster.apply_mine(con, cfg)
         out["manual_opponent"] = opponent_roster.apply(con, cfg)
     return out
 

@@ -6,6 +6,7 @@ import { LeagueCompareScreen } from '../components/app-shell/league/LeagueCompar
 import { LeagueLineupScreen } from '../components/app-shell/league/LeagueLineupScreen';
 import { LeagueMatchupScreen } from '../components/app-shell/league/LeagueMatchupScreen';
 import { LeagueMovesScreen } from '../components/app-shell/league/LeagueMovesScreen';
+import { LeagueMyRosterScreen } from '../components/app-shell/league/LeagueMyRosterScreen';
 import { LeagueNbaTeamScreen } from '../components/app-shell/league/LeagueNbaTeamScreen';
 import { LeagueNotificationsScreen } from '../components/app-shell/league/LeagueNotificationsScreen';
 import { LeagueOpponentScreen } from '../components/app-shell/league/LeagueOpponentScreen';
@@ -55,6 +56,7 @@ export const ROUTES: AppRoute[] = [
   route({ path: '#/league/matchup', experience: 'league', title: 'Matchup', component: LeagueMatchupScreen, storyId: 'prototype--league-matchup', leagueTab: 'matchup' }),
   route({ path: '#/league/team', experience: 'league', title: 'Team · Lineup', component: LeagueLineupScreen, storyId: 'prototype--league-team-lineup', leagueTab: 'team' }),
   route({ path: '#/league/team/moves', experience: 'league', title: 'Team · Moves', component: LeagueMovesScreen, storyId: 'prototype--league-team-moves', leagueTab: 'team' }),
+  route({ path: '#/league/team/roster', experience: 'league', title: 'Team · My roster', component: LeagueMyRosterScreen, storyId: 'prototype--league-team-roster', leagueTab: 'team' }),
   route({ path: '#/league/team/pickups', experience: 'league', title: 'Team · Pickups', component: LeaguePickupsScreen, storyId: 'prototype--league-team-pickups', leagueTab: 'team' }),
   route({ path: '#/league/players', experience: 'league', title: 'Players · Research', component: LeaguePlayersScreen, storyId: 'prototype--league-players', leagueTab: 'players' }),
   route({ path: '#/league/players/profile', experience: 'league', title: 'Players · Deep dive', component: LeaguePlayerProfileScreen, storyId: 'prototype--league-player-profile', leagueTab: 'players' }),

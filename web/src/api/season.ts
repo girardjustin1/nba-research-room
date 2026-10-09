@@ -1381,6 +1381,24 @@ export interface TeamNamesRequest {
   teams: { team_id: number; name: string | null }[];
 }
 
+/** My roster, entered by hand (GET/POST /season/my_roster): used when Yahoo doesn't supply it. */
+export interface MyRoster {
+  players: PlayerRef[];
+  /** Players on my IL slot. */
+  il_ids: number[];
+  /** Roster size limit (all slots, IL included). */
+  max_players: number;
+  unmatched: { name: string; suggestions: string[] }[];
+  saved_at: IsoDateTime | null;
+  policy: string;
+}
+
+export interface MyRosterRequest {
+  player_ids: number[];
+  names: string[];
+  il_ids: number[];
+}
+
 export interface PlayerSearchResponse {
   players: PlayerRef[];
 }
@@ -1411,6 +1429,8 @@ export interface SeasonApi {
   saveOpponentRoster(body: OpponentRosterRequest): Promise<OpponentRoster>;
   /** Register or rename league teams (names only, never rosters). */
   saveTeamNames(body: TeamNamesRequest): Promise<OpponentRoster>;
+  myRoster(): Promise<MyRoster>;
+  saveMyRoster(body: MyRosterRequest): Promise<MyRoster>;
   /** NBA players whose name contains `q` (the NBA list, not Yahoo's). */
   playerSearch(q: string): Promise<PlayerSearchResponse>;
   nbaTeam(abbr: string): Promise<NbaTeamProfile>;
@@ -1441,6 +1461,8 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     saveOpponentRoster: (body) => seasonPost<OpponentRoster>(base, '/season/opponent_roster', body, fetchImpl),
     saveTeamNames: (body) => seasonPost<OpponentRoster>(base, '/season/league_team_names', body, fetchImpl),
     playerSearch: (q) => get('/season/player_search', { q }),
+    myRoster: () => get('/season/my_roster'),
+    saveMyRoster: (body) => seasonPost<MyRoster>(base, '/season/my_roster', body, fetchImpl),
     nbaTeam: (abbr) => get(`/season/nba_teams/${abbr}`),
   };
 }

@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     assert cfg.paths.db == db, "the dry run must never touch the real store"
     if not args.with_x:
         x_feed.poll = lambda con, cfg=None, **k: {"status": "skipped", "reason": "dry run: X stubbed"}
-    if not args.with_markets:   # TheRundown and Kalshi bill by usage: a dry run never calls them
+    if not args.with_markets:  # TheRundown and Kalshi bill by usage: a dry run never calls them
         pipeline.sync_markets = lambda con, cfg=None, day=None, **k: {
             "status": "skipped",
             "reason": "dry run: markets stubbed",
@@ -148,10 +148,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
 
-    def needs_inbox(step: dict | None) -> bool:  # waiting on the owner's Yahoo files, not broken
-        return (
-            isinstance(step, dict) and step.get("status") == "skipped" and "inbox" in str(step.get("reason"))
-        )
+    def needs_inbox(step: dict | None) -> bool:  # waiting on the owner's roster or opponent, not broken
+        reason = str(step.get("reason")) if isinstance(step, dict) else ""
+        waits = ("inbox", "My roster", "This week's opponent", "sign in to Yahoo")
+        return isinstance(step, dict) and step.get("status") == "skipped" and any(w in reason for w in waits)
 
     lineup, snap = nightly.get("lineup"), pregame.get("matchup")
     checks += [
@@ -159,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
             "lineup decision",
             ok
             if one("SELECT count(*) FROM decisions_log WHERE kind = 'lineup'")
+            # The nightly run is the night before DAY: no games that night means no lineup to set.
+            or (isinstance(lineup, dict) and "no NBA games projected" in str(lineup.get("reason")))
             else wait
             if needs_inbox(lineup)
             else fail,
@@ -198,7 +200,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nfull reports: {work / 'report.json'}")
     waiting = [n for n, st, _ in checks if st == "WAIT"]
     if waiting:
-        print(f"waiting on your Yahoo files (make inbox), not broken: {', '.join(waiting)}")
+        print(
+            f"waiting on your roster and opponent (Team → My roster, Teams → This week's opponent), "
+            f"not broken: {', '.join(waiting)}"
+        )
     return 0 if all(st != "FAIL" for _, st, _ in checks) else 1
 
 

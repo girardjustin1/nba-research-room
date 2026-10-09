@@ -120,7 +120,7 @@ def lineup_response(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None,
     today = now.date()
     roster = my_roster(con, cfg)
     if roster.empty:
-        raise NotReady("No Yahoo roster yet: save roster.csv to data/inbox and run `make inbox`.")
+        raise NotReady("No roster yet: enter it on Team → My roster (or sign in to Yahoo).")
     roster = roster.dropna(subset=["player_id"]).assign(player_id=lambda d: d["player_id"].astype(int))
     run = con.execute("SELECT max(run_at) FROM projections WHERE model = 'baseline'").fetchone()[0]
     if run is None:

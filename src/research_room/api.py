@@ -266,6 +266,12 @@ class OpponentIn(BaseModel):
     team_name: str | None = None
 
 
+class MyRosterIn(BaseModel):
+    player_ids: list[int] = Field(default_factory=list)
+    names: list[str] = Field(default_factory=list)
+    il_ids: list[int] = Field(default_factory=list)
+
+
 class TeamNameIn(BaseModel):
     team_id: int
     name: str | None = None
@@ -891,6 +897,27 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return opponent_roster.save(con, body.team_id, body.player_ids, body.names, now=when,
                                         team_name=body.team_name)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.get("/season/my_roster")
+    def get_my_roster() -> dict:
+        """MyRoster: my team as entered by hand (used when Yahoo doesn't supply it)."""
+        con = read_con()
+        try:
+            return opponent_roster.my_response(con)
+        finally:
+            con.close()
+
+    @app.post("/season/my_roster")
+    def post_my_roster(body: MyRosterIn, now: str | None = None) -> dict:
+        """Replace my roster: picked players, pasted names (unmatched come back), who is on IL."""
+        con = read_con()
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return opponent_roster.save_mine(con, body.player_ids, body.names, body.il_ids, now=when)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:

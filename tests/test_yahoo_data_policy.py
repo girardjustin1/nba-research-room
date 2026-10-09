@@ -100,6 +100,7 @@ def test_the_purge_removes_every_yahoo_item(tmp_path, con):
         "inbox/teams.csv",
         "inbox/opponent.json",
         "inbox/league_teams.json",
+        "inbox/my_roster.json",
         "oauth2.json",
         "data/notifications_read.json",
     ):
@@ -114,6 +115,7 @@ def test_the_purge_removes_every_yahoo_item(tmp_path, con):
             "inbox/teams.csv",
             "inbox/opponent.json",
             "inbox/league_teams.json",
+            "inbox/my_roster.json",
             "oauth2.json",
             "data/notifications_read.json",
         )

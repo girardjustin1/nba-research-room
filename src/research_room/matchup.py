@@ -257,7 +257,8 @@ def opponent_for(con, week: int, my_team_id: int) -> tuple[int, pd.DataFrame | N
     """, [week, week]).df()
     mine = rows[rows["team_id"] == my_team_id]
     if mine.empty:
-        raise NoMatchup(f"No week {week} matchup yet: save matchup.csv to data/inbox and run `make inbox`.")
+        raise NoMatchup(f"No week {week} opponent yet: enter them on Teams → This week's opponent "
+                        "(or sign in to Yahoo).")
     return int(mine["opponent_team_id"].iloc[0]), rows
 
 
@@ -332,9 +333,9 @@ def week_inputs(con, cfg: Settings | None = None, now: datetime | None = None) -
     opp_id, rows = opponent_for(con, week_no, me_id)
     me_roster, opp_roster = roster_of(con, me_id), roster_of(con, opp_id)
     if me_roster.empty:
-        raise NoMatchup("No Yahoo roster yet: save roster.csv to data/inbox and run `make inbox`.")
+        raise NoMatchup("No roster yet: enter it on Team → My roster (or sign in to Yahoo).")
     if opp_roster.empty:
-        raise NoMatchup(f"No roster for team {opp_id}: roster.csv must list every team's players.")
+        raise NoMatchup(f"No roster for team {opp_id}: enter it on Teams → This week's opponent.")
     run = con.execute("SELECT max(run_at) FROM projections WHERE model = 'baseline'").fetchone()[0]
     if run is None:
         raise NoMatchup("No projections yet: run `make nightly`.")

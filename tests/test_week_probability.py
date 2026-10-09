@@ -91,7 +91,7 @@ def test_probability_says_what_is_missing(tmp_path):
     con.close()
     c = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
     r = c.get("/season/week/probability", params={"now": NOW})
-    assert r.status_code == 409 and "matchup.csv" in r.json()["detail"]
+    assert r.status_code == 409 and "This week's opponent" in r.json()["detail"]
 
 
 def _free_agents(con, strength=1.6):

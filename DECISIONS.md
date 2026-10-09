@@ -1117,3 +1117,15 @@ the day's first tip (`pregame_final_minutes`), and only today's games from TheRu
 (`rundown.pregame_days_ahead`); about 6-8 pulls on a game day instead of ~28. The nightly run is
 unchanged (today plus 2 days). Dry runs never call the paid market feeds (`--with-markets` to).
 
+**My roster, entered by hand (2026-10-09).** Team → My roster (`#/league/team/roster`,
+`GET/POST /season/my_roster`): my players from the NBA list (search or pasted names, misses
+come back with suggestions) and who is on the IL. It closes the last gap for opening night without
+the Yahoo API: the live read uses it when Yahoo didn't supply my roster (Yahoo's wins when it does),
+with my current lineup unknown (every slot open but the IL). One small file
+(`data/inbox/my_roster.json`), replaced on each save, never in the database, deleted by
+`make yahoo-purge`. The picking parts (search, list, paste, unmatched names) are now one shared
+component for this and This week's opponent. Checked end to end: a dry run with a test roster and
+opponent entered produced the week's matchup odds (the test entries were removed afterwards); the
+lineup step had no games to set on the simulated night. The add/drop plan still needs the free
+agents (players.csv or the API). "No roster yet" messages now point to these screens.
+

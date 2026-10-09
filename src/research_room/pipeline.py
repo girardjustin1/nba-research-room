@@ -72,7 +72,8 @@ def recommend_lineup(con: duckdb.DuckDBPyConnection, proj: pd.DataFrame, day: da
     """Today's lineup for my team from the baseline projections; logged to decisions_log."""
     roster = my_roster(con, cfg)
     if roster.empty:
-        return {"status": "skipped", "reason": "no Yahoo roster snapshot yet (make inbox)"}
+        return {"status": "skipped",
+                "reason": "no roster yet: enter it on Team → My roster (or sign in to Yahoo)"}
     unmatched = roster["player_id"].isna().sum()
     roster = roster.dropna(subset=["player_id"]).assign(player_id=lambda d: d["player_id"].astype(int))
     pool_day = lineup.wide_day(proj, day)

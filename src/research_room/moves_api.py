@@ -39,7 +39,8 @@ def _week_and_plan(
     pool = optimizer.free_agents(con, cfg)
     if pool.empty:
         raise NotReady(
-            "No free agents yet: save players.csv (available players) to data/inbox and run `make inbox`."
+            "No free agents yet: export players.csv (available players) from Yahoo into data/inbox, "
+            "or sign in to Yahoo."
         )
     acq = _acquisitions(con, inp, cfg)
     snap = con.execute("SELECT max(snapshot_at) FROM yahoo_players").fetchone()[0]

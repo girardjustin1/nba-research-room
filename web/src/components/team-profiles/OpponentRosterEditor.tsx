@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
-import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -8,16 +7,14 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { OpponentRoster, OpponentRosterRequest, PlayerRef, TeamNamesRequest } from '../../api/season';
-import { PlayerLine } from '../foundations/PlayerLine';
 import { SeasonShell, ScreenHeader, type SeasonTab } from '../foundations/ScreenFrame';
+import { RosterPicker, UnmatchedNames } from './RosterPicker';
 import { ErrorState, LoadingState } from '../foundations/ScreenStates';
 
 export interface OpponentRosterEditorProps {
@@ -66,12 +63,9 @@ export function OpponentRosterEditor({
   const [players, setPlayers] = useState<PlayerRef[]>([]);
   const [paste, setPaste] = useState('');
   const [pasting, setPasting] = useState(false);
-  const [options, setOptions] = useState<PlayerRef[]>([]);
-  const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [result, setResult] = useState<OpponentRoster | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A saved entry from the server resets the form (on load and after each save).
   const shown = result ?? data;
@@ -87,16 +81,6 @@ export function OpponentRosterEditor({
   }
   const nameOf = (id: number | '') => (id === '' ? '' : (shown?.teams.find((t) => t.team_id === id)?.name ?? ''));
 
-  const searching = query.trim().length >= 2;
-  useEffect(() => {
-    if (!searching) return;
-    timer.current = setTimeout(() => {
-      onSearch(query).then(setOptions, () => setOptions([]));
-    }, 250);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [query, searching, onSearch]);
 
   const names = useMemo(() => paste.split('\n').map((s) => s.trim()).filter(Boolean), [paste]);
   const changed =
@@ -138,21 +122,7 @@ export function OpponentRosterEditor({
   else {
     body = (
       <Stack spacing={1.5}>
-        {shown.unmatched.length > 0 && (
-          <Alert severity="warning">
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {shown.unmatched.length === 1 ? "1 name didn't match an NBA player" : `${shown.unmatched.length} names didn't match an NBA player`}
-            </Typography>
-            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-              {shown.unmatched.map((u) => (
-                <Typography component="li" variant="body2" key={u.name}>
-                  {u.name}
-                  {u.suggestions.length > 0 ? ` (did you mean ${u.suggestions.join(', ')}?)` : ''}
-                </Typography>
-              ))}
-            </Box>
-          </Alert>
-        )}
+        <UnmatchedNames unmatched={shown.unmatched} />
         {saveError && <Alert severity="error">{saveError}</Alert>}
         <Card sx={{ p: 1.5 }}>
           <TextField
@@ -189,66 +159,18 @@ export function OpponentRosterEditor({
           </Button>
         </Card>
 
-        <Card sx={{ p: 1.5 }}>
-          <Typography variant="subtitle2" component="h2" sx={{ mb: 1 }}>
-            Their players ({players.length})
-          </Typography>
-          <Autocomplete<PlayerRef, false, false, false>
-            options={searching ? options.filter((o) => !players.some((p) => p.player_id === o.player_id)) : []}
-            getOptionLabel={(o) => `${o.name} · ${o.team_abbr ?? '—'}`}
-            filterOptions={(x) => x}
-            inputValue={query}
-            onInputChange={(_e, v, reason) => setQuery(reason === 'reset' || reason === 'selectOption' ? '' : v)}
-            value={null}
-            onChange={(_e, v) => {
-              if (v) setPlayers((ps) => [...ps, { ...v, owner: 'opponent' }]);
-            }}
-            noOptionsText={query.trim().length < 2 ? 'Type at least 2 letters' : 'No NBA player by that name'}
-            renderInput={(params) => <TextField {...params} label="Add a player" placeholder="Search the NBA list" />}
-          />
-          <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', m: 0, mt: 1, p: 0 }}>
-            {players.map((p) => (
-              <Box component="li" key={p.player_id}>
-                <PlayerLine
-                  player={p}
-                  onOpen={onOpenPlayer}
-                  trailing={
-                    <IconButton
-                      aria-label={`Remove ${p.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPlayers((ps) => ps.filter((x) => x.player_id !== p.player_id));
-                      }}
-                      sx={{ width: 44, height: 44 }}
-                    >
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  }
-                />
-              </Box>
-            ))}
-          </Stack>
-          {players.length === 0 && (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-              No players yet. Search above, or paste their names.
-            </Typography>
-          )}
-          {pasting ? (
-            <TextField
-              multiline
-              minRows={4}
-              fullWidth
-              label="Paste names, one per line"
-              value={paste}
-              onChange={(e) => setPaste(e.target.value)}
-              sx={{ mt: 1.5 }}
-            />
-          ) : (
-            <Button onClick={() => setPasting(true)} sx={{ mt: 1 }}>
-              Paste a list of names
-            </Button>
-          )}
-        </Card>
+        <RosterPicker
+          title="Their players"
+          players={players}
+          onPlayersChange={setPlayers}
+          owner="opponent"
+          paste={paste}
+          onPasteChange={setPaste}
+          pasting={pasting}
+          onPastingChange={setPasting}
+          onSearch={onSearch}
+          onOpenPlayer={onOpenPlayer}
+        />
 
 
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start', color: 'text.secondary' }}>

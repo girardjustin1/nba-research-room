@@ -191,6 +191,23 @@ def save(
     wk = _week(cfg, now)
     if wk is None:
         raise ValueError("no fantasy week to enter an opponent for")
+    ids, unmatched = _resolve(con, player_ids, names, cfg)
+    entry = {
+        "week": wk["week"],
+        "team_id": int(team_id),
+        "player_ids": ids,
+        "saved_at": pd.Timestamp(now or store.utcnow()).isoformat(),
+    }
+    _write(_path(cfg), entry)
+    if team_name is not None:
+        set_team_names({int(team_id): team_name}, cfg)
+    return response(con, cfg, now, unmatched)
+
+
+def _resolve(
+    con: duckdb.DuckDBPyConnection, player_ids: list[int], names: list[str], cfg: Settings
+) -> tuple[list[int], list[dict]]:
+    """Picked players plus pasted names matched to NBA players; misses come back with suggestions."""
     resolver = NameResolver(player_universe(con), load_aliases(), load_team_aliases())
     ids = [int(p) for p in player_ids]
     unmatched = []
@@ -207,16 +224,99 @@ def save(
     most = len(cfg.roster.slots)
     if len(ids) > most:
         raise ValueError(f"a roster has at most {most} players")
+    return ids, unmatched
+
+
+# -------------------------------------------------------------------- my roster, entered by hand
+MINE_FILE = "my_roster.json"
+MINE_POLICY = (
+    "Your roster, kept on this computer only and never in the database; replaced each time you save. "
+    "When Yahoo supplies your roster, Yahoo's is used instead."
+)
+
+
+def _mine_path(cfg: Settings) -> Path:
+    return Path(cfg.paths.inbox_dir) / MINE_FILE
+
+
+def read_mine(cfg: Settings | None = None) -> dict | None:
+    cfg = cfg or settings()
+    try:
+        return json.loads(_mine_path(cfg).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def my_response(
+    con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, unmatched: list[dict] | None = None
+) -> dict:
+    """MyRoster: my team as entered (players, who is on IL), or empty."""
+    cfg = cfg or settings()
+    e = read_mine(cfg) or {}
+    cards = [{**c, "owner": "mine"} for c in _cards(con, e.get("player_ids", []))]
+    return {
+        "players": cards,
+        "il_ids": [int(i) for i in e.get("il_ids", []) if int(i) in {c["player_id"] for c in cards}],
+        "max_players": len(cfg.roster.slots),
+        "unmatched": unmatched or [],
+        "saved_at": e.get("saved_at"),
+        "policy": MINE_POLICY,
+    }
+
+
+def save_mine(
+    con: duckdb.DuckDBPyConnection,
+    player_ids: list[int],
+    names: list[str],
+    il_ids: list[int],
+    cfg: Settings | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """Replace my roster with these players (pasted names matched to NBA players)."""
+    cfg = cfg or settings()
+    ids, unmatched = _resolve(con, player_ids, names, cfg)
     entry = {
-        "week": wk["week"],
-        "team_id": int(team_id),
         "player_ids": ids,
+        "il_ids": [int(i) for i in il_ids if int(i) in ids],
         "saved_at": pd.Timestamp(now or store.utcnow()).isoformat(),
     }
-    _write(_path(cfg), entry)
-    if team_name is not None:
-        set_team_names({int(team_id): team_name}, cfg)
-    return response(con, cfg, now, unmatched)
+    _write(_mine_path(cfg), entry)
+    return my_response(con, cfg, unmatched)
+
+
+def apply_mine(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None) -> dict:
+    """My entered roster into the connection's in-memory Yahoo tables when Yahoo didn't supply it.
+    My current lineup isn't known, so every slot is open except the IL."""
+    cfg = cfg or settings()
+    e, me = read_mine(cfg), cfg.league.my_team_id
+    if not e or not e.get("player_ids"):
+        return {"applied": False}
+    if con.execute("SELECT count(*) FROM yahoo_rosters WHERE team_id = ?", [me]).fetchone()[0]:
+        return {"applied": False, "reason": "Yahoo supplied my roster"}
+    at = pd.Timestamp(e["saved_at"])
+    il = {int(i) for i in e.get("il_ids", [])}
+    store.upsert(
+        con,
+        "yahoo_rosters",
+        pd.DataFrame(
+            [
+                {
+                    "snapshot_at": at,
+                    "team_id": me,
+                    "yahoo_player_key": f"manual:{c['player_id']}",
+                    "player_name": c["name"],
+                    "player_id": c["player_id"],
+                    "selected_slot": "IL" if c["player_id"] in il else None,
+                    "eligible_positions": ",".join(x for x in c["eligible"] if x != "Util"),
+                    "status": None,
+                    "source": "manual",
+                    "fetched_at": at,
+                }
+                for c in _cards(con, e["player_ids"])
+            ]
+        ),
+    )
+    return {"applied": True, "players": len(e["player_ids"])}
 
 
 def apply(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None) -> dict:

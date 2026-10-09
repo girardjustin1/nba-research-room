@@ -22,6 +22,7 @@ def cfg(tmp_path, monkeypatch):
     c = c.model_copy(update={"paths": c.paths.model_copy(update={"inbox_dir": tmp_path})})
     monkeypatch.setattr(opponent_roster, "_path", lambda cfg=None: tmp_path / "opponent.json")
     monkeypatch.setattr(opponent_roster, "_names_path", lambda cfg=None: tmp_path / "league_teams.json")
+    monkeypatch.setattr(opponent_roster, "_mine_path", lambda cfg=None: tmp_path / "my_roster.json")
     return c
 
 
@@ -152,3 +153,37 @@ def test_the_names_route(tmp_path, cfg):
     assert next(t for t in r.json()["teams"] if t["team_id"] == opp)["label"] == "Invented Rivals"
     bad = client.post("/season/league_team_names", json={"teams": [{"team_id": 99, "name": "x"}]})
     assert bad.status_code == 422
+
+
+def test_my_roster_saves_marks_il_and_fills_in_only_without_yahoo(nba, cfg):
+    me = settings().league.my_team_id
+    out = opponent_roster.save_mine(nba, [1, 3], ["made up center", "Nobody Atall"], [3, 99], cfg, NOW)
+    assert [p["player_id"] for p in out["players"]] == [1, 3, 2] and out["il_ids"] == [3]
+    assert out["players"][0]["owner"] == "mine" and out["unmatched"][0]["name"] == "Nobody Atall"
+    assert opponent_roster.apply_mine(nba, cfg) == {"applied": True, "players": 3}
+    rows = dict(
+        nba.execute("SELECT player_id, selected_slot FROM yahoo_rosters WHERE team_id = ?", [me]).fetchall()
+    )
+    assert rows == {1: None, 2: None, 3: "IL"}
+    assert opponent_roster.apply_mine(nba, cfg)["applied"] is False  # Yahoo's (or mine) already there
+    with pytest.raises(ValueError):
+        opponent_roster.save_mine(nba, list(range(1, 40)), [], [], cfg, NOW)
+
+
+def test_my_roster_routes(tmp_path, cfg):
+    db = tmp_path / "mine.duckdb"
+    c = store.connect(db)
+    store.upsert(
+        c,
+        "players",
+        pd.DataFrame(
+            [{"player_id": 1, "full_name": "Invented Guard", "team_id": 1, "position": "G", **META}]
+        ),
+    )
+    c.close()
+    client = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
+    assert client.get("/season/my_roster").json()["players"] == []
+    r = client.post("/season/my_roster", json={"player_ids": [1], "names": [], "il_ids": [1]})
+    assert (
+        r.status_code == 200 and r.json()["il_ids"] == [1] and "never in the database" in r.json()["policy"]
+    )
