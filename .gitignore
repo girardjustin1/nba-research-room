@@ -13,3 +13,6 @@ __pycache__/
 reference/
 # Private notes (never published)
 docs/private/
+
+# Agent worktrees (local only)
+.claude/
