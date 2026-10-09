@@ -6,7 +6,7 @@ import { opponentRosterEmpty, opponentRosterFilled, sampleSave, sampleSaveNames,
 import { renderWithTheme } from '../../test/render';
 import { OpponentRosterEditor } from './OpponentRosterEditor';
 
-describe("this week's opponent", () => {
+describe("this week's opponent", { timeout: 20_000 }, () => { // many keystrokes: slow on CI runners
   it('picks the team, adds by search, removes, pastes names and saves', async () => {
     const user = userEvent.setup();
     const saved: OpponentRosterRequest[] = [];

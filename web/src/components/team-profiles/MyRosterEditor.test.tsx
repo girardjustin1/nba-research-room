@@ -6,7 +6,7 @@ import { myRosterEmpty, myRosterFilled, sampleSaveMine, sampleSearchMine } from 
 import { renderWithTheme } from '../../test/render';
 import { MyRosterEditor } from './MyRosterEditor';
 
-describe('my roster', () => {
+describe('my roster', { timeout: 20_000 }, () => { // many keystrokes: slow on CI runners
   it('adds players, marks one on the IL, removes one and saves', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn(async (b: MyRosterRequest) => sampleSaveMine(myRosterEmpty, b));
