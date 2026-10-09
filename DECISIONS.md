@@ -1330,3 +1330,20 @@ re-run with `ARGS=--offline` gives the same numbers, checked).
 - Not acted on, for the owner: rebounds are overlaid on the 2026-10-05 result, and under the fixed
   comparison their 80% range touches zero (+0.0002). The rule here covered threes, steals and
   blocks only, so `markets.overlay.stats` stays [pts, reb, ast].
+
+**Draft-night rehearsal (2026-10-09).** A full 14-team, 12-round draft through the real draft API
+(on a copy of the store), driven the way draft night runs: other teams' picks by name as the
+listener sends them, mine from the top recommendation, the room's reads after every pick.
+- Worked: a cold start (API up in 2-4 s), picks by name, undo, an unmatched name (409 with the
+  reason) and a duplicate pick (409), and a hard kill of the API at pick 71: restarted and resumed
+  by draft id with all 70 picks, then finished 168 of 168. The engine-only mock (`make
+  mock-draft`, 14 teams, slots 1, 8, 14) refreshes the board in at most 67 ms (limit 1 s).
+- Found: `/draft/insights` held the session lock while it worked (usually 0.2 s, spikes of 1-13 s;
+  in-process it is a steady 80 ms, so the spikes came from the server around it), and the room
+  waited for every panel before showing the new board. A slow insights call could leave the board
+  stale while I'm on the clock.
+- Fixed: insights and league strength are worked out from a snapshot outside the lock (picks and
+  punt toggles replace the state and board, so a snapshot can't change underneath) and kept until
+  the picks, slot, punts or team names change. The room shows the board and recommendations as
+  soon as they arrive; the side panels fill in after. Re-run, all 168 picks with the room's reads
+  in parallel: board at most 161 ms, everything at most 0.6 s, no spikes.

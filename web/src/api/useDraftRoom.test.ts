@@ -69,6 +69,17 @@ describe('useDraftRoom polling', () => {
     expect(result.current[0].strength.error?.isNotFound).toBe(true);
   });
 
+  it('shows the board without waiting for the side panels (insights can be slow)', async () => {
+    const s5 = makeSession({ currentPick: 5 });
+    const api = fakeApi([s5]);
+    const never = () => new Promise<never>(() => {});
+    Object.assign(api, { getInsights: vi.fn(never), getStrength: vi.fn(never), getPositionalValue: vi.fn(never) });
+    const { result } = renderHook(() => useDraftRoom(api, 20));
+    await waitFor(() => expect(result.current[0].board).not.toBeNull(), { timeout: 2000 });
+    expect(result.current[0].boardLoading).toBe(false);
+    expect(result.current[0].insights.data).toBeNull();
+  });
+
   it('reports no session on the 409 and down when unreachable', async () => {
     const api = fakeApi([new ApiError(409, 'no draft session; POST /draft/session first'), new ApiUnreachableError()]);
     const { result } = renderHook(() => useDraftRoom(api, 20));

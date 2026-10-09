@@ -178,6 +178,31 @@ def test_pick_insights_describe_each_drafting_team(client):
     assert mine["vs_me"] is None                    # no head-to-head against myself
 
 
+def test_insights_are_worked_out_once_per_pick(client, monkeypatch):
+    from research_room.draft.board import DraftBoard
+
+    calls = []
+    real = DraftBoard.pick_insight
+    def counted(self, *a, **k):
+        calls.append(1)
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(DraftBoard, "pick_insight", counted)
+    client.post("/draft/session", json={"draft_id": "league", "my_slot": 2})
+    client.post("/draft/pick", json={"player_id": 1})
+    client.get("/draft/insights", params={"last": 5})
+    client.get("/draft/insights", params={"last": 5})                 # a poll between picks: reused
+    assert len(calls) == 1
+    client.post("/draft/pick", json={"player_id": 2})
+    assert len(client.get("/draft/insights", params={"last": 5}).json()["insights"]) == 2
+    assert len(calls) == 3                                             # a new pick: worked out again
+    client.put("/draft/teams/names", json={"names": {"1": "Renamed Club"}})
+    d = client.get("/draft/insights", params={"last": 5}).json()["insights"]
+    assert d[-1]["team_name"] == "Renamed Club"                        # a rename isn't served stale
+    s1 = client.get("/draft/strength").json()
+    assert client.get("/draft/strength").json() == s1
+
+
 def test_pick_owners_my_slots_and_compare_percentages(client):
     s = client.post("/draft/session", json={"draft_id": "league", "my_slot": 2}).json()
     assert s["pick_owners"][:8] == [1, 2, 3, 4, 4, 3, 2, 1] and len(s["pick_owners"]) == 20

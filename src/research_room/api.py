@@ -94,6 +94,8 @@ class Session:
     yahoo_elig: pd.DataFrame | None = None  # player_id -> Yahoo positions (players.csv snapshot)
     mock: MockState | None = None
     names: dict[int, str] = field(default_factory=dict)   # saved team names for this draft
+    # (inputs, response) of the last insights / strength: polls between picks reuse it
+    cached: dict[str, tuple] = field(default_factory=dict)
 
     @property
     def mode(self) -> str:
@@ -507,33 +509,53 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                 })
             return {"teams": out, "current_pick": current}
 
+    def off_lock(name: str, compute, *extra):
+        """Answer a slow read from a snapshot, outside the session lock, so pick entry and the
+        board never wait behind it (the draft rehearsal saw 1-13 s stalls). Safe because a pick
+        or punt toggle replaces the state and board rather than changing them. The answer is kept
+        until the inputs change, so polls between picks are free."""
+        with h.lock:
+            s = h.require()
+            inputs = (s.state, s.board, s.state.my_slot, tuple(sorted(s.punts)),
+                      tuple(sorted(s.names.items())), *extra)
+            hit = s.cached.get(name)
+            if hit is not None and hit[0][0] is inputs[0] and hit[0][1] is inputs[1] \
+                    and hit[0][2:] == inputs[2:]:          # same state and board objects, same rest
+                return hit[1]
+            snap = (s, s.state, s.board, s.team_names())
+        out = compute(*snap)
+        with h.lock:
+            if h.session is snap[0]:
+                snap[0].cached[name] = (inputs, out)
+        return out
+
     @app.get("/draft/strength")
     def get_strength() -> dict:
         """Me vs the league per category (P(win) vs an average team, projected final rosters)."""
-        with h.lock:
-            s = h.require()
-            out = s.board.league_strength(s.state)
-            names = s.team_names()
+        def compute(s, state, board, names):
+            out = board.league_strength(state)
             for row in [*out["categories"], out["expected_cats"]]:
                 row["best_team_name"] = names.get(row["best_team_id"])
-            return {**out, "my_slot": s.state.my_slot, "punts": sorted(s.punts),
-                    "current_pick": s.state.current_pick}
+            return {**out, "my_slot": state.my_slot, "punts": sorted(s.punts),
+                    "current_pick": state.current_pick}
+
+        return off_lock("strength", compute)
 
     @app.get("/draft/insights")
     def get_insights(last: int = 5) -> dict:
         """Live read on the most recent picks: each drafting team's needs, strengths and
         weaknesses, and its projected head-to-head against me, as rosters stand right now."""
-        with h.lock:
-            s = h.require()
-            picks = s.state.picks.sort_values("pick_no", ascending=False).head(max(1, min(last, 50)))
-            names = s.team_names()
+        def compute(s, state, board, names):
+            picks = state.picks.sort_values("pick_no", ascending=False).head(max(1, min(last, 50)))
             out = []
             for pick_no in picks["pick_no"].astype(int):
-                ins = s.board.pick_insight(s.state, pick_no)
+                ins = board.pick_insight(state, pick_no)
                 ins["team_name"] = names.get(ins["team_id"])
                 out.append(ins)
-            return {"insights": out, "current_pick": s.state.current_pick,
+            return {"insights": out, "current_pick": state.current_pick,
                     "categories": [{"key": c.key, "label": c.label} for c in s.cfg.categories]}
+
+        return off_lock("insights", compute, last)
 
     @app.put("/draft/teams/names")
     def put_team_names(body: NamesIn) -> dict:

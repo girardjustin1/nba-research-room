@@ -112,13 +112,34 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
         const key = boardKey(latest.current);
         loadedKey.current = key;
         setState((s) => ({ ...s, boardLoading: true }));
-        const [board, pool, teams, positional, insights, strength] = await Promise.allSettled([
+        // The side panels (positional value, pick insights, league strength) arrive on their own:
+        // the board and recommendations never wait for them (the draft rehearsal saw insights
+        // take up to 13 s while the board was ready in 30 ms). Stale panels are not applied.
+        void Promise.allSettled([api.getPositionalValue(), api.getInsights(), api.getStrength()]).then(
+          ([positional, insights, strength]) => {
+            if (!alive.current || loadedKey.current !== key) return;
+            setState((s) => ({
+              ...s,
+              positional:
+                positional.status === 'fulfilled'
+                  ? { data: positional.value.positions, error: null }
+                  : { data: s.positional.data, error: asApiError(positional.reason) },
+              strength:
+                strength.status === 'fulfilled'
+                  ? { data: strength.value, error: null }
+                  : { data: s.strength.data, error: asApiError(strength.reason) },
+              positionalNote: positional.status === 'fulfilled' ? (positional.value.note ?? null) : s.positionalNote,
+              insights:
+                insights.status === 'fulfilled'
+                  ? { data: [...insights.value.insights].sort((a, b) => a.pick_no - b.pick_no), error: null }
+                  : { data: s.insights.data, error: asApiError(insights.reason) },
+            }));
+          },
+        );
+        const [board, pool, teams] = await Promise.allSettled([
           api.getBoard(),
           api.getPlayers({ availableOnly: false, limit: 2000 }),
           api.getTeams(),
-          api.getPositionalValue(),
-          api.getInsights(),
-          api.getStrength(),
         ]);
         if (!alive.current) return;
         const drafted = new Set((latest.current?.picks ?? []).map((p) => p.player_id));
@@ -135,19 +156,6 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
               teams.status === 'fulfilled'
                 ? { data: teams.value.teams, error: null }
                 : { data: s.teams.data, error: asApiError(teams.reason) },
-            positional:
-              positional.status === 'fulfilled'
-                ? { data: positional.value.positions, error: null }
-                : { data: s.positional.data, error: asApiError(positional.reason) },
-            strength:
-              strength.status === 'fulfilled'
-                ? { data: strength.value, error: null }
-                : { data: s.strength.data, error: asApiError(strength.reason) },
-            positionalNote: positional.status === 'fulfilled' ? (positional.value.note ?? null) : s.positionalNote,
-            insights:
-              insights.status === 'fulfilled'
-                ? { data: [...insights.value.insights].sort((a, b) => a.pick_no - b.pick_no), error: null }
-                : { data: s.insights.data, error: asApiError(insights.reason) },
           };
         });
         if (board.status === 'rejected' && !(board.reason instanceof ApiError)) {
