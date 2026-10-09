@@ -113,8 +113,10 @@ def sync(
     client: RateLimited | None = None,
     today: date | None = None,
     now: datetime | None = None,
+    days_ahead: int | None = None,
 ) -> dict[str, int]:
-    """Archive game lines and player props for today and the next `days_ahead` days."""
+    """Archive game lines and player props for today and the next `days_ahead` days (default
+    settings.markets.rundown.days_ahead; pre-game runs pass pregame_days_ahead)."""
     cfg = cfg or settings()
     rd = cfg.markets.rundown
     if client is None:  # the key is only needed for the real API (tests pass their own client)
@@ -124,7 +126,8 @@ def sync(
     today = today or datetime.now(ET).date()
     ids = ",".join(str(i) for i in [*rd.game_markets, *rd.prop_markets])
     lines, props = [], []
-    for i in range(rd.days_ahead + 1):
+    ahead = rd.days_ahead if days_ahead is None else days_ahead
+    for i in range(ahead + 1):
         d = today + timedelta(days=i)
         for ev in client.get(
             f"{rd.base_url}/sports/{rd.sport_id}/events/{d.isoformat()}", {"market_ids": ids}

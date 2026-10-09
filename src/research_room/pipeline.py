@@ -166,7 +166,7 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
         api = client or bdl.BdlClient.from_env()
         report["injuries"] = step("injuries",
                                    lambda: guarded("injuries", "bdl", lambda: bdl.sync_injuries(con, api)))
-        report["markets"] = step("markets", lambda: sync_markets(con, cfg, day))
+        report["markets"] = step("markets", lambda: _pregame_markets(con, cfg, now, day))
         refresh_projections(con, cfg, day, step, report)
         report["matchup"] = step("matchup snapshot",
                                  lambda: _snapshot(con, cfg, event=("news", "Pre-game refresh")))
@@ -236,11 +236,13 @@ def driver_model(cfg: Settings) -> BaselineModel:
     return BaselineModel(cfg)
 
 
-def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None = None) -> dict:
+def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None = None,
+                 days_ahead: int | None = None) -> dict:
     """Archive Kalshi and TheRundown lines. A market outage is recorded in ingest_runs (the Jobs
     health check shows it) and never stops the nightly run: markets are an input, not the core."""
     out = {}
-    jobs = (("kalshi", lambda: kalshi.sync(con, cfg)), ("rundown", lambda: rundown.sync(con, cfg, today=day)))
+    jobs = (("kalshi", lambda: kalshi.sync(con, cfg)),
+            ("rundown", lambda: rundown.sync(con, cfg, today=day, days_ahead=days_ahead)))
     for name, fn in jobs:
         try:
             with store.ingest_run(con, name, "sync_markets") as run:
@@ -250,6 +252,36 @@ def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None
         except Exception as exc:  # noqa: BLE001 - recorded above; the night goes on
             out[name] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     return out
+
+
+def markets_due(last: datetime | None, now: datetime, first_tip: datetime | None,
+                cfg: Settings) -> str | None:
+    """Why a pre-game run should pull the markets now, or None to skip (TheRundown bills by use):
+    never pulled today, an hour since the last pull, or the final pull before the first tip."""
+    mk = cfg.markets
+    now = pd.Timestamp(now)
+    if last is None:
+        return "first pull"
+    last = pd.Timestamp(last)
+    if now - last >= pd.Timedelta(minutes=mk.pregame_every_minutes):
+        return "due"
+    if first_tip is not None:
+        final = pd.Timestamp(first_tip) - pd.Timedelta(minutes=mk.pregame_final_minutes)
+        if final <= now < pd.Timestamp(first_tip) and last < final:
+            return "final pull before tip"
+    return None
+
+
+def _pregame_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, now: datetime, day: date) -> dict:
+    last = con.execute("""SELECT max(started_at) FROM ingest_runs
+                          WHERE source = 'rundown' AND job = 'sync_markets' AND status = 'ok'"""
+                       ).fetchone()[0]
+    tip = con.execute("SELECT min(tip_utc) FROM games WHERE game_date = ?", [day]).fetchone()[0]
+    why = markets_due(last, now, tip, cfg)
+    if why is None:
+        return {"status": "skipped", "reason": f"pulled at {pd.Timestamp(last).isoformat()}; "
+                                               f"next within {cfg.markets.pregame_every_minutes:.0f} min"}
+    return {"why": why, **sync_markets(con, cfg, day, days_ahead=cfg.markets.rundown.pregame_days_ahead)}
 
 
 def _snapshot(con, cfg: Settings, event: tuple[str, str] = ("nightly", "Nightly run")) -> dict:

@@ -117,7 +117,8 @@ def test_routes(tmp_path, monkeypatch, cfg):
     )
     assert r.status_code == 200 and r.json()["players"][0]["name"] == "Invented Guard"
     got = client.get("/season/opponent_roster", params={"now": NOW.isoformat()}).json()
-    assert got["opponent_team_id"] == opp and "never in the database" in got["policy"] and "one opponent" in got["policy"]
+    assert got["opponent_team_id"] == opp
+    assert "never in the database" in got["policy"] and "one opponent" in got["policy"]
     bad = client.post("/season/opponent_roster", json={"team_id": settings().league.my_team_id})
     assert bad.status_code == 422
 

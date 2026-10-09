@@ -233,6 +233,10 @@ bdl:
   max_retries: 5
 
 markets:                       # betting-market inputs (ingest/kalshi.py, ingest/rundown.py), archived nightly
+  # Pre-game runs poll every 15 minutes on game days; the markets (TheRundown bills by use) are pulled
+  # at most this often, and always once in the final minutes before the day's first tip.
+  pregame_every_minutes: 60
+  pregame_final_minutes: 45
   kalshi:                      # public market data, no key
     base_url: https://api.elections.kalshi.com/trade-api/v2
     prop_series: {KXNBAPTS: pts, KXNBAREB: reb, KXNBAAST: ast, KXNBA3PT: fg3m, KXNBASTL: stl, KXNBABLK: blk, KXNBAFTM: ftm}
@@ -251,6 +255,7 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     prop_markets: {29: pts, 35: reb, 39: ast, 38: fg3m, 34: stl, 98: blk, 33: tov}
     game_markets: {1: moneyline, 2: spread, 3: total}
     days_ahead: 2              # today plus this many days of events per nightly run
+    pregame_days_ahead: 0      # pre-game pulls: today's games only
     requests_per_second: 5
 
 alerts:                        # in-app notifications (research_room/alerts.py, League bell)

@@ -348,6 +348,7 @@ class RundownConfig(BaseModel):
     prop_markets: dict[int, str]
     game_markets: dict[int, str]
     days_ahead: int
+    pregame_days_ahead: int = 0
     requests_per_second: float
 
 
@@ -359,6 +360,8 @@ class OverlayConfig(BaseModel):
 
 
 class MarketsConfig(BaseModel):
+    pregame_every_minutes: float = 60
+    pregame_final_minutes: float = 45
     kalshi: KalshiConfig
     rundown: RundownConfig
     overlay: OverlayConfig = Field(default_factory=OverlayConfig)

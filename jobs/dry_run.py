@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.with_x:
         x_feed.poll = lambda con, cfg=None, **k: {"status": "skipped", "reason": "dry run: X stubbed"}
     if not args.with_markets:   # TheRundown and Kalshi bill by usage: a dry run never calls them
-        pipeline.sync_markets = lambda con, cfg=None, day=None: {
+        pipeline.sync_markets = lambda con, cfg=None, day=None, **k: {
             "status": "skipped",
             "reason": "dry run: markets stubbed",
         }

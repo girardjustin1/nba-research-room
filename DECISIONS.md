@@ -1109,3 +1109,11 @@ week's opponent) and the prototype; with sample data, saving and search work in 
   `make yahoo-purge`. Rosters stay one opponent at a time: a registry of every team's roster was
   asked for and the owner chose this narrower version.
 
+**Market pulls throttled in pre-game runs (2026-10-08).** Pre-game runs poll every 15 minutes on
+game days, and each pulled TheRundown and Kalshi (TheRundown bills by use; a day of dry runs while
+testing showed up as a usage spike). Now a pre-game run pulls the markets only when it hasn't today,
+an hour after the last pull (`markets.pregame_every_minutes`), or once in the final 45 minutes before
+the day's first tip (`pregame_final_minutes`), and only today's games from TheRundown
+(`rundown.pregame_days_ahead`); about 6-8 pulls on a game day instead of ~28. The nightly run is
+unchanged (today plus 2 days). Dry runs never call the paid market feeds (`--with-markets` to).
+
