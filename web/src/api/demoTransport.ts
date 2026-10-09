@@ -12,6 +12,7 @@ import { gcMidweekClose } from '../mocks/matchup-analysis/gamecenter';
 import { mockScenarioEngine, probNormal } from '../mocks/matchup-analysis/probability';
 import { weekNormal } from '../mocks/matchup-analysis/week';
 import { notificationsNormal } from '../mocks/notifications/notifications';
+import { yahooOff } from '../mocks/app-shell/yahooStatus';
 import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../mocks/team-profiles/opponentRoster';
 import { myRosterFilled, sampleSaveMine } from '../mocks/team-profiles/myRoster';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
@@ -166,6 +167,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['POST', /^\/season\/my_roster$/, ({ body }) => (state.mine = sampleSaveMine(state.mine, body as MyRosterRequest))],
     ['POST', /^\/season\/league_team_names$/, ({ body }) => (state.opponent = sampleSaveNames(state.opponent, body as TeamNamesRequest))],
     // ---- system
+    ['GET', /^\/system\/yahoo$/, () => yahooOff],
     ['GET', /^\/system\/health$/, () => healthWarn],
     ['GET', /^\/system\/readiness$/, () => readinessWarn],
     ['GET', /^\/system\/models$/, () => modelsNormal],

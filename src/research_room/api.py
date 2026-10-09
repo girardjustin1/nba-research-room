@@ -795,27 +795,46 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
             con.close()
 
     # ---------------------------------------------------------------- season (Phase 1+)
-    def season_con(parts):
+    def season_con(parts, info: dict | None = None):
         """A read connection with this request's Yahoo data loaded live into memory (only the
-        parts the page needs; nothing Yahoo is stored)."""
+        parts the page needs; nothing Yahoo is stored). `info`, when given, receives the read's
+        report, including `yahoo` (yahoo_live.status: whether Yahoo answered)."""
         con = read_con()
         try:
-            yahoo_live.attach(con, settings(), parts)
+            out = yahoo_live.attach(con, settings(), parts)
         except Exception:
             con.close()
             raise
+        if info is not None:
+            info.update(out or {})
         return con
+
+    def yahoo_down(info: dict) -> bool:
+        return bool((info.get("yahoo") or {}).get("degraded"))
+
+    def not_ready(exc: Exception, info: dict) -> HTTPException:
+        """409 for a page that can't be built yet; says so when Yahoo is why."""
+        msg = str(exc)
+        if yahoo_down(info):
+            msg = f"{info['yahoo']['message']} {msg}"
+        return HTTPException(409, msg)
+
+    @app.get("/system/yahoo")
+    def get_system_yahoo() -> dict:
+        """YahooStatus (web/src/api/season.ts): how the last Yahoo read went (no Yahoo data)."""
+        return yahoo_live.status()
 
     @app.get("/season/lineup")
     def get_season_lineup(now: str | None = None) -> dict:
         """LineupResponse (web/src/api/season.ts): today's and the rest of the week's lineups.
         `now` (ISO time) is for testing and replay only."""
-        con = season_con(yahoo_live.PAGE)
+        info: dict = {}
+        con = season_con(yahoo_live.PAGE, info)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return season_api.lineup_response(con, now=when)
         except season_api.NotReady as exc:
-            raise HTTPException(409, str(exc)) from exc
+            raise not_ready(exc, info) from exc
         finally:
             con.close()
 
@@ -823,17 +842,19 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def get_week_probability(now: str | None = None) -> dict:
         """WinProbabilityResponse: this week's P(win) history and the do-nothing path.
         `now` (ISO time) is for testing and replay only."""
-        con = season_con(yahoo_live.odds_parts())
+        info: dict = {}
+        con = season_con(yahoo_live.odds_parts(), info)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             resp = season_api.probability_response(con, now=when)
-            saved = moves_api.with_saved_recommended(resp, con, now=when)   # the last run's plan
+            saved = moves_api.with_saved_recommended(                       # the last run's plan
+                resp, con, now=when, yahoo_down=yahoo_down(info))
             if saved is not None:
                 return saved
             yahoo_live.attach(con, settings(), ("players",))                # no plan fits: solve live
             return moves_api.with_recommended(resp, con, now=when)
         except season_api.NotReady as exc:
-            raise HTTPException(409, str(exc)) from exc
+            raise not_ready(exc, info) from exc
         finally:
             con.close()
 
@@ -854,16 +875,18 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     @app.get("/season/moves")
     def get_season_moves(now: str | None = None) -> dict:
         """MovesResponse: the optimizer's add/drop plan for the rest of the week."""
-        con = season_con(yahoo_live.PAGE)
+        info: dict = {}
+        con = season_con(yahoo_live.PAGE, info)
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
-            saved = moves_api.saved_moves_response(con, now=when)            # the last run's plan
+            saved = moves_api.saved_moves_response(                          # the last run's plan
+                con, now=when, yahoo_down=yahoo_down(info))
             if saved is not None:
                 return saved
             yahoo_live.attach(con, settings(), ("players",))                # no plan fits: solve live
             return moves_api.moves_response(con, now=when)
         except season_api.NotReady as exc:
-            raise HTTPException(409, str(exc)) from exc
+            raise not_ready(exc, info) from exc
         finally:
             con.close()
 

@@ -230,6 +230,12 @@ system:                        # health-check freshness budgets, in hours
     markets: 30                # Kalshi / sportsbook lines archive (only checked once games are on the schedule)
   failed_job_lookback_days: 7
 
+yahoo:                         # live reads (ingest/yahoo_live.py); nothing from Yahoo is stored
+  page_time_limit_s: 8         # a page waits this long, then shows my entries and the last saved plan
+  job_time_limit_s: 90         # nightly / pre-game runs (they read more: the free agents)
+  parallel_reads: 4            # Yahoo calls in flight at once (1 = one at a time)
+  pause_after_failure_s: 120   # after a failed or slow read, pages skip Yahoo this long
+
 paths:
   db: data/research_room.duckdb
   parquet_dir: data/parquet

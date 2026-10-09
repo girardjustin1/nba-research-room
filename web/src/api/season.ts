@@ -397,6 +397,8 @@ export interface Scenario {
  * stored in `matchup_snapshots`) plus projected scenarios from optimizer.py + simulate.py.
  */
 export interface WinProbabilityResponse extends Envelope {
+  /** True when Yahoo couldn't be read and this is the last saved plan, whatever the roster was then. */
+  yahoo_unavailable?: boolean;
   week: WeekContext;
   opponent: TeamRef;
   /** Oldest first; the last point is "now". */
@@ -583,6 +585,8 @@ export interface OptimizerRun {
 }
 
 export interface MovesResponse extends Envelope {
+  /** True when Yahoo couldn't be read and this is the last saved plan, whatever the roster was then. */
+  yahoo_unavailable?: boolean;
   baseline: { p_win_week: ProbBand; expected_cats: number };
   /** All moves together. Not the sum of the single-move deltas (they interact). */
   with_all: { p_win_week: ProbBand; expected_cats: number; delta_vs_baseline: number } | null;

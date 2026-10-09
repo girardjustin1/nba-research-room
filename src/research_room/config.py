@@ -349,6 +349,16 @@ class SystemConfig(BaseModel):
     failed_job_lookback_days: int
 
 
+class YahooConfig(BaseModel):
+    """Live Yahoo reads (ingest/yahoo_live.py): how long a read may take before the app falls back
+    to the CSV inbox / manual entries and the last saved plan, and how long it then waits before
+    trying Yahoo again."""
+    page_time_limit_s: float = Field(gt=0)
+    job_time_limit_s: float = Field(gt=0)
+    parallel_reads: int = Field(ge=1)
+    pause_after_failure_s: float = Field(ge=0)
+
+
 class KalshiConfig(BaseModel):
     base_url: str
     prop_series: dict[str, str]
@@ -422,6 +432,7 @@ class Settings(BaseModel):
     backtest: BacktestConfig
     simulation: SimulationConfig
     system: SystemConfig
+    yahoo: YahooConfig
 
     @model_validator(mode="after")
     def _anchor_paths(self) -> Settings:

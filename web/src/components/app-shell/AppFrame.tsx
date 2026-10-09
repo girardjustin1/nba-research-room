@@ -15,6 +15,8 @@ import { LeagueBottomNav } from './nav/LeagueBottomNav';
 import { BellButton, MenuButton } from './nav/ShellButtons';
 import { DemoBadge } from './DemoBadge';
 import { YahooAttribution } from './YahooAttribution';
+import { YahooStatusBanner } from './YahooStatusBanner';
+import type { YahooStatus } from '../../api/system';
 import { PrototypeDataChip } from './PrototypeDataChip';
 
 export interface AppFrameProps {
@@ -74,6 +76,35 @@ function useUnread(path: string, mode: DataMode, apis: AppApis, inLeague: boolea
   return inLeague ? (n.data?.unread ?? null) : null;
 }
 
+/**
+ * How the last Yahoo read went (GET /system/yahoo), re-read on every navigation in live mode. The
+ * page that just loaded has read Yahoo by then, so this reflects it. Dismissing hides the banner
+ * until the state changes.
+ */
+function useYahooStatus(path: string, mode: DataMode, apis: AppApis, on: boolean) {
+  const [status, setStatus] = useState<YahooStatus | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  useEffect(() => {
+    if (mode !== 'live' || !on) return;
+    let live = true;
+    const t = setTimeout(() => {
+      apis.system.yahoo().then(
+        (s) => live && setStatus(s),
+        () => live && setStatus(null),
+      );
+    }, 1500);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [path, mode, apis, on]);
+  const key = status ? `${status.state}` : null;
+  return {
+    status: key !== null && key === dismissed ? null : status,
+    dismiss: () => setDismissed(key),
+  };
+}
+
 export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false, demo }: AppFrameProps) {
   const normalized = normalizePath(path || '');
   const route = findRoute(normalized);
@@ -98,6 +129,7 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
 
   const experience: Experience = route?.experience ?? 'draft';
   const unread = useUnread(normalized, mode, apis, experience === 'league');
+  const yahoo = useYahooStatus(normalized, mode, apis, !demo && (experience === 'league' || experience === 'draft'));
   const query = useMemo(() => new URLSearchParams(normalized.split('?')[1] ?? ''), [normalized]);
   const openDrawer = useCallback(() => setDrawer(true), []);
 
@@ -137,6 +169,11 @@ export function AppFrame({ path, navigate, mode, apis, initialDrawerOpen = false
         {mode === 'live' && !demo && (experience === 'league' || experience === 'draft') && (
           <YahooAttribution bottomOffset={experience === 'league' ? LEAGUE_NAV_HEIGHT : 0} />
         )}
+        <YahooStatusBanner
+          status={yahoo.status}
+          onDismiss={yahoo.dismiss}
+          bottomOffset={experience === 'league' ? LEAGUE_NAV_HEIGHT : 0}
+        />
         {mode === 'mock' && experience === 'draft' && <PrototypeDataChip endpoints={['Sample draft (Storybook mock API)']} bottomOffset={112} />}
         <ExperienceDrawer
           open={drawer}

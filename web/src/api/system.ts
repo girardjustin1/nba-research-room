@@ -133,12 +133,28 @@ export interface LiveScoreboardResponse {
   note: string | null;
 }
 
+/** GET /system/yahoo: how the last live Yahoo read went (no Yahoo data in it). */
+export type YahooReadState = 'live' | 'off' | 'slow' | 'down' | 'throttled' | 'no_access';
+
+export interface YahooStatus {
+  state: YahooReadState;
+  checked_at: string | null;
+  seconds: number | null;
+  /** Plain words for the page, written by the engine. */
+  message: string;
+  /** slow, down, throttled or no_access: pages show my entries and the last saved plan. */
+  degraded: boolean;
+  /** Pages are skipping Yahoo for a short while after a failed read. */
+  paused: boolean;
+}
+
 export interface SystemApi {
   health(): Promise<HealthResponse>;
   readiness(): Promise<ReadinessResponse>;
   models(): Promise<ModelsResponse>;
   scoreboard(): Promise<LiveScoreboardResponse>;
   notes(): Promise<NotesResponse>;
+  yahoo(): Promise<YahooStatus>;
 }
 
 export function createSystemApi(base = '/api', fetchImpl?: FetchLike): SystemApi {
@@ -148,5 +164,6 @@ export function createSystemApi(base = '/api', fetchImpl?: FetchLike): SystemApi
     models: () => seasonGet(base, '/system/models', fetchImpl),
     scoreboard: () => seasonGet(base, '/system/scoreboard', fetchImpl),
     notes: () => seasonGet(base, '/system/notes', fetchImpl),
+    yahoo: () => seasonGet(base, '/system/yahoo', fetchImpl),
   };
 }

@@ -631,8 +631,9 @@ def save_plan(
     return {"week": int(inp["week"]), "moves": len(moves["moves"])}
 
 
-def _saved(con, cfg: Settings, now: datetime | None):
-    """The latest saved plan for this week if my roster (live in `con`) still matches it."""
+def _saved(con, cfg: Settings, now: datetime | None, any_roster: bool = False):
+    """The latest saved plan for this week if my roster (live in `con`) still matches it; with
+    `any_roster` (Yahoo couldn't be read, so the roster isn't known) the latest for this week."""
     when = pd.Timestamp(now or store.utcnow())
     when = when if when.tzinfo else when.tz_localize("UTC")
     week = schedule.week_of(when.tz_convert(matchup.ET).date(), cfg.season)
@@ -645,6 +646,13 @@ def _saved(con, cfg: Settings, now: datetime | None):
             [me, me],
         ).fetchall()
     ]
+    if week is not None and any_roster:
+        row = con.execute(
+            """SELECT moves, recommended, run_at FROM saved_plans WHERE week = ?
+               ORDER BY saved_at DESC LIMIT 1""",
+            [week],
+        ).fetchone()
+        return row, when
     if week is None or not ids:
         return None, when
     row = con.execute(
@@ -655,16 +663,37 @@ def _saved(con, cfg: Settings, now: datetime | None):
     return row, when
 
 
+YAHOO_DOWN_NOTE = (
+    "Yahoo couldn't be read just now, so this is the plan saved by the last run; it assumes the "
+    "roster you had then"
+)
+
+
+def _fallback(con, cfg: Settings, now: datetime | None, yahoo_down: bool):
+    """(_saved row, when, whether it is the Yahoo-down fallback): the plan for my live roster, else,
+    when Yahoo couldn't be read, this week's latest plan whatever the roster was."""
+    row, when = _saved(con, cfg, now)
+    if row is None and yahoo_down:
+        row, when = _saved(con, cfg, now, any_roster=True)
+        return row, when, row is not None
+    return row, when, False
+
+
 def saved_moves_response(
-    con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
+    con: duckdb.DuckDBPyConnection,
+    cfg: Settings | None = None,
+    now: datetime | None = None,
+    yahoo_down: bool = False,
 ) -> dict | None:
     """MovesResponse from the saved plan, or None when there is none for this week and roster
-    (the page then solves live). Acquisitions used come from the live matchup."""
+    (the page then solves live). Acquisitions used come from the live matchup. With `yahoo_down`
+    (this request couldn't read Yahoo) a plan saved for another roster is shown, marked so."""
     cfg = cfg or settings()
-    row, when = _saved(con, cfg, now)
+    row, when, fallback = _fallback(con, cfg, now, yahoo_down)
     if row is None:
         return None
     resp = json.loads(row[0])
+    resp["yahoo_unavailable"] = fallback
     used = con.execute(
         """SELECT acquisitions_used FROM yahoo_matchups WHERE team_id = ?
            ORDER BY snapshot_at DESC LIMIT 1""",
@@ -678,20 +707,27 @@ def saved_moves_response(
             "module": "optimizer",
             "as_of": pd.Timestamp(row[2]).isoformat(),
             "run_id": None,
-            "note": "The plan saved by the last run; rostered % isn't shown (Yahoo data isn't kept)",
+            "note": YAHOO_DOWN_NOTE if fallback
+            else "The plan saved by the last run; rostered % isn't shown (Yahoo data isn't kept)",
         }
     )
     return resp
 
 
 def with_saved_recommended(
-    resp: dict, con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
+    resp: dict,
+    con: duckdb.DuckDBPyConnection,
+    cfg: Settings | None = None,
+    now: datetime | None = None,
+    yahoo_down: bool = False,
 ) -> dict | None:
-    """with_recommended from the saved plan, or None when there is none for this week and roster."""
+    """with_recommended from the saved plan, or None when there is none for this week and roster
+    (with `yahoo_down`, this week's latest plan, marked so)."""
     cfg = cfg or settings()
-    row, _when = _saved(con, cfg, now)
+    row, _when, fallback = _fallback(con, cfg, now, yahoo_down)
     if row is None:
         return None
+    resp["yahoo_unavailable"] = fallback
     if resp.get("scenarios") and row[1]:
         rec = json.loads(row[1])
         resp["scenarios"].append(rec)
@@ -701,7 +737,7 @@ def with_saved_recommended(
             "module": "optimizer",
             "as_of": pd.Timestamp(row[2]).isoformat(),
             "run_id": None,
-            "note": "The plan saved by the last run",
+            "note": YAHOO_DOWN_NOTE if fallback else "The plan saved by the last run",
         }
     )
     return resp

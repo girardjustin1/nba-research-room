@@ -79,6 +79,30 @@ def _with_backoff(fn, sleep=None):
     return call
 
 
+NO_ACCESS = ("401", "403", "not authorized", "forbidden", "isn't among this account")
+
+
+def problem(exc: BaseException) -> str:
+    """What went wrong with a read, in the app's terms: "no_access" (Yahoo refuses this app or
+    league), "throttled" (still throttled after the backoff) or "down" (anything else)."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    if any(t in text for t in NO_ACCESS):
+        return "no_access"
+    if any(t in text for t in THROTTLED):
+        return "throttled"
+    return "down"
+
+
+def _pmap(fn, items: list, workers: int) -> list:
+    """fn over items, `workers` at a time (1 = in order, one at a time); results in input order."""
+    if workers <= 1 or len(items) <= 1:
+        return [fn(x) for x in items]
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=min(workers, len(items))) as ex:
+        return list(ex.map(fn, items))
+
+
 class YahooWriteBlocked(RuntimeError):
     """Something tried to act inside Yahoo. This app only reads."""
 
@@ -188,8 +212,10 @@ class ApiBackend:
         week: int | None = None,
         now: datetime | None = None,
         team_ids: list[int] | None = None,
+        workers: int = 1,
     ) -> None:
         self.lg, self.game, self.cfg = league, game_key, cfg or settings()
+        self.workers = workers   # Yahoo calls in flight at once (settings.yahoo.parallel_reads)
         self.week, self.now = week, now
         self.team_ids = set(team_ids) if team_ids else None   # rosters of these teams only
         # Each snapshot read once for this one load (one job or page); never kept beyond it.
@@ -203,9 +229,10 @@ class ApiBackend:
         return self._teams
 
     def details(self, ids: list[int]) -> dict[int, dict]:
+        batches = [[int(x) for x in ids[i : i + DETAIL_BATCH]] for i in range(0, len(ids), DETAIL_BATCH)]
         out = {}
-        for i in range(0, len(ids), DETAIL_BATCH):
-            for d in self.lg.player_details([int(x) for x in ids[i : i + DETAIL_BATCH]]) or []:
+        for got in _pmap(lambda b: self.lg.player_details(b) or [], batches, self.workers):
+            for d in got:
                 out[int(d.get("player_id"))] = d
         return out
 
@@ -218,11 +245,11 @@ class ApiBackend:
         return _frame(rows, "teams")
 
     def roster(self) -> pd.DataFrame:
+        keys = [k for k in self.teams_raw() if self.team_ids is None or _team_id(k) in self.team_ids]
+        got = _pmap(lambda k: self.lg.to_team(k).roster() or [], keys, self.workers)
         rows = []
-        for key in self.teams_raw():
-            if self.team_ids is not None and _team_id(key) not in self.team_ids:
-                continue
-            for p in self.lg.to_team(key).roster() or []:
+        for key, players in zip(keys, got, strict=True):
+            for p in players:
                 rows.append(
                     {
                         "team_id": _team_id(key),
@@ -237,8 +264,8 @@ class ApiBackend:
 
     def players(self) -> pd.DataFrame:
         seen: dict[int, dict] = {}
-        for pos in POSITIONS:
-            for p in self.lg.free_agents(pos) or []:
+        for got in _pmap(lambda pos: self.lg.free_agents(pos) or [], list(POSITIONS), self.workers):
+            for p in got:
                 seen.setdefault(int(p["player_id"]), p)
         det = self.details(list(seen))
         rows = [
@@ -318,6 +345,13 @@ class ApiBackend:
             self._frames[name] = df
         return self._frames[name]
 
+    def prefetch(self, parts) -> None:
+        """Read the snapshots asked for now, independent ones side by side (the teams first: the
+        others need them). Kept in this backend only, for this one load."""
+        self.teams_raw()
+        names = [n for n in parts if n in SCHEMAS]
+        _pmap(self._get, names, self.workers)
+
     def available(self, parts=None) -> dict[str, datetime]:
         """Only the snapshots asked for are read (a page needs a few calls, not the whole league)."""
         out = {}
@@ -345,6 +379,7 @@ def league_facts(league: ReadOnly, cfg: Settings | None = None) -> dict:
         c.get("display_name") for c in (league.stat_categories() or []) if c.get("position_type", "P") == "P"
     ]
     teams = league.teams() or {}
+    stat_ids = _stat_ids(league)
     order = {int(t["draft_position"]): _team_id(k) for k, t in teams.items() if t.get("draft_position")}
     weeks = []
     start, end = int(s.get("start_week") or 1), int(s.get("end_week") or league.end_week() or 0)
@@ -360,12 +395,34 @@ def league_facts(league: ReadOnly, cfg: Settings | None = None) -> dict:
         "uses_keepers": s.get("uses_keepers") if "uses_keepers" in s else s.get("is_keeper_league"),
         "roster": roster or None,
         "categories": cats or None,
+        "stat_ids": stat_ids,
         "max_weekly_adds": s.get("max_weekly_adds") or s.get("max_adds"),
         "playoff_start_week": s.get("playoff_start_week"),
         "trade_end_date": s.get("trade_end_date"),
         "draft_order": [order[k] for k in sorted(order)] or None,
         "weeks": weeks or None,
     }
+
+
+def _stat_ids(league: ReadOnly) -> dict[str, int] | None:
+    """{label: Yahoo stat id} of the league's scoring categories, from the raw league settings (the
+    library's stat_categories() drops the ids). None when Yahoo didn't say (reported, not guessed)."""
+    inner = object.__getattribute__(league, "_inner")
+    handler = getattr(inner, "yhandler", None)
+    if handler is None or not hasattr(handler, "get_settings_raw"):
+        return None
+    raw = _with_backoff(handler.get_settings_raw)(inner.league_id)
+    out = {}
+    for cats in _find(raw, "stat_categories"):
+        for st in _find(cats, "stat"):
+            if (
+                isinstance(st, dict)
+                and "stat_id" in st
+                and not st.get("is_only_display_stat")
+                and str(st.get("position_type", "P")) == "P"
+            ):
+                out[str(st.get("display_name"))] = int(st["stat_id"])
+    return out or None
 
 
 def compare(facts: dict, cfg: Settings | None = None) -> list[dict]:
@@ -383,6 +440,7 @@ def compare(facts: dict, cfg: Settings | None = None) -> list[dict]:
         ("keepers", facts.get("uses_keepers"), bool(cfg.draft.keepers)),
         ("roster slots", facts.get("roster"), list(cfg.roster.slots)),
         ("categories", facts.get("categories"), [c.label for c in cfg.categories]),
+        ("category stat ids", facts.get("stat_ids"), {c.label: c.yahoo_stat_id for c in cfg.categories}),
         ("weekly acquisitions", facts.get("max_weekly_adds"), cfg.transactions.max_acquisitions_per_week),
         ("draft order", order, list(cfg.draft.order) or None),
         (

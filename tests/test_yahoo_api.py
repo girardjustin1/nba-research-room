@@ -45,7 +45,27 @@ class FakeTeam:
         raise AssertionError("the guard should have stopped this")
 
 
+class FakeHandler:
+    """The library's raw-request handler: only the league settings read is used (stat ids)."""
+
+    ids = {"FG%": 5, "FT%": 8, "3PTM": 10, "PTS": 12, "REB": 15, "AST": 16, "ST": 17, "BLK": 18, "TO": 19}
+
+    def get_settings_raw(self, league_id):
+        stats = [
+            {"stat": {"stat_id": i, "display_name": d, "position_type": "P"}} for d, i in self.ids.items()
+        ]
+        stats.append({"stat": {"stat_id": 9004003, "display_name": "FGM/A", "position_type": "P",
+                               "is_only_display_stat": "1"}})
+        return {"fantasy_content": {"league": [{"league_key": league_id},
+                                               {"settings": [{"stat_categories": {"stats": stats}}]}]}}
+
+
 class FakeLeague:
+    league_id = f"{GAME}.l.79805"
+
+    def __init__(self):
+        self.yhandler = FakeHandler()
+
     def teams(self):
         return {
             tkey(1): {
@@ -259,6 +279,30 @@ def test_league_facts_are_set_beside_our_settings(lg):
     assert rows["keepers"]["status"] == "match" and rows["weekly acquisitions"]["status"] == "match"
     assert rows["my draft slot"]["yahoo"] == 1  # team 11 picks first in this fake
     assert rows["week dates"]["status"] in ("match", "differs")  # our calendar has more weeks than the fake
+    assert rows["category stat ids"]["status"] == "match"
+
+
+def test_a_wrong_category_stat_id_is_caught(monkeypatch):
+    league = FakeLeague()
+    league.yhandler.ids = {**FakeHandler.ids, "BLK": 99}
+    lg = yahoo_api.ReadOnly(league, yahoo_api.READ_LEAGUE)
+    rows = {r["fact"]: r for r in yahoo_api.compare(yahoo_api.league_facts(lg, settings()), settings())}
+    ids = rows["category stat ids"]
+    assert ids["status"] == "differs" and ids["yahoo"]["BLK"] == 99
+
+
+def test_parallel_reads_give_the_same_snapshots(lg):
+    one = yahoo_api.ApiBackend(lg, GAME, settings(), now=NOW, workers=1)
+    four = yahoo_api.ApiBackend(lg, GAME, settings(), now=NOW, workers=4)
+    four.prefetch(tuple(yahoo.SCHEMAS))
+    for name in yahoo.SCHEMAS:
+        pd.testing.assert_frame_equal(one.read(name), four.read(name))
+
+
+def test_read_problems_are_named():
+    assert yahoo_api.problem(RuntimeError('{"error": {"description": "Not authorized."}}')) == "no_access"
+    assert yahoo_api.problem(RuntimeError("HTTP 999 Request denied")) == "throttled"
+    assert yahoo_api.problem(ConnectionError("reset by peer")) == "down"
 
 
 def test_no_write_call_is_on_the_allowed_lists():
@@ -292,3 +336,79 @@ def test_the_live_read_falls_back_to_the_csv_inbox_when_the_api_fails(con, monke
     out = REAL_ATTACH(con, cfg, yahoo_live.PAGE)
     assert out["source"] == "csv" and "Yahoo is down" in out["api_error"]
     assert out["loaded"] == {"teams": 1}
+    assert out["yahoo"]["state"] == "down" and out["yahoo"]["degraded"]
+
+
+def _cfg(tmp_path, **yahoo_settings):
+    cfg = settings()
+    return cfg.model_copy(update={
+        "paths": cfg.paths.model_copy(update={"inbox_dir": tmp_path}),
+        "yahoo": cfg.yahoo.model_copy(update=yahoo_settings),
+    })
+
+
+def test_a_slow_read_gives_up_on_time_and_pages_then_skip_yahoo(con, monkeypatch, tmp_path):
+    import time
+
+    from research_room.ingest import yahoo_live
+    from tests.conftest import REAL_ATTACH
+
+    monkeypatch.setattr(yahoo_api, "signed_in", lambda: True)
+    calls = []
+
+    def slow(*a, **k):
+        calls.append(1)
+        time.sleep(0.6)
+        raise AssertionError("past its limit: the result is dropped")
+
+    monkeypatch.setattr(yahoo_live, "_read_api", slow)
+    cfg = _cfg(tmp_path, page_time_limit_s=0.1, pause_after_failure_s=60)
+    started = time.monotonic()
+    out = REAL_ATTACH(con, cfg, yahoo_live.PAGE)
+    assert time.monotonic() - started < 0.5 and out["source"] == "csv"
+    assert out["yahoo"]["state"] == "slow" and out["yahoo"]["paused"]
+    assert "showing your own entries" in out["yahoo"]["message"]
+    again = REAL_ATTACH(con, cfg, yahoo_live.PAGE)                     # a page moments later: no wait
+    assert len(calls) == 1 and again["yahoo"]["state"] == "slow" and "skipped" in again["api_error"]
+    REAL_ATTACH(con, cfg, yahoo_live.PAGE, time_limit=0.1)              # a job always tries
+    assert len(calls) == 2
+    assert yahoo_live.status()["state"] == "slow"
+
+
+def test_a_good_read_is_live_and_lifts_the_pause(con, monkeypatch, tmp_path):
+    from research_room.ingest import yahoo_live
+    from tests.conftest import REAL_ATTACH
+
+    monkeypatch.setattr(yahoo_api, "signed_in", lambda: True)
+    state = {"fail": True}
+
+    def connect(cfg=None):
+        if state["fail"]:
+            raise RuntimeError('{"error": {"description": "Not authorized."}}')
+        return yahoo_api.ReadOnly(FakeLeague(), yahoo_api.READ_LEAGUE), GAME
+
+    monkeypatch.setattr(yahoo_api, "connect", connect)
+    cfg = _cfg(tmp_path, page_time_limit_s=5, pause_after_failure_s=60, parallel_reads=4)
+    out = REAL_ATTACH(con, cfg, yahoo_live.PAGE)
+    assert out["yahoo"]["state"] == "no_access" and "isn't letting" in out["yahoo"]["message"]
+    state["fail"] = False
+    REAL_ATTACH(con, cfg, yahoo_live.PAGE)                               # paused: still skipped
+    assert yahoo_live.status()["state"] == "no_access"
+    out = REAL_ATTACH(con, cfg, yahoo_live.PAGE, time_limit=5)           # the nightly run gets through
+    assert out["source"] == "api" and out["yahoo"]["state"] == "live" and not out["yahoo"]["paused"]
+    me = cfg.league.my_team_id
+    teams = {r[0] for r in con.execute("SELECT DISTINCT team_id FROM yahoo_rosters").fetchall()}
+    assert teams <= {me, 1}                                              # me and this week's opponent
+    assert REAL_ATTACH(con, cfg, yahoo_live.PAGE)["yahoo"]["state"] == "live"
+
+
+def test_the_status_route(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from research_room import api
+
+    db = tmp_path / "s.duckdb"
+    store.connect(db).close()
+    client = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
+    body = client.get("/system/yahoo").json()
+    assert body["state"] == "off" and body["degraded"] is False and "message" in body

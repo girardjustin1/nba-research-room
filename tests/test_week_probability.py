@@ -151,7 +151,7 @@ def test_moves_need_players_csv_but_probability_still_answers(client):
     assert any("players.csv" in (p["note"] or "") for p in prob["provenance"])
 
 
-def test_the_saved_plan_serves_the_moves_page_without_yahoo_fields(client):
+def test_the_saved_plan_serves_the_moves_page_without_yahoo_fields(client, monkeypatch):
     c, db = client
     con = store.connect(db)
     _free_agents(con)
@@ -176,3 +176,18 @@ def test_the_saved_plan_serves_the_moves_page_without_yahoo_fields(client):
     con.close()
     again = c.get("/season/moves", params={"now": NOW}).json()
     assert not any("saved by the last run" in (p["note"] or "") for p in again["provenance"])
+    assert again.get("yahoo_unavailable") is not True
+
+    # Yahoo can't be read: the roster isn't known, so this week's latest plan is shown, marked so.
+    fake = yahoo_live.attach
+
+    def down(*a, **k):
+        return {**fake(*a, **k), "yahoo": {"degraded": True, "state": "slow", "message": "Yahoo is slow."}}
+
+    monkeypatch.setattr(yahoo_live, "attach", down)
+    fallback = c.get("/season/moves", params={"now": NOW}).json()
+    assert fallback["yahoo_unavailable"] is True
+    assert [m["move_id"] for m in fallback["moves"]] == [m["move_id"] for m in json.loads(stored)["moves"]]
+    assert any("Yahoo couldn't be read" in (p["note"] or "") for p in fallback["provenance"])
+    prob = c.get("/season/week/probability", params={"now": NOW}).json()
+    assert prob["yahoo_unavailable"] is True and prob["scenarios"][-1]["kind"] == "recommended"

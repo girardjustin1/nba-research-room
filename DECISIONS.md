@@ -1222,3 +1222,27 @@ fixed roster), following the plan 51.4%, a lift of +36 points (80% range +31 to 
 assume a fixed roster were too optimistic. The number is a judgment, not measured: revisit at the
 week-3 review against what opponents actually add (Yahoo's matchup shows each side's adds).
 
+
+**Yahoo go-live kit and slow-Yahoo handling (2026-10-09).** Built ahead of API access (still
+refused as of today: signed in, but Yahoo won't show the league to the app).
+- `make yahoo-check` is the go-live step. It sets each league fact beside settings.yaml, now
+  including the 9 categories' Yahoo stat ids (read from the raw league settings; the library's
+  category list drops them). A wrong id would have read that category as 0 in every live matchup
+  without an error. It then times one page's read and one nightly run's read against the limits
+  below, printing counts and seconds only. While access is pending it says so and stops.
+- Reads run side by side: the matchup first (it names this week's opponent), then both rosters,
+  the five free-agent lists and the detail batches in parallel (`yahoo.parallel_reads: 4`; 1 turns
+  it off). The same snapshots either way (tested).
+- Time limits: a page waits `page_time_limit_s: 8`, a nightly / pre-game run `job_time_limit_s:
+  90`. Past the limit, or on an error, the read falls back to the CSV inbox and my own entries, and
+  pages skip Yahoo for `pause_after_failure_s: 120` so each page doesn't wait again. Jobs always
+  try. A read past its limit finishes on its own thread and its result is dropped.
+- Failures are named: no access (401/403), throttled (still limited after the 2-4-8-16 s backoff),
+  slow (over the limit) and down (anything else). `GET /system/yahoo` reports the last read's
+  state, time and a sentence. It holds no Yahoo data, so it may live in memory between requests.
+  The app shows it as a banner on League and Draft pages (nothing while reads succeed or when not
+  signed in).
+- When Yahoo can't be read, the moves and weekly-odds pages show this week's latest saved plan
+  even if it was saved for a different roster, marked `yahoo_unavailable` with a note saying it
+  assumes the roster at the time. Before, an unknown roster meant no saved plan and a live solve
+  with no data. If my own roster entry is there, the plan for that roster is shown as usual.

@@ -14,9 +14,21 @@ The policy, enforced here and checked by tests/test_yahoo_data_policy.py:
 - Reads back off when Yahoo throttles them (yahoo_api.ReadOnly), and never write (read only).
 - Nothing here feeds an AI tool or a model fit: the tables are read by the decision code only.
 - Every page that can show Yahoo data carries the attribution (web YahooAttribution).
+
+When Yahoo is slow or down: the reads run side by side (settings.yahoo.parallel_reads) on a worker
+thread with a time limit (page_time_limit_s; jobs pass job_time_limit_s). A read that fails or runs
+out of time falls back to the CSV inbox and my manual entries, and pages then skip Yahoo for
+pause_after_failure_s so they don't each wait again. `status()` says how the last read went (no
+Yahoo data in it: a state, a time and a sentence) for the page's banner.
 """
 
 from __future__ import annotations
+
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -58,38 +70,117 @@ class _Limited:
         return df
 
 
+MESSAGES = {
+    "live": "Read from Yahoo just now.",
+    "off": "Not signed in to Yahoo: using your own entries.",
+    "slow": "Yahoo didn't answer in time: showing your own entries and the last saved plan.",
+    "down": "Yahoo couldn't be read: showing your own entries and the last saved plan.",
+    "throttled": "Yahoo is limiting requests: showing your own entries and the last saved plan.",
+    "no_access": "Yahoo isn't letting the app read the league yet: using your own entries.",
+}
+DEGRADED = frozenset({"slow", "down", "throttled", "no_access"})
+
+_lock = threading.Lock()
+_last: dict = {"state": "off", "checked_at": None, "seconds": None}
+_paused_until = 0.0     # time.monotonic(): pages skip Yahoo until then, after a failed read
+
+
+def status() -> dict:
+    """How the last Yahoo read went: state (live, off, slow, down, throttled, no_access), when, how
+    long it took, a sentence for the page, and whether pages are skipping Yahoo for now. No Yahoo
+    data, so it can be kept in memory between requests."""
+    with _lock:
+        out = dict(_last)
+        out["paused"] = time.monotonic() < _paused_until
+    out["message"] = MESSAGES[out["state"]]
+    out["degraded"] = out["state"] in DEGRADED
+    return out
+
+
+def _record(state: str, seconds: float | None, pause_s: float = 0.0) -> dict:
+    global _paused_until
+    with _lock:
+        _last.update(state=state, checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                     seconds=None if seconds is None else round(seconds, 2))
+        if state in DEGRADED and pause_s > 0:
+            _paused_until = time.monotonic() + pause_s
+        elif state == "live":
+            _paused_until = 0.0
+    return status()
+
+
+def reset() -> None:
+    """Forget the last read and any pause (tests; `make yahoo-check` before its speed check)."""
+    global _paused_until
+    with _lock:
+        _last.update(state="off", checked_at=None, seconds=None)
+        _paused_until = 0.0
+
+
+def _read_api(cfg: Settings, want: tuple[str, ...], me: int):
+    """Every API read for this load, done up front (so loading into the connection makes no more
+    calls): the matchup first when rosters are wanted (it names this week's opponent), then the
+    rest side by side."""
+    league, game = yahoo_api.connect(cfg)
+    api = yahoo_api.ApiBackend(league, game, cfg, workers=cfg.yahoo.parallel_reads)
+    if "roster" in want:
+        api.prefetch(("matchup",))
+        api.team_ids = {me} | ({o} if (o := _opponent(api.read("matchup"), me)) is not None else set())
+    api.prefetch(want)
+    return api
+
+
 def attach(
-    con, cfg: Settings | None = None, parts: tuple[str, ...] | None = None, show_names: bool = False
+    con,
+    cfg: Settings | None = None,
+    parts: tuple[str, ...] | None = None,
+    show_names: bool = False,
+    time_limit: float | None = None,
 ) -> dict:
     """Fill this connection's in-memory Yahoo tables with the parts asked for (default all):
-    the API when signed in, else the CSV inbox; an API failure falls back to the CSV inbox and
-    says so. Returns where the data came from, what was loaded and the names that didn't resolve."""
+    the API when signed in, else the CSV inbox. An API read that fails or takes longer than
+    `time_limit` seconds (default settings.yahoo.page_time_limit_s) falls back to the CSV inbox and
+    says so; for a while after, page reads (no `time_limit` given) skip the API
+    (settings.yahoo.pause_after_failure_s). Returns
+    where the data came from, what was loaded, the names that didn't resolve and `yahoo`, the read's
+    status (see `status`)."""
     cfg = cfg or settings()
     want = tuple(parts or ALL)
     if "roster" in want and "matchup" not in want:
         want = (*want, "matchup")  # the opponent decides whose roster loads
     me = cfg.league.my_team_id
-    error = None
+    page = time_limit is None   # pages respect the pause; jobs always try Yahoo
+    limit = time_limit or cfg.yahoo.page_time_limit_s
+    error, state = None, "off"
     if yahoo_api.signed_in():
-        try:
-            league, game = yahoo_api.connect(cfg)
-            api = yahoo_api.ApiBackend(league, game, cfg)
-            if "roster" in want:
-                api.team_ids = {me} | (
-                    {o} if (o := _opponent(api.read("matchup"), me)) is not None else set()
-                )
-            out = {"source": "api", **yahoo.load_live(con, _Limited(api, me), cfg, want, show_names)}
-            return _with_manual_opponent(con, cfg, want, out)
-        except yahoo.YahooCsvError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - the CSV inbox still works; reported
-            error = f"{type(exc).__name__}: {exc}"[:200]
+        now = status()
+        if page and now["paused"]:
+            state = now["state"]   # failed moments ago: don't make this page wait again
+            error = "skipped: Yahoo failed moments ago"
+        else:
+            started = time.monotonic()
+            ex = ThreadPoolExecutor(max_workers=1, thread_name_prefix="yahoo-read")
+            try:
+                api = ex.submit(_read_api, cfg, want, me).result(timeout=limit)
+                out = {"source": "api", **yahoo.load_live(con, _Limited(api, me), cfg, want, show_names)}
+                out["yahoo"] = _record("live", time.monotonic() - started)
+                return _with_manual_opponent(con, cfg, want, out)
+            except yahoo.YahooCsvError:
+                raise
+            except FutureTimeout:
+                state, error = "slow", f"no answer within {limit:g} s"
+            except Exception as exc:  # noqa: BLE001 - the CSV inbox still works; reported
+                state, error = yahoo_api.problem(exc), f"{type(exc).__name__}: {exc}"[:200]
+            finally:
+                ex.shutdown(wait=False)   # a read past its limit finishes on its own; its result is dropped
+            _record(state, time.monotonic() - started, cfg.yahoo.pause_after_failure_s)
     out = {
         "source": "csv",
         **yahoo.load_live(con, _Limited(yahoo.CsvBackend(cfg.paths.inbox_dir), me), cfg, want, show_names),
     }
     if error:
         out["api_error"] = error
+    out["yahoo"] = status() if state != "off" else _record("off", None)
     return _with_manual_opponent(con, cfg, want, out)
 
 

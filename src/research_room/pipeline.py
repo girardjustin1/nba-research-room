@@ -189,7 +189,7 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
 def _yahoo(con: duckdb.DuckDBPyConnection, cfg: Settings, parts=None) -> dict:
     """Yahoo, live for this run only: the API once signed in (read only), else the CSV inbox, into
     this connection's in-memory tables. Nothing Yahoo is stored."""
-    return yahoo_live.attach(con, cfg, parts)
+    return yahoo_live.attach(con, cfg, parts, time_limit=cfg.yahoo.job_time_limit_s)
 
 
 def _save_plan(con: duckdb.DuckDBPyConnection, cfg: Settings, read_free_agents: bool = False) -> dict:

@@ -35,6 +35,7 @@ def opponent_static(monkeypatch):
 @pytest.fixture(autouse=True)
 def fake_yahoo(monkeypatch):
     """What "Yahoo" returns in this test: every frame the test wrote to a Yahoo table."""
+    yahoo_live.reset()   # no Yahoo status or pause carried over from another test
     seeded: list[tuple[str, pd.DataFrame]] = []
     real_upsert = store.upsert
 
@@ -43,7 +44,7 @@ def fake_yahoo(monkeypatch):
             seeded.append((table, df.copy()))
         return real_upsert(c, table, df)
 
-    def attach(c, cfg=None, parts=None, show_names=False):
+    def attach(c, cfg=None, parts=None, show_names=False, time_limit=None):
         upsert.replaying = True
         try:
             for table, df in seeded:

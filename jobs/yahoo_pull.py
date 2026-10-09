@@ -22,7 +22,7 @@ def main() -> int:
         return 1
     con = store.connect(read_only=True)
     try:
-        out = yahoo_live.attach(con, cfg, show_names=True)
+        out = yahoo_live.attach(con, cfg, show_names=True, time_limit=cfg.yahoo.job_time_limit_s)
     finally:
         con.close()                      # the in-memory Yahoo tables go with it
     print(json.dumps(out, indent=1))
