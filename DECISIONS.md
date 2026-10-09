@@ -1129,3 +1129,53 @@ opponent entered produced the week's matchup odds (the test entries were removed
 lineup step had no games to set on the simulated night. The add/drop plan still needs the free
 agents (players.csv or the API). "No roster yet" messages now point to these screens.
 
+**Opponent streaming: modeled, measured, off by default (2026-10-09).** Until now the weekly
+odds, the add/drop plan and the backtest all held the opponent's roster fixed for the week, so the
+backtest's "48% → 88%" was against an opponent who never adds anyone. `streaming.py`, settings
+`opponent:` (`streaming: false`, `adds_per_week: 2`, `adds_per_day: 1`).
+- The rule (greedy, day by day, from the first day an add counts): his weakest player without a
+  game that day (least value over the rest of the week) is swapped for the free agent with a game
+  that day worth the most over the rest of the week, if he is worth more. Value is the optimizer's
+  own (`day_values` with `category_weights` taken from his side of the matchup). Players in an IL
+  slot or listed injured are never dropped; a free agent is added once a week at most; my roster is
+  never touched. Adds per week are capped at the league's 4, less his adds so far when Yahoo's
+  matchup gives them (otherwise none assumed, listed in `missing`).
+- Shared pool, one way: he picks first, and his adds are taken out of my free agents. He doesn't
+  react to my plan, so a player my plan adds stays open to him. Simplification, stated.
+- When on: `matchup.week_inputs` gives his days from the streamed rosters (the odds, the do-nothing
+  path, the "with moves" line and every move's value then face him); without a player list his
+  roster stays fixed and `missing` says so. The odds page and pre-game run read the free agents only
+  when it's on (`yahoo_live.odds_parts`); the odds' provenance names his assumed adds.
+  `backtest.run(opponent_streams=True)` (`make backtest ARGS=--opponent-streams`) makes the
+  replay's opponent stream by the same rule on Sunday's projections, plays his streamed rosters, and
+  also replays the plan made the old way (his roster fixed, his adds gone) against him. Rows record
+  `opp_streams`, `opp_adds` and the fixed-roster odds (`p_dn_static`).
+- Measured on 2025-26, same league and the same 140 team-weeks (paired; the fixed-roster odds in
+  the streaming runs equal the static run's exactly). 80% ranges resample matchups.
+
+| Opponent | Do nothing won | Plan won | Lift (80%) | Odds Brier | My moves/wk |
+|---|---|---|---|---|---|
+| Fixed roster (today) | 47.9% | 88.2% | +40.4 (+35.0 to +45.4) | 0.187 | 3.97 |
+| Streams, 2 adds/wk | 23.6% | 70.4% | +46.8 (+41.4 to +52.1) | 0.155 (fixed-roster odds: 0.211) | 3.91 |
+| Streams, 4 adds/wk | 15.4% | 51.4% | +36.1 (+30.7 to +41.1) | 0.112 (fixed-roster odds: 0.222) | 3.69 |
+
+- What changed: the odds. Against a streaming opponent the fixed-roster odds run far too high
+  (predicted 46% on average, won 24% with 2 adds); the streaming odds track it (Brier 0.155 vs
+  0.211 on the same outcomes, paired difference −0.055, 80% −0.081 to −0.028). This is partly
+  circular: the replay's opponent follows exactly the rule the odds assume.
+- What didn't: the moves. Valuing my moves against his pickups changed the result in 17 of 140
+  weeks with 2 adds (8 better, 9 worse; +0.0 pts, 80% −3.2 to +3.6) and 24 with 4 (13 and 11;
+  +1.8 pts, −1.8 to +5.7). Not shown to help. The plan's lift holds against a streamer (+47 and
+  +36 points), so following it still matters as much; it just starts from lower odds.
+- Why the effect is so large here, and likely smaller in the league: the simulated league never
+  changes its rosters after the draft and nobody else picks anyone up, so the free agents include
+  every breakout of the season, and two pickups are worth about one category a week (his
+  categories 4.5 → 5.5). In the real league 13 managers compete for a thinner pool. 2 adds a week
+  is an assumption, not measured (no league transaction data is kept).
+- Default: off, pending the owner's decision. With it off, production is unchanged: the backtest
+  with it off gives every row identical to the code before this change (checked, all 140), which
+  reproduces the documented 48% → 88%, and every existing test passes. Turning it on would lower the weekly
+  odds shown, by an amount set mostly by `adds_per_week`, and leave the recommended moves almost
+  unchanged. The season's live scoreboard (weekly-odds Brier) is the check of whether the odds run
+  high against real opponents, which would be the case for turning it on.
+

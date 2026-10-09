@@ -186,6 +186,17 @@ optimizer:                     # weekly add/drop plan (research_room/optimizer.p
   solver_time_limit_s: 20
   saved_plan_hours: 2          # pre-game runs re-save the plan (reading every free agent) at most this often
 
+opponent:                      # the opponent's in-week pickups (research_room/streaming.py; DECISIONS.md,
+                               # "Opponent streaming"). Off: his roster is fixed for the week, as before.
+  streaming: false             # on: the weekly odds and the add/drop plan assume he streams by this rule
+  # The rule: from the first day an add counts, each day his weakest player without a game (least value
+  # over the rest of the week; never one on the IL or listed injured) is swapped for the free agent with a
+  # game that day worth the most over the rest of the week, if he is worth more. Value is the optimizer's,
+  # from his side of the matchup. He picks first: his adds are not free agents for my plan.
+  adds_per_week: 2             # ASSUMED for a typical opponent (the league allows 4); less his adds so far
+                               # this week when Yahoo's matchup says
+  adds_per_day: 1              # at most this many swaps on one day
+
 backtest:                      # replay of a past season (research_room/backtest.py, make backtest)
   teams: 14                    # simulated league: snake draft on season-start projected value
   roster_size: 12              # non-IL roster spots

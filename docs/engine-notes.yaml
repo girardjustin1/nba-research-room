@@ -3,6 +3,22 @@
 # Public repo: never put Basketball Monster numbers, secrets or personal data here.
 
 notes:
+  - id: 2026-10-09-opponent-streaming
+    date: 2026-10-09
+    kind: finding
+    title: What if your opponent picks up players too? (off for now, your call)
+    body: >
+      The weekly odds and the add/drop plan have assumed your opponent never adds anyone during
+      the week. The app can now assume he streams like a typical manager (2 pickups a week: a
+      player with a game that day for one of his who has none). Replayed on last season, the moves
+      it recommends barely change, and following them still adds about 40 points of win chance.
+      What changes is the odds: against a streaming opponent the current odds run high. In the
+      replay that gap is large (about 46% shown vs 24% won), but the replay's free-agent pool is
+      richer than a real league's, so the real gap is likely smaller. It stays off until you
+      decide; the season's own scoreboard will show whether the odds run high against real
+      opponents. Switch: `opponent: streaming` in settings.yaml.
+    refs: [DECISIONS.md, src/research_room/streaming.py, config/settings.yaml]
+
   - id: 2026-10-08-yahoo-live
     date: 2026-10-08
     kind: update

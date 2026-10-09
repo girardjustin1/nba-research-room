@@ -53,8 +53,8 @@ doctor:  ## draft-night readiness: projections, Yahoo eligibility, slot, keepers
 markets:  ## archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
 	$(PY) jobs/markets.py
 
-backtest:  ## replay last season week by week: are the win odds honest, do the plans win more?
-	$(PY) jobs/backtest.py
+backtest:  ## replay last season week by week: are the win odds honest, do the plans win more? (ARGS=--opponent-streams)
+	$(PY) jobs/backtest.py $(ARGS)
 
 backtest-news:  ## replay last season day by day with the NBA injury reports: does game-day news help?
 	$(PY) jobs/backtest_news.py $(ARGS)

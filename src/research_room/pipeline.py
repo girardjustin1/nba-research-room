@@ -158,9 +158,10 @@ def run_pregame(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now
             return {"error": f"{type(exc).__name__}: {exc}"[:300]}
 
     with store.ingest_run(con, "pipeline", "pregame") as run:
-        # My team, this week's opponent and the matchup, live for this run only (never stored).
-        report["yahoo"] = step("yahoo", lambda: guarded("yahoo", "yahoo",
-                                                         lambda: _yahoo(con, cfg, yahoo_live.PAGE)))
+        # My team, this week's opponent and the matchup (and the free agents when the odds assume he
+        # streams), live for this run only (never stored).
+        parts = yahoo_live.odds_parts(cfg)
+        report["yahoo"] = step("yahoo", lambda: guarded("yahoo", "yahoo", lambda: _yahoo(con, cfg, parts)))
         report["x_feed"] = step("x feed", lambda: guarded("x feed", "x", lambda: x_feed.poll(con, cfg)))
         report["nba_report"] = step("nba injury report", lambda: guarded(
             "nba injury report", "nba_report", lambda: nba_injury_report.sync(con, cfg)))

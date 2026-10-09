@@ -12,6 +12,8 @@ Model:
 - Counted games. Each remaining day, each team's lineup comes from lineup.assign_day (10 active
   slots, eligibility, IL), valued like the daily lineup tool. Only starters with a game count, so
   a 12-game day on a 10-slot roster counts 10. The opponent is assumed to set its best lineup.
+  His roster is fixed for the week unless settings.opponent.streaming is on: then week_inputs
+  gives his days from the rosters his assumed pickups make (streaming.py).
 - A counted game adds the player's projected mean and variance (sd^2) per stat; percentages add
   makes, attempts and the binomial term, as in simulate.contributions.
 - Week total = live Yahoo total so far + projected remaining days. Yahoo gives FG%/FT% as ratios
@@ -360,12 +362,38 @@ def week_inputs(con, cfg: Settings | None = None, now: datetime | None = None) -
         miss.append({"key": "week_to_date", "label": "This week's totals so far aren't known",
                      "effect": "The opponent was entered by hand, with no Yahoo matchup: the whole week is "
                                "projected, including days already played."})
-    return {"week": week_no, "start": start, "end": end, "days": days, "now": now, "run_at": run,
-            "cats_as_of": cats_as_of, "me_id": me_id, "opp_id": opp_id,
-            "me": team_days(me_roster, proj, days, cfg), "opp": team_days(opp_roster, proj, days, cfg),
-            "me_roster": me_roster, "opp_roster": opp_roster, "proj": proj,
-            "me_done": me_done, "opp_done": opp_done, "missing": miss,
-            "var_mult": calibration.load_multipliers(con), "corr": calibration.load_correlation(con, cfg)}
+    inp = {"week": week_no, "start": start, "end": end, "days": days, "now": now, "run_at": run,
+           "cats_as_of": cats_as_of, "me_id": me_id, "opp_id": opp_id,
+           "me": team_days(me_roster, proj, days, cfg), "opp": team_days(opp_roster, proj, days, cfg),
+           "me_roster": me_roster, "opp_roster": opp_roster, "proj": proj,
+           "me_done": me_done, "opp_done": opp_done, "missing": miss,
+           "var_mult": calibration.load_multipliers(con), "corr": calibration.load_correlation(con, cfg)}
+    return _opponent_streams(con, inp, rows, cfg) if cfg.opponent.streaming else inp
+
+
+def _opponent_streams(con, inp: dict, rows: pd.DataFrame | None, cfg: Settings) -> dict:
+    """settings.opponent.streaming on: the opponent's days come from his streamed rosters
+    (streaming.py), picking from the free agents of the latest player list. Without one, his
+    roster stays fixed and the odds say so."""
+    from research_room import optimizer, streaming  # both import this module
+
+    pool = optimizer.free_agents(con, cfg)
+    if pool.empty:
+        inp["missing"].append({"key": "opponent_streaming",
+                               "label": "No free agents read for the opponent's pickups",
+                               "effect": "His roster is held fixed for the week (as with opponent "
+                                         "streaming off)."})
+        return inp
+    used = None
+    if rows is not None and "acquisitions_used" in rows:
+        r = rows.loc[rows["team_id"] == inp["opp_id"], "acquisitions_used"]
+        used = int(r.iloc[0]) if not r.empty and pd.notna(r.iloc[0]) else None
+    if used is None:
+        inp["missing"].append({"key": "opponent_acquisitions",
+                               "label": "The opponent's adds this week aren't known",
+                               "effect": f"Assumed none yet: up to {cfg.opponent.adds_per_week} adds "
+                                         "left for him."})
+    return streaming.apply(inp, pool, cfg, used or 0)
 
 
 def cats_lead(me_done: ToDate, opp_done: ToDate, cfg: Settings) -> dict[str, int]:

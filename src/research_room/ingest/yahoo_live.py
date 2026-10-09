@@ -27,6 +27,13 @@ ALL = yahoo.LIVE  # teams, roster, players, matchup
 PAGE = ("teams", "roster", "matchup")  # what most pages need: a few calls
 
 
+def odds_parts(cfg: Settings | None = None) -> tuple[str, ...]:
+    """What the weekly odds need: PAGE, plus the free agents when the odds assume the opponent
+    streams (settings.opponent.streaming; he picks from them)."""
+    cfg = cfg or settings()
+    return (*PAGE, "players") if cfg.opponent.streaming else PAGE
+
+
 def _opponent(matchup: pd.DataFrame, me: int) -> int | None:
     mine = matchup[matchup["team_id"] == me] if not matchup.empty else matchup
     return int(mine["opponent_team_id"].iloc[0]) if not mine.empty else None
