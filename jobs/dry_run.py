@@ -4,11 +4,13 @@ clock set to a chosen game day. The real store is never written.
 Usage: make dry-run                                  (opening night, settings.season.first_game_date)
        make dry-run ARGS="--day 2027-03-15"          (any game day)
        make dry-run ARGS="--with-x"                  (also reads X and calls the parser: paid)
+       make dry-run ARGS="--with-markets"            (also pulls TheRundown and Kalshi lines: paid)
 
 1. Copies the store (and the read state beside it) to data/dry-run/.
-2. Nightly run the night before DAY, at 23:30 Eastern (feeds on: BallDontLie, the NBA injury
-   report, markets; all public). Feeds can only return what exists today, so a future date's box
-   scores or report are honestly absent; those steps must fail softly, not stop the night.
+2. Nightly run the night before DAY, at 23:30 Eastern (feeds on: BallDontLie and the NBA injury
+   report; the paid feeds, X and the betting markets, are stubbed unless asked for). Feeds can
+   only return what exists today, so a future date's box scores or report are honestly absent;
+   those steps must fail softly, not stop the night.
 3. Pre-game run on DAY at 17:00 Eastern. X is replaced by a stub unless --with-x. Yahoo is read
    from the CSV inbox only: the sign-in file is never refreshed or written.
 4. Checks what a game day needs and prints ok, FAIL, or WAIT (waiting on the owner's Yahoo
@@ -49,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--day", type=date.fromisoformat, default=None)
     ap.add_argument("--with-x", action="store_true")
+    ap.add_argument("--with-markets", action="store_true")
     args = ap.parse_args(argv)
 
     import time_machine
@@ -78,6 +81,11 @@ def main(argv: list[str] | None = None) -> int:
     assert cfg.paths.db == db, "the dry run must never touch the real store"
     if not args.with_x:
         x_feed.poll = lambda con, cfg=None, **k: {"status": "skipped", "reason": "dry run: X stubbed"}
+    if not args.with_markets:   # TheRundown and Kalshi bill by usage: a dry run never calls them
+        pipeline.sync_markets = lambda con, cfg=None, day=None: {
+            "status": "skipped",
+            "reason": "dry run: markets stubbed",
+        }
 
     night = datetime.combine(day - timedelta(days=1), time(23, 30), ET)
     pre = datetime.combine(day, time(17, 0), ET)
