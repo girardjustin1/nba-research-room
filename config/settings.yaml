@@ -257,7 +257,7 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     requests_per_second: 8
   overlay:                     # market-informed projections (projections/market.py)
     enabled: true
-    stats: [pts, reb, ast]     # tested 2026-10-05: the market beat the baseline here (threes tied; others untested)
+    stats: [pts, reb, ast]     # tested 2026-10-05; threes, steals, blocks re-tested 2026-10-09: not shown (DECISIONS.md)
     sd_bounds: [0.5, 2.0]      # market spread kept within these multiples of the baseline's
     max_age_hours: 30          # ignore ladders older than this
   rundown:                     # sportsbook lines + player props (RUNDOWN_API_KEY)

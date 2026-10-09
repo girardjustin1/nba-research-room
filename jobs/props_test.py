@@ -14,7 +14,8 @@ Network: Kalshi's public, keyless API only (settings.markets.kalshi.base_url), a
 settings.props_test.requests_per_second, backing off on 429 and 5xx. Every response is cached as
 JSON under --cache (default data/props_test/kalshi_cache), so a re-run reads the cache.
 Reads the store only (RESEARCH_ROOM_DB points it at a copy). Writes data/props_test/<date>/
-(summary.json, rungs.csv, means.csv, unmatched.csv). Prints the verdict; changes nothing.
+(summary.json, rungs.csv, means.csv, unmatched.csv, listed.csv: every rung). Prints the verdict;
+changes nothing.
 """
 
 from __future__ import annotations
@@ -288,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     df.to_csv(out / "rungs.csv", index=False)
     means.to_csv(out / "means.csv", index=False)
     unmatched.to_csv(out / "unmatched.csv", index=False)
+    rungs.drop(columns=["kalshi_player"], errors="ignore").to_csv(out / "listed.csv", index=False)
     echo("\ndecisions: " + ", ".join(f"{s}: {d}" for s, d in summary["decisions"].items()))
     echo(f"saved to {out}")
     return 0
