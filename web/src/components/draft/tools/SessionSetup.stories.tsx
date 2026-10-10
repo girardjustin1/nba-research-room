@@ -27,3 +27,10 @@ export const StartFails: Story = {
     },
   },
 };
+/** Slot 6 and a punt chosen: the chosen slot is filled with a check, like the punt chips. */
+export const SlotAndPuntChosen: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Slot 6' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'FG%' }));
+  },
+};

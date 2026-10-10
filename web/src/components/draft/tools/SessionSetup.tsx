@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import CheckIcon from '@mui/icons-material/Check';
 import Typography from '@mui/material/Typography';
 import type { Category, Session } from '../../../api/types';
 import { errorMessage } from '../../../api/client';
@@ -79,33 +79,47 @@ export function SessionSetup({ session, teams, categories, onStart, onResume }: 
           <Typography variant="subtitle2" component="h2" id="slot-label" sx={{ mb: 1 }}>
             My draft slot
           </Typography>
-          <ToggleButtonGroup
-            exclusive
-            value={slot}
-            onChange={(_, v: number | null) => v != null && setSlot(v)}
+          {/* Standalone toggles in a grid (not a ToggleButtonGroup: it joins borders, which breaks
+              when the slots wrap). Chosen = filled primary with a check, like the punt chips. */}
+          <Box
+            role="group"
             aria-labelledby="slot-label"
             sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0.75 }}
           >
-            {Array.from({ length: n }, (_, i) => i + 1).map((s) => (
-              <ToggleButton
-                key={s}
-                value={s}
-                aria-label={`Slot ${s}`}
-                sx={{
-                  minWidth: 0,
-                  fontSize: 16,
-                  fontWeight: 600,
-                  // ToggleButtonGroup joins borders; give each its own in a grid.
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: '10px !important',
-                  ml: '0 !important',
-                }}
-              >
-                {s}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+            {Array.from({ length: n }, (_, i) => i + 1).map((s) => {
+              const on = slot === s;
+              return (
+                <ToggleButton
+                  key={s}
+                  value={s}
+                  selected={on}
+                  onChange={() => setSlot(s)}
+                  aria-label={`Slot ${s}`}
+                  sx={(t) => ({
+                    position: 'relative',
+                    minWidth: 0,
+                    minHeight: 48,
+                    fontSize: 16,
+                    fontWeight: 600,
+                    borderRadius: '12px',
+                    color: 'text.primary',
+                    borderColor: t.palette.mode === 'light' ? t.palette.grey[400] : t.palette.grey[700],
+                    '&.Mui-selected, &.Mui-selected:hover': {
+                      bgcolor: 'primary.main',
+                      borderColor: 'primary.main',
+                      color: 'primary.contrastText',
+                    },
+                    '&.Mui-selected:hover': { bgcolor: 'primary.dark' },
+                  })}
+                >
+                  {s}
+                  {on && (
+                    <CheckIcon aria-hidden sx={{ position: 'absolute', top: 3, right: 3, fontSize: 14 }} />
+                  )}
+                </ToggleButton>
+              );
+            })}
+          </Box>
           <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 1 }}>
             {slot ? `Slot ${slot}: you pick ${ordinal(slot)} in round 1.` : 'Not chosen yet.'}
           </Typography>
