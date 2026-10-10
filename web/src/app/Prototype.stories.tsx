@@ -22,6 +22,7 @@ export const LeagueMatchup = at('#/league/matchup');
 export const LeagueTeamLineup = at('#/league/team');
 export const LeagueTeamMoves = at('#/league/team/moves');
 export const LeagueTeamRoster = at('#/league/team/roster');
+export const LeagueTeamFreeAgents = at('#/league/team/free-agents');
 export const LeagueTeamPickups = at('#/league/team/pickups');
 export const LeaguePlayers = at('#/league/players');
 export const LeaguePlayerProfile = at('#/league/players/profile');

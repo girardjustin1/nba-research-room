@@ -1347,3 +1347,20 @@ listener sends them, mine from the top recommendation, the room's reads after ev
   the picks, slot, punts or team names change. The room shows the board and recommendations as
   soon as they arrive; the side panels fill in after. Re-run, all 168 picks with the room's reads
   in parallel: board at most 161 ms, everything at most 0.6 s, no spikes.
+
+**Opener rehearsal, and free agents pasted by hand (2026-10-10).** `make dry-run ARGS="--days 3
+--sample-rosters"` now rehearses the first game days. It runs on the real schedule (pre-game at
+5:00 pm, nightly at 6:30 pm, which sets that evening's lineup) on copies of the store and the
+inbox. A mock draft at my slot fills My roster and this week's opponent, and the season pages are
+read through the API each day.
+- Oct 20-22: no step errors; lineups set for each day; matchup snapshots, alerts, scorecard and
+  every page answered. The weekly odds page takes 4-5 s (to look at).
+- The gap: without Yahoo there was no free-agent list, so the moves page and the saved plan could
+  only wait. Owner's choice: paste Yahoo's Players page by hand (Team → Free agents).
+  `free_agents.py` finds the NBA names in the paste (2-4 word runs; accents, punctuation, Jr./III
+  and aliases.yaml nicknames handled; a name shared by two players is skipped and reported). It
+  keeps only those player ids and a time, as one file in the inbox, replaced by the next paste,
+  never in the store, purged by `make yahoo-purge`. The list fills the in-memory free agents only
+  when Yahoo didn't, minus my roster and this week's opponent's. Positions are the NBA's, so the
+  draft board's Yahoo eligibility ignores these rows. The moves page says the list is pasted, and
+  when; the screen suggests a fresh paste after 24 h. Waiver players paste in as free agents.

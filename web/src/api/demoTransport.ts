@@ -1,5 +1,5 @@
 import type { FetchLike } from './client';
-import type { MovesResponse, MyRoster, MyRosterRequest, NotificationsResponse, OpponentRoster, OpponentRosterRequest, ScenarioRequest, TeamNamesRequest } from './season';
+import type { FreeAgents, FreeAgentsRequest, MovesResponse, MyRoster, MyRosterRequest, NotificationsResponse, OpponentRoster, OpponentRosterRequest, ScenarioRequest, TeamNamesRequest } from './season';
 import { createDraftApi } from './client';
 import { createSeasonApi } from './season';
 import { createSystemApi } from './system';
@@ -15,6 +15,7 @@ import { notificationsNormal } from '../mocks/notifications/notifications';
 import { yahooOff } from '../mocks/app-shell/yahooStatus';
 import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../mocks/team-profiles/opponentRoster';
 import { myRosterFilled, sampleSaveMine } from '../mocks/team-profiles/myRoster';
+import { freeAgentsFilled, sampleSaveFree } from '../mocks/team-profiles/freeAgents';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
 import { playerBramwell, playerHargreaveLastDay, playerPellham, playerRosswell } from '../mocks/player-profiles/player';
 import { resultsNormal } from '../mocks/results/results';
@@ -62,6 +63,7 @@ interface DemoNotes {
   notes: NotificationsResponse;
   opponent: OpponentRoster;
   mine: MyRoster;
+  free: FreeAgents;
 }
 const freshNotes = (): NotificationsResponse => JSON.parse(JSON.stringify(notificationsNormal)) as NotificationsResponse;
 
@@ -164,6 +166,8 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['POST', /^\/season\/opponent_roster$/, ({ body }) => (state.opponent = sampleSave(state.opponent, body as OpponentRosterRequest))],
     ['GET', /^\/season\/player_search$/, ({ query }) => ({ players: sampleSearch(query.get('q') ?? '') })],
     ['GET', /^\/season\/my_roster$/, () => state.mine],
+    ['GET', /^\/season\/free_agents$/, () => state.free],
+    ['POST', /^\/season\/free_agents$/, ({ body }) => (state.free = sampleSaveFree(body as FreeAgentsRequest))],
     ['POST', /^\/season\/my_roster$/, ({ body }) => (state.mine = sampleSaveMine(state.mine, body as MyRosterRequest))],
     ['POST', /^\/season\/league_team_names$/, ({ body }) => (state.opponent = sampleSaveNames(state.opponent, body as TeamNamesRequest))],
     // ---- system
@@ -178,7 +182,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
 
 export function createDemoTransport(base = '/api'): DemoTransport {
   let draft = initialDemoDraft();
-  const state: DemoNotes = { notes: freshNotes(), opponent: opponentRosterFilled, mine: myRosterFilled };
+  const state: DemoNotes = { notes: freshNotes(), opponent: opponentRosterFilled, mine: myRosterFilled, free: freeAgentsFilled };
   const table = routes(state);
   const unhandled: string[] = [];
   const fetchImpl: FetchLike = async (input, init) => {
@@ -209,6 +213,7 @@ export function createDemoTransport(base = '/api'): DemoTransport {
       state.notes = freshNotes();
       state.opponent = opponentRosterFilled;
       state.mine = myRosterFilled;
+      state.free = freeAgentsFilled;
     },
   };
 }

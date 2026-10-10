@@ -1397,6 +1397,23 @@ export interface MyRoster {
   policy: string;
 }
 
+/** GET/POST /season/free_agents: free agents pasted from Yahoo's Players page (used without Yahoo). */
+export interface FreeAgents {
+  /** The NBA players found in the paste (names and positions from the NBA data). */
+  players: PlayerRef[];
+  saved_at: IsoDateTime | null;
+  /** Hours since the paste; the list goes stale as other teams add and drop. */
+  age_hours: number | null;
+  /** Name keys shared by two players, skipped rather than guessed (only on the save response). */
+  ambiguous: string[];
+  policy: string;
+}
+
+export interface FreeAgentsRequest {
+  /** The text copied from Yahoo's Players page; scanned for names, not kept. */
+  text: string;
+}
+
 export interface MyRosterRequest {
   player_ids: number[];
   names: string[];
@@ -1434,6 +1451,8 @@ export interface SeasonApi {
   /** Register or rename league teams (names only, never rosters). */
   saveTeamNames(body: TeamNamesRequest): Promise<OpponentRoster>;
   myRoster(): Promise<MyRoster>;
+  freeAgents(): Promise<FreeAgents>;
+  saveFreeAgents(body: FreeAgentsRequest): Promise<FreeAgents>;
   saveMyRoster(body: MyRosterRequest): Promise<MyRoster>;
   /** NBA players whose name contains `q` (the NBA list, not Yahoo's). */
   playerSearch(q: string): Promise<PlayerSearchResponse>;
@@ -1466,6 +1485,8 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     saveTeamNames: (body) => seasonPost<OpponentRoster>(base, '/season/league_team_names', body, fetchImpl),
     playerSearch: (q) => get('/season/player_search', { q }),
     myRoster: () => get('/season/my_roster'),
+    freeAgents: () => get('/season/free_agents'),
+    saveFreeAgents: (body) => seasonPost<FreeAgents>(base, '/season/free_agents', body, fetchImpl),
     saveMyRoster: (body) => seasonPost<MyRoster>(base, '/season/my_roster', body, fetchImpl),
     nbaTeam: (abbr) => get(`/season/nba_teams/${abbr}`),
   };

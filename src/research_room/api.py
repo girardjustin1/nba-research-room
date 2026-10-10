@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from research_room import (
     alerts,
+    free_agents,
     images,
     moves_api,
     opponent_roster,
@@ -266,6 +267,10 @@ class OpponentIn(BaseModel):
     player_ids: list[int] = Field(default_factory=list)
     names: list[str] = Field(default_factory=list)
     team_name: str | None = None
+
+
+class FreeAgentsIn(BaseModel):
+    text: str = Field(max_length=300_000)   # pasted from Yahoo's Players page; scanned, not kept
 
 
 class MyRosterIn(BaseModel):
@@ -963,6 +968,27 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return opponent_roster.save_mine(con, body.player_ids, body.names, body.il_ids, now=when)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.get("/season/free_agents")
+    def get_free_agents(now: str | None = None) -> dict:
+        """FreeAgents: the free-agent list as pasted (used when Yahoo doesn't supply it)."""
+        con = read_con()
+        try:
+            return free_agents.response(con, now=pd.Timestamp(now).to_pydatetime() if now else None)
+        finally:
+            con.close()
+
+    @app.post("/season/free_agents")
+    def post_free_agents(body: FreeAgentsIn, now: str | None = None) -> dict:
+        """Replace the free-agent list with the NBA players found in the pasted text."""
+        con = read_con()
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return free_agents.save(con, body.text, now=when)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:

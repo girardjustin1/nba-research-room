@@ -458,6 +458,9 @@ class Settings(BaseModel):
         override = os.environ.get("RESEARCH_ROOM_DB")      # tests and scratch runs only
         if override:
             self.paths.db = Path(override)
+        inbox = os.environ.get("RESEARCH_ROOM_INBOX")      # dry runs only: a copy of the inbox
+        if inbox:
+            self.paths.inbox_dir = Path(inbox)
         return self
 
     @model_validator(mode="after")

@@ -142,13 +142,13 @@ def test_moves_plan_with_moves_line_and_scenarios(client):
     assert not bad["feasible"] and "acquisitions" in bad["message"]
 
 
-def test_moves_need_players_csv_but_probability_still_answers(client):
+def test_moves_need_free_agents_but_probability_still_answers(client):
     c, _db = client
     r = c.get("/season/moves", params={"now": NOW})
-    assert r.status_code == 409 and "players.csv" in r.json()["detail"]
+    assert r.status_code == 409 and "free-agent list" in r.json()["detail"]
     prob = c.get("/season/week/probability", params={"now": NOW}).json()
     assert [s["kind"] for s in prob["scenarios"]] == ["do_nothing"]
-    assert any("players.csv" in (p["note"] or "") for p in prob["provenance"])
+    assert any("free-agent list" in (p["note"] or "") for p in prob["provenance"])
 
 
 def test_the_saved_plan_serves_the_moves_page_without_yahoo_fields(client, monkeypatch):

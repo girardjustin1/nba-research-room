@@ -34,7 +34,9 @@ def load_yahoo(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """player_id -> Yahoo positions (list) from the latest players.csv snapshot (resolved rows only)."""
     df = con.execute("""
         SELECT player_id, eligible_positions FROM yahoo_players
-        WHERE player_id IS NOT NULL AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_players)
+        WHERE player_id IS NOT NULL AND coalesce(source, '') <> 'manual'   -- pasted lists: NBA positions
+          AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_players
+                             WHERE coalesce(source, '') <> 'manual')
     """).df()
     if df.empty:
         return pd.DataFrame({"player_id": pd.Series(dtype=int), "yahoo_positions": pd.Series(dtype=object)})

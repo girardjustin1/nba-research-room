@@ -185,13 +185,17 @@ def attach(
 
 
 def _with_manual_opponent(con, cfg: Settings, want: tuple[str, ...], out: dict) -> dict:
-    """My roster and this week's opponent, entered by hand, fill in when Yahoo didn't supply them
-    (opponent_roster)."""
+    """My roster, this week's opponent and the free agents, entered by hand, fill in when Yahoo
+    didn't supply them (opponent_roster, free_agents)."""
     from research_room import opponent_roster
 
     if "roster" in want:
         out["manual_mine"] = opponent_roster.apply_mine(con, cfg)
         out["manual_opponent"] = opponent_roster.apply(con, cfg)
+    if "players" in want:   # after the rosters: their players are left out of the pasted list
+        from research_room import free_agents
+
+        out["manual_free_agents"] = free_agents.apply(con, cfg)
     return out
 
 

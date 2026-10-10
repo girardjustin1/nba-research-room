@@ -39,8 +39,8 @@ def _week_and_plan(
     pool = optimizer.free_agents(con, cfg)
     if pool.empty:
         raise NotReady(
-            "No free agents yet: export players.csv (available players) from Yahoo into data/inbox, "
-            "or sign in to Yahoo."
+            "No free agents yet: paste Yahoo's free-agent list (Team → Free agents), or sign in to "
+            "Yahoo."
         )
     acq = _acquisitions(con, inp, cfg)
     snap = con.execute("SELECT max(snapshot_at) FROM yahoo_players").fetchone()[0]
@@ -288,7 +288,7 @@ def moves_response(
                 "module": "optimizer",
                 "as_of": inp["now"].isoformat(),
                 "run_id": None,
-                "note": f"{len(pool)} free agents from players.csv; "
+                "note": f"{len(pool)} free agents {_pool_source(con)}; "
                 f"{cfg.optimizer.candidate_pool} considered",
             },
             {"module": "projections", "as_of": run_iso, "run_id": None, "note": "baseline"},
@@ -383,7 +383,8 @@ def with_recommended(
     resp: dict, con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: datetime | None = None
 ) -> dict:
     """Add the optimizer's recommended scenario to a WinProbabilityResponse. Without free agents
-    (no players.csv yet) the response keeps only "do nothing" and says why in its provenance."""
+    (none from Yahoo or pasted yet) the response keeps only "do nothing" and says why in its
+    provenance."""
     cfg = cfg or settings()
     if not resp.get("scenarios"):
         return resp
@@ -570,6 +571,16 @@ def player_response(
 
 
 # ------------------------------------------------------------------ the saved plan
+def _pool_source(con) -> str:
+    """Where this connection's free agents came from, in words for the page."""
+    row = con.execute(
+        "SELECT count(*), max(snapshot_at) FROM yahoo_players WHERE source = 'manual'").fetchone()
+    if row and row[0]:
+        when = pd.Timestamp(row[1]).tz_convert(matchup.ET).strftime("%a %b %-d, %-I:%M %p")
+        return f"as you pasted them ({when} ET): check each is still free in Yahoo before adding"
+    return "from Yahoo"
+
+
 def _roster_key(ids) -> str:
     """A fingerprint of my roster: says whether a saved plan still fits, without keeping the roster."""
     return hashlib.sha256(",".join(str(int(i)) for i in sorted(ids)).encode()).hexdigest()[:16]
