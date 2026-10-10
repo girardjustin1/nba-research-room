@@ -1373,3 +1373,24 @@ The opener rehearsal now also pastes the mock draft's undrafted ranked players a
 list (138). Oct 20-21: every check ok, the saved plan made 4 moves each run, the moves page answered
 from it in 0.1 s. Week-1 odds fell from 0.97 to 0.78-0.85 once a free-agent list existed, because
 the opponent-streaming model (on, 4 adds a week) needs one to pick from.
+
+**The weekly odds page, about twice as fast (2026-10-10).** Measured on the opener rehearsal's
+store (week 1, three moments): 1.9-2.1 s before, 0.85-1.1 s after. Every number on the odds and
+moves pages is unchanged: 2,040 compared, largest difference 3.6e-15, which is the run-to-run
+float-summation noise the page already had.
+- The odds choose each remaining day's starters with an exact assignment
+  (`lineup.best_starters`, scipy) instead of the MILP solver, which ran 36 times a page as a
+  separate process. The MILP (`assign_day`) stays the lineup decision itself (locks, reasons).
+  Same best value as the MILP on 300 random rosters (tests/test_best_starters.py). Equal-value
+  lineups can break ties differently: one test whose 11 players were projected identically now
+  says which one is the surest starter.
+- The week's projections are reshaped once (one pivot, reused for both teams and the opponent's
+  pickups) instead of twice per day per team.
+- The correlated P(win week) counts category wins one category at a time (wins - losses per draw)
+  instead of building the (draws x categories x paths) array: identical results, about a ninth of
+  the memory.
+- What remains is the simulation itself (13 points x 2,000 paths x 1,000 draws). Fewer draws would
+  change the numbers (settings.simulation): not done.
+- Found while checking, not changed: the lineup page shows starters in different, equally good
+  slots from one load to the next (the MILP's tie-breaking). Who starts and who sits is the same
+  every time.

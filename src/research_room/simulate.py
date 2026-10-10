@@ -189,9 +189,16 @@ def p_win_week_correlated(me: TeamWeek, opp: TeamWeek, z: np.ndarray, cfg: Setti
     diff = np.vstack([np.atleast_1d(d) for d in diff])            # (cats, batch)
     sd = np.vstack([np.atleast_1d(s) for s in sd])
     diff, sd = np.broadcast_arrays(diff, sd)
-    edge = diff[None, :, :] + sd[None, :, :] * z[:, :, None]                      # (n, cats, batch)
-    wins, losses = (edge > 0).sum(axis=1), (edge < 0).sum(axis=1)                 # exact ties: nobody
-    return (wins > losses).mean(axis=0)
+    # One category at a time, keeping wins minus losses per draw (wins > losses <=> score > 0), so
+    # the (n, cats, batch) array is never built. Each edge is sd * z + diff, as before; exact ties
+    # count for nobody.
+    score = np.zeros((z.shape[0], diff.shape[1]), dtype=np.int16)
+    for c in range(diff.shape[0]):
+        edge = sd[c][None, :] * z[:, c][:, None]                                   # (n, batch)
+        edge += diff[c][None, :]
+        score += edge > 0
+        score -= edge < 0
+    return (score > 0).mean(axis=0)
 
 
 def monte_carlo(me: TeamWeek, opp: TeamWeek, cfg: Settings | None = None, n: int = 5000,

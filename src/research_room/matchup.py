@@ -83,6 +83,39 @@ def _wide(proj: pd.DataFrame, day: date, value: str) -> pd.DataFrame:
         if not d.empty else pd.DataFrame()
 
 
+_WIDE_LAST: list = []   # [(weakref to the projections frame, days, result)]: the last call's answer
+
+
+def _wide_days(proj: pd.DataFrame, days: list[date]) -> dict[date, tuple[pd.DataFrame, pd.DataFrame]]:
+    """{day: (means, sds)} as `_wide` gives them (player x stat, missing = 0), from one pivot of
+    the week instead of two per day. A page reshapes the same frame for both teams and the
+    opponent's pickups: the last answer is reused while it is that very frame (and the same days)."""
+    import weakref
+
+    if _WIDE_LAST:
+        ref, last_days, result = _WIDE_LAST[0]
+        if ref() is proj and last_days == tuple(days):
+            return result
+    result = _wide_days_uncached(proj, days)
+    _WIDE_LAST[:] = [(weakref.ref(proj), tuple(days), result)]
+    return result
+
+
+def _wide_days_uncached(proj: pd.DataFrame, days: list[date]) -> dict:
+    keys = {pd.Timestamp(day): day for day in days}         # days may be dates, frames datetime64
+    when = pd.to_datetime(proj["date"])
+    d = proj.assign(_day=when)[when.isin(list(keys))]
+    if d.empty:
+        return {}
+    both = d.pivot_table(index=["_day", "player_id"], columns="stat", values=["mean", "sd"], aggfunc="sum")
+    out = {}
+    for ts in dict.fromkeys(d["_day"]):
+        rows = both.xs(ts, level="_day")
+        out[keys[pd.Timestamp(ts)]] = tuple(
+            rows[v].dropna(how="all").fillna(0.0).rename_axis(columns="stat") for v in ("mean", "sd"))
+    return out
+
+
 def team_days(roster: pd.DataFrame | list[pd.DataFrame], proj: pd.DataFrame, days: list[date],
               cfg: Settings | None = None) -> TeamDays:
     """`roster`: player_id, name, eligible (list), status, current_slot; or one such frame per day
@@ -94,10 +127,11 @@ def team_days(roster: pd.DataFrame | list[pd.DataFrame], proj: pd.DataFrame, day
     out = {k: {c.key: np.zeros(len(days)) for c in cats} for k in ("mean", "var", "made", "att", "bin_var")}
     scheduled, counted, starters_by_day = [], [], []
     by_day = roster if isinstance(roster, list) else [roster] * len(days)
+    wide = _wide_days(proj, days)
     for i, day in enumerate(days):
         roster = by_day[i]
         ids = roster["player_id"].astype(int).tolist()
-        mean_day, sd_day = _wide(proj, day, "mean"), _wide(proj, day, "sd")
+        mean_day, sd_day = wide.get(day, (pd.DataFrame(), pd.DataFrame()))
         if mean_day.empty:
             scheduled.append(0), counted.append(0), starters_by_day.append([])
             continue
@@ -105,8 +139,8 @@ def team_days(roster: pd.DataFrame | list[pd.DataFrame], proj: pd.DataFrame, day
         weights = lineup.category_weights(mean_day, cfg)
         values = lineup.player_value(mean_day.reindex(ids).fillna(0.0), weights,
                                      lineup.league_pct(mean_day, cfg), cfg)
-        res = lineup.assign_day(roster, values, has_game, cfg=cfg)
-        starting = [p for p in res.starters.values() if p is not None and bool(has_game.get(p, False))]
+        chosen = lineup.best_starters(roster, values, has_game, cfg=cfg)
+        starting = [p for p in chosen.values() if p is not None and bool(has_game.get(p, False))]
         scheduled.append(int(has_game.sum())), counted.append(len(starting)), starters_by_day.append(starting)
         if not starting:
             continue

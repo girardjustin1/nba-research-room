@@ -87,6 +87,43 @@ def _slots(cfg: Settings) -> list[str]:
     return out
 
 
+def best_starters(roster: pd.DataFrame, values: pd.Series, has_game: pd.Series,
+                  cfg: Settings | None = None) -> dict[str, int | None]:
+    """Who starts in `assign_day`'s best lineup (no locks), found by an exact assignment instead of
+    the MILP solver: the same best total value in about a thousandth of the time. For the matchup
+    odds, which need only who starts each day; `assign_day` stays the lineup decision (locks,
+    reasons). Equal-value lineups may break ties differently.
+
+    Each player can take an eligible slot (worth his value if he has a game and it is positive, else
+    0) or a bench column of his own (worth 0), so slots may stay empty, as in the MILP; a player
+    starts only when his slot is worth more than 0."""
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+
+    cfg = cfg or settings()
+    slots = _slots(cfg)
+    starters: dict[str, int | None] = {s: None for s in slots}
+    r = roster.set_index("player_id")
+    il = [p for p in r.index if str(r.at[p, "status"] or "").upper() in IL_STATUSES][: cfg.roster.il]
+    candidates = [p for p in r.index if p not in il]
+    if not candidates:
+        return starters
+    val = [float(values.get(p, 0.0)) if bool(has_game.get(p, False)) else 0.0 for p in candidates]
+    forbidden = -1e12
+    m = np.full((len(candidates), len(slots) + len(candidates)), forbidden)
+    for i, p in enumerate(candidates):
+        fills = fillable(r.at[p, "eligible"], cfg)
+        for j, slot in enumerate(slots):
+            if slot.split("#")[0] in fills:
+                m[i, j] = max(val[i], 0.0)
+        m[i, len(slots) + i] = 0.0                                   # his own bench column
+    rows, cols = linear_sum_assignment(m, maximize=True)
+    for i, j in zip(rows, cols, strict=True):
+        if j < len(slots) and m[i, j] > 0:
+            starters[slots[j]] = int(candidates[i])
+    return starters
+
+
 def assign_day(roster: pd.DataFrame, values: pd.Series, has_game: pd.Series,
                locked: dict[int, str] | None = None, cfg: Settings | None = None) -> DayLineup:
     """Best lineup for one day. `roster`: player_id, name, eligible (list of slot codes), status,

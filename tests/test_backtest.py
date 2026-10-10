@@ -66,6 +66,7 @@ def test_week_projections_cover_every_scheduled_game_and_ignore_the_future(cfg):
 def test_a_bench_player_fills_in_when_a_starter_sits(cfg):
     r = roster(11)
     p = proj(r["player_id"], days=DAYS[:1])
+    p.loc[p["player_id"] == 1, "mean"] *= 1.1        # the one who sits is the surest starter
     act = pd.DataFrame([{"player_id": pid, "date": DAYS[0], "y_did_play": pid != 1,
                          **{f"y_{s}": (0.0 if pid == 1 else 1.0) for s in features.RATE_STATS}}
                         for pid in r["player_id"]])
