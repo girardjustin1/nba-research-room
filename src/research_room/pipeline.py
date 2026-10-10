@@ -62,6 +62,7 @@ def my_roster(con: duckdb.DuckDBPyConnection, cfg: Settings) -> pd.DataFrame:
         SELECT player_id, player_name AS name, eligible_positions, status, selected_slot AS current_slot
         FROM yahoo_rosters
         WHERE team_id = ? AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_rosters WHERE team_id = ?)
+        ORDER BY player_id          -- a fixed order: equal-value lineups come out the same each time
     """, [cfg.league.my_team_id, cfg.league.my_team_id]).df()
     df["eligible"] = df["eligible_positions"].fillna("").map(lambda s: [p for p in s.split(",") if p])
     return df

@@ -50,3 +50,20 @@ def test_a_slot_nobody_can_fill_does_not_cost_a_better_player_his_start():
     values, has_game = pd.Series({1: 10.0, 2: 1.0}), pd.Series({1: True, 2: True})
     fast = lineup.best_starters(roster, values, has_game, cfg=cfg)
     assert _value(fast, values, has_game) == 11.0
+
+
+def test_rosters_come_back_in_a_fixed_order(con):
+    """Equal-value lineups only come out the same each time if the roster does (no ORDER BY made
+    the lineup page shuffle starters between equally good slots from one load to the next)."""
+    from datetime import UTC, datetime
+
+    from research_room import matchup, store
+
+    at = pd.Timestamp(datetime(2026, 11, 4, tzinfo=UTC))
+    store.upsert(con, "yahoo_rosters", pd.DataFrame([
+        {"snapshot_at": at, "team_id": 11, "yahoo_player_key": f"k{p}", "player_name": f"p{p}",
+         "player_id": p, "selected_slot": None, "eligible_positions": "PG", "status": None,
+         "source": "test", "fetched_at": at}
+        for p in (30, 4, 17, 9)
+    ]))
+    assert matchup.roster_of(con, 11)["player_id"].tolist() == [4, 9, 17, 30]

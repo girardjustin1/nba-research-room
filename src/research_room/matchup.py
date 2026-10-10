@@ -280,6 +280,7 @@ def roster_of(con, team_id: int) -> pd.DataFrame:
         FROM yahoo_rosters
         WHERE team_id = ? AND snapshot_at = (SELECT max(snapshot_at) FROM yahoo_rosters WHERE team_id = ?)
           AND player_id IS NOT NULL
+        ORDER BY player_id          -- a fixed order: equal-value lineups come out the same each time
     """, [team_id, team_id]).df()
     df["eligible"] = df["eligible_positions"].fillna("").map(lambda s: [p for p in s.split(",") if p])
     return df.assign(player_id=lambda d: d["player_id"].astype(int))
