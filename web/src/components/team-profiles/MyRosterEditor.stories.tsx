@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { MyRoster } from '../../api/season';
-import { myRosterEmpty, myRosterFilled, sampleSaveMine, sampleSearchMine } from '../../mocks/team-profiles/myRoster';
+import { myRosterEmpty, myRosterFilled, sampleFromDraft, sampleSaveMine, sampleSearchMine } from '../../mocks/team-profiles/myRoster';
 import { MyRosterEditor, type MyRosterEditorProps } from './MyRosterEditor';
 
 /** My roster, entered by hand. Invented players; saving works in memory. */
@@ -13,6 +13,7 @@ const meta = {
     onSearch: async (q: string) => sampleSearchMine(q),
     onSave: async (b) => sampleSaveMine(myRosterFilled, b),
     onOpenPlayer: () => {},
+    onFromDraft: async () => sampleFromDraft(),
   },
   render: (args) => <Interactive {...args} />,
 } satisfies Meta<typeof MyRosterEditor>;
@@ -46,3 +47,15 @@ export const NameDidNotMatch: Story = {
 };
 export const Loading: Story = { args: { data: null, loading: true } };
 export const ApiError: Story = { args: { data: null, error: 'Request failed (HTTP 500)', onRetry: () => {} } };
+/** Right after the draft: "Use my draft picks" fills the roster from the draft room's log. */
+export const JustDrafted: Story = { args: { data: myRosterEmpty } };
+/** The app doesn't know my draft slot: the dialog asks for it, then uses that slot's picks. */
+export const AsksForSlot: Story = {
+  args: {
+    data: myRosterEmpty,
+    onFromDraft: async (slot?: number) => {
+      if (slot == null) throw new Error('Which draft slot was yours? Choose it, then try again.');
+      return sampleFromDraft();
+    },
+  },
+};

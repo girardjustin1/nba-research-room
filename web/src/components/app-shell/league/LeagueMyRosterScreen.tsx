@@ -6,10 +6,11 @@ import { firstError, LEAGUE_NAV_HEIGHT, mockEndpoints } from '../../../app/leagu
 import { SEASON_TAB_PATH } from '../../../app/experiences';
 import { PrototypeDataChip } from '../PrototypeDataChip';
 import { MyRosterEditor } from '../../team-profiles/MyRosterEditor';
-import { myRosterFilled, sampleSaveMine, sampleSearchMine } from '../../../mocks/team-profiles/myRoster';
+import { myRosterFilled, sampleFromDraft, sampleSaveMine, sampleSearchMine } from '../../../mocks/team-profiles/myRoster';
 
 /**
- * Team → My roster: GET/POST /season/my_roster, GET /season/player_search. With sample data,
+ * Team → My roster: GET/POST /season/my_roster, POST /season/my_roster/from_draft, GET
+ * /season/player_search. With sample data,
  * saving and searching work in memory. Invented data is marked "Prototype data".
  */
 export function LeagueMyRosterScreen({ mode, apis, navigate }: RouteScreenProps) {
@@ -28,9 +29,18 @@ export function LeagueMyRosterScreen({ mode, apis, navigate }: RouteScreenProps)
     }
     return apis.season.saveMyRoster(body);
   };
+  const onFromDraft = async (slot?: number) => {
+    if (roster.isMock) {
+      const r = sampleFromDraft();
+      setSample(r);
+      return r;
+    }
+    return apis.season.myRosterFromDraft(slot != null ? { my_slot: slot } : {});
+  };
   return (
     <>
       <MyRosterEditor
+        onFromDraft={onFromDraft}
         data={data}
         loading={roster.loading}
         error={firstError([roster])}

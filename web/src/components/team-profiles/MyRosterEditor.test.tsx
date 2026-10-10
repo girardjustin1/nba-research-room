@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { MyRosterRequest } from '../../api/season';
-import { myRosterEmpty, myRosterFilled, sampleSaveMine, sampleSearchMine } from '../../mocks/team-profiles/myRoster';
+import { myRosterEmpty, myRosterFilled, sampleFromDraft, sampleSaveMine, sampleSearchMine } from '../../mocks/team-profiles/myRoster';
 import { renderWithTheme } from '../../test/render';
 import { MyRosterEditor } from './MyRosterEditor';
 
@@ -29,5 +29,34 @@ describe('my roster', { timeout: 20_000 }, () => { // many keystrokes: slow on C
     const big = { ...myRosterFilled, max_players: 3 };
     renderWithTheme(<MyRosterEditor data={big} onSearch={async () => []} onSave={async () => big} />);
     expect(screen.getByText(/A roster holds at most 3 players/)).toBeInTheDocument();
+  });
+
+  it('fills the roster from my draft picks, asking for the slot when it is not known', async () => {
+    const user = userEvent.setup();
+    const onFromDraft = vi.fn(async (slot?: number) => {
+      if (slot == null) throw new Error('Which draft slot was yours? Choose it, then try again.');
+      return sampleFromDraft();
+    });
+    renderWithTheme(<MyRosterEditor data={myRosterEmpty} onSearch={async () => []} onSave={async () => myRosterEmpty} onFromDraft={onFromDraft} />);
+    await user.click(screen.getByRole('button', { name: 'Use my draft picks' }));
+    expect(await screen.findByText('Which draft slot was yours?')).toBeInTheDocument();
+    await user.click(screen.getByRole('combobox', { name: 'My draft slot' }));
+    await user.click(await screen.findByRole('option', { name: 'Slot 6' }));
+    await user.click(screen.getByRole('button', { name: 'Use these picks' }));
+    await waitFor(() => expect(onFromDraft).toHaveBeenLastCalledWith(6));
+    expect(await screen.findByText(new RegExp(`${myRosterFilled.players.length} of 14 players`))).toBeInTheDocument();
+  });
+
+  it('asks before replacing players already entered', async () => {
+    const user = userEvent.setup();
+    const onFromDraft = vi.fn(async () => sampleFromDraft());
+    renderWithTheme(<MyRosterEditor data={myRosterFilled} onSearch={async () => []} onSave={async () => myRosterFilled} onFromDraft={onFromDraft} />);
+    await user.click(screen.getByRole('button', { name: 'Use my draft picks' }));
+    expect(await screen.findByText(/replaces the \d+ players here/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onFromDraft).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Use my draft picks' })); // after the dialog closes
+    await user.click(await screen.findByRole('button', { name: 'Replace' }));
+    await waitFor(() => expect(onFromDraft).toHaveBeenCalledOnce());
   });
 });

@@ -258,6 +258,7 @@ def my_response(
         "players": cards,
         "il_ids": [int(i) for i in e.get("il_ids", []) if int(i) in {c["player_id"] for c in cards}],
         "max_players": len(cfg.roster.slots),
+        "teams": cfg.league.teams,
         "unmatched": unmatched or [],
         "saved_at": e.get("saved_at"),
         "policy": MINE_POLICY,
@@ -282,6 +283,27 @@ def save_mine(
     }
     _write(_mine_path(cfg), entry)
     return my_response(con, cfg, unmatched)
+
+
+def mine_from_draft(
+    con: duckdb.DuckDBPyConnection,
+    draft_id: str,
+    slot: int,
+    cfg: Settings | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """Replace my roster with my picks in this draft (slot `slot`), from the draft room's own log.
+    Raises ValueError when the draft has no picks for that slot."""
+    from research_room.draft import tracker
+
+    cfg = cfg or settings()
+    if not 1 <= slot <= cfg.league.teams:
+        raise ValueError(f"draft slot must be 1..{cfg.league.teams}")
+    picks = tracker._read_picks(con, draft_id)
+    ids = [int(p) for p in picks.loc[picks["team_id"] == slot, "player_id"]]
+    if not ids:
+        raise ValueError(f"no picks for slot {slot} in draft {draft_id}")
+    return save_mine(con, ids, [], [], cfg, now)
 
 
 def apply_mine(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None) -> dict:

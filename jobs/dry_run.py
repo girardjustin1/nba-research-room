@@ -133,11 +133,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def sample_rosters(cfg) -> str:
-    """A mock draft at my slot; my picks become My roster and another team's this week's opponent,
+    """A mock draft at my slot; my picks become My roster, another team's this week's opponent, and
+    the undrafted ranked players a pasted free-agent list (laid out like Yahoo's Players page), all
     saved the way the app saves them (in the dry run's inbox copy)."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # run as a script: find jobs/
     from jobs.mock_draft import run_mock
-    from research_room import opponent_roster, store
+    from research_room import free_agents, opponent_roster, store
 
     slot = cfg.draft.my_slot or 6
     res = run_mock(teams=cfg.league.teams, slot=slot, seed=1)
@@ -147,10 +148,21 @@ def sample_rosters(cfg) -> str:
     try:
         mine = opponent_roster.save_mine(con, res["rosters"][slot], [], [], cfg)
         opp = opponent_roster.save(con, opp_team, res["rosters"][other], [], cfg)
+        drafted = {p for ids in res["rosters"].values() for p in ids}
+        rows = con.execute(
+            """SELECT p.full_name, t.abbreviation, p.position FROM external_projections e
+               JOIN players p USING (player_id) LEFT JOIN teams t ON t.team_id = p.team_id
+               WHERE e.snapshot = (SELECT max(snapshot) FROM external_projections) AND e.ext_rank <= ?
+                 AND p.player_id NOT IN (SELECT unnest(?::INTEGER[])) ORDER BY e.ext_rank""",
+            [RANKED, list(drafted)],
+        ).fetchall()
+        paste = "\n".join(f"{n}  {t} - {pos}\nPlayer Note  FA  0  0  0  1%" for n, t, pos in rows)
+        fa = free_agents.save(con, paste, cfg)
     finally:
         con.close()
     return (f"sample rosters from a mock draft at slot {slot}: my roster {len(mine['players'])} players, "
-            f"this week's opponent (team {opp_team}) {len(opp['players'])} players")
+            f"this week's opponent (team {opp_team}) {len(opp['players'])} players, "
+            f"{len(fa['players'])} free agents pasted")
 
 
 PAGES = (

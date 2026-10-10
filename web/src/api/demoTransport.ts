@@ -14,7 +14,7 @@ import { weekNormal } from '../mocks/matchup-analysis/week';
 import { notificationsNormal } from '../mocks/notifications/notifications';
 import { yahooOff } from '../mocks/app-shell/yahooStatus';
 import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../mocks/team-profiles/opponentRoster';
-import { myRosterFilled, sampleSaveMine } from '../mocks/team-profiles/myRoster';
+import { myRosterFilled, sampleFromDraft, sampleSaveMine } from '../mocks/team-profiles/myRoster';
 import { freeAgentsFilled, sampleSaveFree } from '../mocks/team-profiles/freeAgents';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
 import { playerBramwell, playerHargreaveLastDay, playerPellham, playerRosswell } from '../mocks/player-profiles/player';
@@ -166,6 +166,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['POST', /^\/season\/opponent_roster$/, ({ body }) => (state.opponent = sampleSave(state.opponent, body as OpponentRosterRequest))],
     ['GET', /^\/season\/player_search$/, ({ query }) => ({ players: sampleSearch(query.get('q') ?? '') })],
     ['GET', /^\/season\/my_roster$/, () => state.mine],
+    ['POST', /^\/season\/my_roster\/from_draft$/, () => (state.mine = sampleFromDraft())],
     ['GET', /^\/season\/free_agents$/, () => state.free],
     ['POST', /^\/season\/free_agents$/, ({ body }) => (state.free = sampleSaveFree(body as FreeAgentsRequest))],
     ['POST', /^\/season\/my_roster$/, ({ body }) => (state.mine = sampleSaveMine(state.mine, body as MyRosterRequest))],

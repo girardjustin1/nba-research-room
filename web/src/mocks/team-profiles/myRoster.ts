@@ -6,7 +6,7 @@ import { SEARCHABLE } from './opponentRoster';
 const POLICY =
   "Your roster, kept on this computer only and never in the database; replaced each time you save. When Yahoo supplies your roster, Yahoo's is used instead.";
 
-export const myRosterEmpty: MyRoster = { players: [], il_ids: [], max_players: 14, unmatched: [], saved_at: null, policy: POLICY };
+export const myRosterEmpty: MyRoster = { players: [], il_ids: [], max_players: 14, teams: 14, unmatched: [], saved_at: null, policy: POLICY };
 
 export const myRosterFilled: MyRoster = {
   ...myRosterEmpty,
@@ -40,4 +40,9 @@ export function sampleSaveMine(prev: MyRoster, body: MyRosterRequest, now = new 
     .map((p) => ({ ...p, owner: 'mine' as const }));
   const kept = new Set(players.map((p) => p.player_id));
   return { ...prev, players, il_ids: body.il_ids.filter((i) => kept.has(i)), unmatched, saved_at: now };
+}
+
+/** The sample "use my draft picks": my sample players, nobody on IL yet. */
+export function sampleFromDraft(now = new Date().toISOString()): MyRoster {
+  return { ...myRosterFilled, il_ids: [], unmatched: [], saved_at: now };
 }

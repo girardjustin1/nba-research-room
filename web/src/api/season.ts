@@ -1392,6 +1392,8 @@ export interface MyRoster {
   il_ids: number[];
   /** Roster size limit (all slots, IL included). */
   max_players: number;
+  /** Teams in the league (draft slots 1..teams). */
+  teams?: number;
   unmatched: { name: string; suggestions: string[] }[];
   saved_at: IsoDateTime | null;
   policy: string;
@@ -1451,6 +1453,8 @@ export interface SeasonApi {
   /** Register or rename league teams (names only, never rosters). */
   saveTeamNames(body: TeamNamesRequest): Promise<OpponentRoster>;
   myRoster(): Promise<MyRoster>;
+  /** Replace my roster with my picks from the draft room's log; 422 asks for the slot when unknown. */
+  myRosterFromDraft(body?: { my_slot?: number }): Promise<MyRoster>;
   freeAgents(): Promise<FreeAgents>;
   saveFreeAgents(body: FreeAgentsRequest): Promise<FreeAgents>;
   saveMyRoster(body: MyRosterRequest): Promise<MyRoster>;
@@ -1485,6 +1489,7 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     saveTeamNames: (body) => seasonPost<OpponentRoster>(base, '/season/league_team_names', body, fetchImpl),
     playerSearch: (q) => get('/season/player_search', { q }),
     myRoster: () => get('/season/my_roster'),
+    myRosterFromDraft: (body = {}) => seasonPost<MyRoster>(base, '/season/my_roster/from_draft', body, fetchImpl),
     freeAgents: () => get('/season/free_agents'),
     saveFreeAgents: (body) => seasonPost<FreeAgents>(base, '/season/free_agents', body, fetchImpl),
     saveMyRoster: (body) => seasonPost<MyRoster>(base, '/season/my_roster', body, fetchImpl),

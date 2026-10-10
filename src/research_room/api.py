@@ -269,6 +269,11 @@ class OpponentIn(BaseModel):
     team_name: str | None = None
 
 
+class FromDraftIn(BaseModel):
+    draft_id: str | None = None   # default: the running draft, else this season's draft id
+    my_slot: int | None = None    # default: the running draft's slot, else settings.draft.my_slot
+
+
 class FreeAgentsIn(BaseModel):
     text: str = Field(max_length=300_000)   # pasted from Yahoo's Players page; scanned, not kept
 
@@ -968,6 +973,26 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
         try:
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return opponent_roster.save_mine(con, body.player_ids, body.names, body.il_ids, now=when)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.post("/season/my_roster/from_draft")
+    def post_my_roster_from_draft(body: FromDraftIn, now: str | None = None) -> dict:
+        """Replace my roster with my picks from the draft room's log (the running draft, or this
+        season's), so the League screens work right after the draft without typing them in."""
+        with h.lock:
+            live = h.session if h.session is not None and h.session.mock is None else None
+        draft_id = body.draft_id or (live.draft_id if live else SessionIn().draft_id)
+        slot = body.my_slot or (live.state.my_slot if live and live.draft_id == draft_id else None)
+        slot = slot or settings().draft.my_slot
+        if slot is None:
+            raise HTTPException(422, "Which draft slot was yours? Choose it, then try again.")
+        con = read_con()
+        try:
+            when = pd.Timestamp(now).to_pydatetime() if now else None
+            return opponent_roster.mine_from_draft(con, draft_id, slot, now=when)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:

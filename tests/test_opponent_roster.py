@@ -187,3 +187,37 @@ def test_my_roster_routes(tmp_path, cfg):
     assert (
         r.status_code == 200 and r.json()["il_ids"] == [1] and "never in the database" in r.json()["policy"]
     )
+
+
+def _picks(con, draft_id, rows):
+    store.upsert(con, "draft_picks", pd.DataFrame([
+        {"draft_id": draft_id, "pick_no": n, "round": r, "team_id": t, "player_id": p, "player_name": f"p{p}",
+         "is_keeper": False, "entry_source": "manual", "picked_at": pd.Timestamp(NOW), "undone": u}
+        for n, r, t, p, u in rows
+    ]))
+
+
+def test_my_roster_comes_from_my_draft_picks(nba, cfg):
+    _picks(nba, "d1", [(1, 1, 1, 1, False), (2, 1, 2, 2, False), (3, 2, 2, 3, False), (4, 2, 1, 4, True)])
+    out = opponent_roster.mine_from_draft(nba, "d1", 2, cfg, NOW)
+    assert [p["player_id"] for p in out["players"]] == [2, 3] and out["il_ids"] == []
+    assert [p["player_id"] for p in opponent_roster.mine_from_draft(nba, "d1", 1, cfg, NOW)["players"]] == [1]
+    with pytest.raises(ValueError):                                   # no picks for that slot
+        opponent_roster.mine_from_draft(nba, "d1", 5, cfg, NOW)
+
+
+def test_the_from_draft_route(tmp_path, cfg):
+    db = tmp_path / "fd.duckdb"
+    c = store.connect(db)
+    store.upsert(c, "players", pd.DataFrame(
+        [{"player_id": 1, "full_name": "Invented Guard", "team_id": 1, "position": "G", **META}]))
+    _picks(c, "d1", [(1, 1, 3, 1, False)])
+    c.close()
+    client = TestClient(api.create_app(db_path=str(db), run_mock_thread=False))
+    r = client.post("/season/my_roster/from_draft", json={"draft_id": "d1", "my_slot": 3})
+    assert r.status_code == 200 and r.json()["players"][0]["name"] == "Invented Guard"
+    if settings().draft.my_slot is None:                              # no slot known: asks for it
+        r = client.post("/season/my_roster/from_draft", json={"draft_id": "d1"})
+        assert r.status_code == 422 and "slot" in r.json()["detail"]
+    r = client.post("/season/my_roster/from_draft", json={"draft_id": "nope", "my_slot": 3})
+    assert r.status_code == 422

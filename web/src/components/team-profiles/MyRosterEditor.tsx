@@ -2,7 +2,14 @@ import { useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -21,6 +28,9 @@ export interface MyRosterEditorProps {
   onSave: (body: MyRosterRequest) => Promise<MyRoster>;
   onOpenPlayer?: (p: PlayerRef) => void;
   onTabChange?: (tab: SeasonTab) => void;
+  /** Replace my roster with my draft picks (the draft room's log); rejects asking for the slot
+   * when the app doesn't know it. Without it, the "Use my draft picks" card is hidden. */
+  onFromDraft?: (slot?: number) => Promise<MyRoster>;
 }
 
 const fmtSaved = (iso: string) =>
@@ -30,7 +40,7 @@ const fmtSaved = (iso: string) =>
  * My roster, entered by hand, for when Yahoo doesn't supply it: players from the NBA list (search
  * or pasted names) and who is on the IL. Kept on this computer only, replaced on each save.
  */
-export function MyRosterEditor({ data, loading, error, onRetry, onSearch, onSave, onOpenPlayer, onTabChange }: MyRosterEditorProps) {
+export function MyRosterEditor({ data, loading, error, onRetry, onSearch, onSave, onOpenPlayer, onTabChange, onFromDraft }: MyRosterEditorProps) {
   const [players, setPlayers] = useState<PlayerRef[]>([]);
   const [il, setIl] = useState<number[]>([]);
   const [paste, setPaste] = useState('');
@@ -58,6 +68,27 @@ export function MyRosterEditor({ data, loading, error, onRetry, onSearch, onSave
       ids.join() !== shown.players.map((p) => p.player_id).join() ||
       [...ilNow].sort().join() !== [...shown.il_ids].sort().join());
   const tooMany = shown != null && players.length > shown.max_players;
+
+  // "Use my draft picks": confirm before replacing a roster, and ask for the slot if needed.
+  const [fd, setFd] = useState<{ open: boolean; askSlot: boolean; slot: number | ''; busy: boolean; error: string | null }>({
+    open: false, askSlot: false, slot: '', busy: false, error: null,
+  });
+  const fromDraft = (slot?: number) => {
+    if (!onFromDraft) return;
+    setFd((f) => ({ ...f, busy: true, error: null }));
+    onFromDraft(slot).then(
+      (r) => {
+        setResult(r);
+        setFd({ open: false, askSlot: false, slot: '', busy: false, error: null });
+      },
+      (e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'Reading your draft picks failed';
+        const askSlot = /slot/i.test(msg) && slot == null;
+        setFd((f) => ({ ...f, open: true, askSlot: askSlot || f.askSlot, busy: false, error: askSlot ? null : msg }));
+      },
+    );
+  };
+  const startFromDraft = () => (players.length > 0 ? setFd((f) => ({ ...f, open: true, error: null })) : fromDraft());
 
   const save = () => {
     setSaving(true);
@@ -88,6 +119,22 @@ export function MyRosterEditor({ data, loading, error, onRetry, onSearch, onSave
   else {
     body = (
       <Stack spacing={1.5}>
+        {onFromDraft && (
+          <Card sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="subtitle2" component="h2">
+                Just drafted?
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Fill this in from your picks in the draft room.
+              </Typography>
+            </Box>
+            <Button variant="outlined" onClick={startFromDraft} disabled={fd.busy}>
+              {fd.busy && !fd.open ? 'Reading…' : 'Use my draft picks'}
+            </Button>
+          </Card>
+        )}
+        {fd.error && !fd.open && <Alert severity="error">{fd.error}</Alert>}
         <UnmatchedNames unmatched={shown.unmatched} />
         {saveError && <Alert severity="error">{saveError}</Alert>}
         {tooMany && <Alert severity="error">A roster holds at most {shown.max_players} players: remove {players.length - shown.max_players}.</Alert>}
@@ -140,9 +187,54 @@ export function MyRosterEditor({ data, loading, error, onRetry, onSearch, onSave
         </Button>
       </Box>
     ) : undefined;
+  const teams = shown?.teams ?? 14;
   return (
-    <SeasonShell tab="builder" onTabChange={onTabChange} header={header} footer={footer}>
-      {body}
-    </SeasonShell>
+    <>
+      <SeasonShell tab="builder" onTabChange={onTabChange} header={header} footer={footer}>
+        {body}
+      </SeasonShell>
+      <Dialog open={fd.open} onClose={() => !fd.busy && setFd((f) => ({ ...f, open: false }))} fullWidth maxWidth="xs">
+        <DialogTitle>{fd.askSlot ? 'Which draft slot was yours?' : 'Use your draft picks?'}</DialogTitle>
+        <DialogContent>
+          {fd.askSlot ? (
+            <TextField
+              select
+              fullWidth
+              label="My draft slot"
+              value={fd.slot}
+              onChange={(e) => setFd((f) => ({ ...f, slot: Number(e.target.value) }))}
+              sx={{ mt: 1 }}
+            >
+              {Array.from({ length: teams }, (_, i) => i + 1).map((n) => (
+                <MenuItem key={n} value={n}>
+                  Slot {n}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Typography variant="body2">
+              This replaces the {players.length} players here with your picks from the draft room, and clears the IL marks.
+            </Typography>
+          )}
+          {fd.error && (
+            <Alert severity="error" sx={{ mt: 1.5 }}>
+              {fd.error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFd((f) => ({ ...f, open: false }))} disabled={fd.busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={fd.busy || (fd.askSlot && fd.slot === '')}
+            onClick={() => fromDraft(fd.askSlot && fd.slot !== '' ? fd.slot : undefined)}
+          >
+            {fd.busy ? 'Reading…' : fd.askSlot ? 'Use these picks' : 'Replace'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

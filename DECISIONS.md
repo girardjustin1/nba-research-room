@@ -1364,3 +1364,12 @@ read through the API each day.
   when Yahoo didn't, minus my roster and this week's opponent's. Positions are the NBA's, so the
   draft board's Yahoo eligibility ignores these rows. The moves page says the list is pasted, and
   when; the screen suggests a fresh paste after 24 h. Waiver players paste in as free agents.
+
+**My roster from the draft, and the rehearsal with pasted free agents (2026-10-10).** Team → My
+roster has "Use my draft picks": `POST /season/my_roster/from_draft` copies my picks from the draft
+room's own log into the roster entry (the running draft's slot, else `draft.my_slot`, else the page
+asks which slot was mine; it asks before replacing players already entered and clears IL marks).
+The opener rehearsal now also pastes the mock draft's undrafted ranked players as the free-agent
+list (138). Oct 20-21: every check ok, the saved plan made 4 moves each run, the moves page answered
+from it in 0.1 s. Week-1 odds fell from 0.97 to 0.78-0.85 once a free-agent list existed, because
+the opponent-streaming model (on, 4 adds a week) needs one to pick from.
