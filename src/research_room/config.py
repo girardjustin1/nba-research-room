@@ -238,6 +238,16 @@ class XForwardTestConfig(BaseModel):
     seed: int = 0
 
 
+class BooksPassConfig(BaseModel):
+    """The props test on sportsbook closing lines (ParlayAPI), a forward test on this season; the
+    rule is in DECISIONS.md (2026-10-11)."""
+    season: int = 2026
+    train_seasons: list[int] = Field(default_factory=lambda: [2023, 2024, 2025])
+    first_day: date = date(2026, 10, 20)
+    judged: list[str] = Field(default_factory=lambda: ["fg3m", "stl", "blk", "tov"])
+    reference: list[str] = Field(default_factory=lambda: ["pts", "reb", "ast"])
+
+
 class PropsTestConfig(BaseModel):
     """The props test (jobs/props_test.py); the rule is in DECISIONS.md (2026-10-09)."""
     season: int = 2025                    # BallDontLie season tested
@@ -253,6 +263,7 @@ class PropsTestConfig(BaseModel):
     level: float = 0.80
     prob_clip: tuple[float, float] = (0.01, 0.99)
     requests_per_second: float = 3
+    books: BooksPassConfig = Field(default_factory=BooksPassConfig)
 
 
 class NbaReportConfig(BaseModel):
@@ -395,6 +406,17 @@ class RundownConfig(BaseModel):
     requests_per_second: float
 
 
+class ParlayConfig(BaseModel):
+    """ParlayAPI (PARLAY_API_KEY): sportsbook player-prop closing lines (ingest/parlay.py)."""
+    base_url: str = "https://parlay-api.com"
+    sport_key: str = "basketball_nba"
+    prop_markets: dict[str, str] = Field(default_factory=dict)   # ParlayAPI market key -> our stat
+    skip_sources: list[str] = Field(default_factory=list)        # DFS apps, exchanges: not a book price
+    max_quote_age_hours: float = 12      # a book's last quote counts only if this close to tip
+    requests_per_second: float = 2
+    max_credits_per_run: int = 20_000
+
+
 class OverlayConfig(BaseModel):
     enabled: bool = False
     stats: list[str] = Field(default_factory=list)
@@ -407,6 +429,7 @@ class MarketsConfig(BaseModel):
     pregame_final_minutes: float = 45
     kalshi: KalshiConfig
     rundown: RundownConfig
+    parlay: ParlayConfig = Field(default_factory=ParlayConfig)
     overlay: OverlayConfig = Field(default_factory=OverlayConfig)
 
 
@@ -484,6 +507,7 @@ class Secrets(BaseSettings):
 
     bdl_api_key: SecretStr = SecretStr("")
     rundown_api_key: SecretStr = SecretStr("")
+    parlay_api_key: SecretStr = SecretStr("")
     x_bearer_token: SecretStr = SecretStr("")
     llm_api_key: SecretStr = SecretStr("")
     yahoo_league_id: int | None = None

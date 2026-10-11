@@ -1407,3 +1407,40 @@ test image with 10 real names (accents, Jr., nicknames, stat columns, status tag
 1.1 s. Vision's first read on a Mac takes about a minute (it loads its models), then ~0.2 s.
 Per-team analysis of the whole league stays the draft room's (Teams, Me vs league), from the draft
 log.
+
+**ParlayAPI checked; the props test on sportsbook closing lines, its rule written before the
+data (2026-10-11).** The owner has a ParlayAPI Enterprise key (one year of history, 5M credits a
+month; `PARLAY_API_KEY`). The hope was last season's book closing lines for threes, steals and
+blocks, which Kalshi traded too thinly to judge (2026-10-09). What its NBA prop archive holds
+(`make parlay-check`, about 250 credits spent finding out):
+- Oct 21, 2025 – Apr 7, 2026: nothing. Apr 8 – Apr 24: DFS apps, exchanges and Bovada's one-sided
+  prices (no pair to de-vig). Two-way book prices begin Apr 25, 2026 (DraftKings, bet365, FanDuel,
+  BetMGM, Caesars and others; 500–1,100 threes/steals/blocks quotes a day): the playoffs only.
+  The baseline leaves playoff games out, and playoff rotations wouldn't carry over to fantasy
+  weeks, so last season can't be tested on book lines at all.
+- Their "closing" row is a book's last quote, and on a playoff day 79% were taken after tip (in
+  play). Pre-tip quotes ran a median 2.4 h before tip, a quarter of them over 7 h.
+- `commence_time` is often empty and team names come short ("ATL Hawks"): games are found by
+  their listed date (or the UTC day after) and the store's tip time. Players matched 98%; the
+  misses are team names and template text listed as players, which are dropped.
+
+So the books pass is a forward test on this season. Fixed now, before any of its data exists
+(`jobs/props_test.py --source books`, settings `props_test.books`, `markets.parlay`):
+- Games: every finished 2026-27 regular-season game from opening night (Oct 20), no sample.
+- Price, per rung (game, player, stat, line): each sportsbook's last quote before tip and within
+  12 hours of it (`max_quote_age_hours`), both sides priced, de-vigged within the book's pair;
+  the rung's market probability is the mean over books. DFS apps, exchanges, prediction markets
+  (Kalshi is its own test) and opening lines are left out. Whole-number lines are dropped (a push
+  is neither over nor under). A book voids the prop when he doesn't play, so the price is P(over |
+  plays), compared with the baseline's P(stat > line | plays) and scored only where he played.
+- Baseline: the production baseline fitted on 2023–2025 only, each game projected from its
+  pre-game state with no game-day news (as in the 2026-10-09 test).
+- Scores, range and rule as on 2026-10-09: Brier per rung, the 80% range of (market - baseline)
+  from 2,000 resamples of whole games; the market leads a judged stat only with at least 150 scored
+  rungs and that range entirely below zero. Judged: threes, steals, blocks, turnovers (books post
+  turnovers; Kalshi doesn't). Reference, no rule: points, rebounds, assists.
+- When: first run once the season has two weeks of games (about Nov 3); a stat short of 150
+  scored rungs then is "too few rungs" and waits for a later run. A stat the market leads joins
+  `markets.overlay.stats` only after the owner sees the result.
+- Caveat known now: the baseline has no news, the books do; the gap that comes from availability
+  is removed by scoring if he plays, the rest (minutes caps, starts) is not.

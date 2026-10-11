@@ -48,6 +48,8 @@ make scoreboard-live             # grade what the app said before each game agai
 make report-backfill SEASONS="2025"  # store a past season's NBA injury reports (for the news backtest)
 make backtest-news               # replay that season day by day: does game-day news make the weekly odds more honest?
 make x-forward-test              # mid-November: this season replayed with and without X statuses, verdict by the rule
+make parlay-check                # ParlayAPI (PARLAY_API_KEY): the key, credits, one day of NBA prop closing lines
+make props-test ARGS="--source books"  # from about Nov 3: this season's sportsbook closing lines vs the baseline, by the rule
 ```
 
 `.env`, `oauth2.json` and `data/` are gitignored and must never be committed.

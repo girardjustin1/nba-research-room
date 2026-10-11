@@ -274,6 +274,20 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     days_ahead: 2              # today plus this many days of events per nightly run
     pregame_days_ahead: 0      # pre-game pulls: today's games only
     requests_per_second: 5
+  parlay:                      # ParlayAPI (PARLAY_API_KEY, Enterprise: one year of history), ingest/parlay.py
+    base_url: https://parlay-api.com
+    sport_key: basketball_nba
+    prop_markets: {player_points: pts, player_rebounds: reb, player_assists: ast, player_threes: fg3m,
+                   player_steals: stl, player_blocks: blk, player_turnovers: tov}
+    # Not a two-way sportsbook price: DFS pick'em apps, exchanges and prediction markets (Kalshi is
+    # tested on its own). Sources ending "_open" are opening lines and are always skipped.
+    skip_sources: [prizepicks, underdog, sleeper, pick6, betr, dabble, novig, prophetx, kalshi, polymarket,
+                   robinhood]
+    # Their "closing" row is a book's last quote, often taken after tip (in play: dropped) or long
+    # before it. A pre-tip quote counts only within this many hours of tip (median 2.4 h, 2026 playoffs).
+    max_quote_age_hours: 12
+    requests_per_second: 2
+    max_credits_per_run: 20000 # a job stops before spending more (a season of closing lines is ~a few thousand)
 
 alerts:                        # in-app notifications (research_room/alerts.py, League bell)
   lookback_days: 14            # how far back the inbox shows
@@ -315,6 +329,12 @@ props_test:                    # Kalshi props vs the baseline, both if he plays 
   level: 0.80
   prob_clip: [0.01, 0.99]      # log loss only
   requests_per_second: 5       # Kalshi's public API, kept polite (the live ingest uses 8)
+  books:                       # the same test on sportsbook closing lines (ParlayAPI), forward on this season
+    season: 2026               # (make props-test ARGS="--source books"); its rule is in DECISIONS.md,
+    train_seasons: [2023, 2024, 2025]   # "Props test on sportsbook closing lines", written before the data
+    first_day: 2026-10-20      # opening night
+    judged: [fg3m, stl, blk, tov]
+    reference: [pts, reb, ast]
 
 x_forward_test:                # the X forward test (make x-forward-test); the rule is in DECISIONS.md,
                                # "In-season scorecard and the forward tests", written before opening night
