@@ -98,8 +98,9 @@ With Yahoo access on, steps 1–3 happen by themselves; skip them.
   quickest), and paste a fresh free-agent list.
 - **After you add or drop anyone in Yahoo:** update My roster (search or paste), and the IL marks.
 - **For fresh add suggestions:** paste the free agents again. The screen asks for a new paste once a
-  list is over 24 hours old, because other teams add and drop every day. Players on waivers paste
-  in as free agents; one that's suggested can only be claimed once his waivers clear.
+  list is over 24 hours old, because other teams add and drop every day. Players on waivers are
+  read from Yahoo's "W (date)" mark and show "Waivers until Fri Nov 20": Moves still suggests them,
+  counting their games only from the day they clear, and says to put the claim in now.
 - **Game days:** Team → Lineup (**#/league/team**) shows who to start; set it in Yahoo before the
   first tip. Team → Moves (**#/league/team/moves**) shows the week's add/drop plan and what it does
   to your odds.

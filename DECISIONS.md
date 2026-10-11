@@ -1464,3 +1464,21 @@ lines for opening-week games from Pinnacle only (the books post closer to tip); 
 - The overlay's tested stats are unchanged ([pts, reb, ast]): more books feed the same lines.
   Tests can't reach the paid feed: the conftest blanks PARLAY_API_KEY, and dry runs stub the
   market pulls as before.
+
+**Waiver labels on pasted free agents (2026-10-11).** The free-agent paste now reads Yahoo's
+waiver mark: a player on waivers shows "W (Nov 20)" (or "W (Fri)", "W (11/20)") in his row after
+his name, a free agent "FA". Each W mark goes to the last player found before it (none after a name
+shared by two players); a date that can't be read is today + `transactions.waiver_days`. The dates
+are kept beside the ids in data/inbox/free_agents.json (ids and dates only, purged by
+`make yahoo-purge` as before) and drop off once the day arrives. The owner chose to keep waiver
+players in the suggestions with a label rather than hide them:
+- The optimizer and the opponent's streaming can't put a player on waivers on a roster before the
+  day his waivers clear (`available_from`); `optimizer.check` refuses a chosen move that tries.
+- Moves: the player is `owner: "waivers"` with `waiver_until`, the reason starts "On waivers until
+  Fri: claim him now.", and the deadline is `waiver_clears` at the start of that day, Eastern
+  (Yahoo's processing hour isn't known, so no later time is claimed).
+- Web: every player line shows "Waivers until Fri Nov 20" (the shape the Pickups prototype already
+  used); the sample paste and mocks carry a waiver player, so the Storybook stories show it.
+- Assumed, not checked against a real paste (Yahoo text never reaches an AI): the mark sits in the
+  player's row after his name. If a real paste puts it elsewhere, labels attach to the wrong player;
+  the Free agents page shows them, so a check after the first real paste will tell.

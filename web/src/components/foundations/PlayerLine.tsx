@@ -8,7 +8,7 @@ import LocalHospitalOutlinedIcon from '@mui/icons-material/LocalHospitalOutlined
 import type { PlayerRef } from '../../api/season';
 import { pct } from '../../lib/format';
 import { PlayerAvatar, TeamBadge } from './avatars/PlayerAvatar';
-import { STATUS_LABEL, positionsLabel } from './seasonFormat';
+import { STATUS_LABEL, positionsLabel, waiverLabel } from './seasonFormat';
 
 /** Injury/status as icon + words + the engine's play probability and minutes cap. */
 export function StatusChip({ player, showHealthy = false }: { player: PlayerRef; showHealthy?: boolean }) {
@@ -40,8 +40,9 @@ export interface PlayerLineProps {
   trailing?: ReactNode;
 }
 
-/** A player row: face, name, positions · team, optional detail; tappable when `onOpen` is set. */
+/** A player row: face, name, positions · team, waivers, optional detail; tappable when `onOpen` is set. */
 export function PlayerLine({ player, prefix, detail, size = 36, onOpen, trailing }: PlayerLineProps) {
+  const waivers = waiverLabel(player);
   const body = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0, width: '100%', minHeight: 44, textAlign: 'left' }}>
       {prefix && (
@@ -56,6 +57,7 @@ export function PlayerLine({ player, prefix, detail, size = 36, onOpen, trailing
         </Typography>
         <Typography variant="caption" component="p" noWrap sx={{ color: 'text.secondary' }}>
           {positionsLabel(player.eligible)} · <TeamBadge abbr={player.team_abbr} logoUrl={player.team_logo_url} />
+          {waivers ? <> · {waivers}</> : null}
           {detail ? <> · {detail}</> : null}
         </Typography>
       </Box>

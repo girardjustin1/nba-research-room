@@ -219,10 +219,11 @@ LIVE_ONLY: dict[str, Table] = {
         "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "yahoo_player_key VARCHAR",
         "player_name VARCHAR", "player_id INTEGER", "selected_slot VARCHAR",
         "eligible_positions VARCHAR", "status VARCHAR", *_INGEST),
+    # waiver_until: the day his waivers clear (he can play from then); null for a free agent.
     "yahoo_players": _t(("snapshot_at", "yahoo_player_key"),
         "snapshot_at TIMESTAMPTZ", "yahoo_player_key VARCHAR", "player_name VARCHAR",
         "team_abbr VARCHAR", "eligible_positions VARCHAR", "pct_rostered DOUBLE",
-        "status VARCHAR", "owner_team_id INTEGER", "player_id INTEGER", *_INGEST),
+        "status VARCHAR", "owner_team_id INTEGER", "player_id INTEGER", "waiver_until DATE", *_INGEST),
     "yahoo_matchups": _t(("snapshot_at", "week", "team_id"),
         "snapshot_at TIMESTAMPTZ", "week INTEGER", "team_id INTEGER",
         "opponent_team_id INTEGER", "fg_pct DOUBLE", "ft_pct DOUBLE", "fg3m DOUBLE",

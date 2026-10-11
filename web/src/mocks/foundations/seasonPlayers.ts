@@ -119,11 +119,11 @@ export const THEIRS = {
 /** Free agents and waiver-wire players. Ids 300+. */
 export const FREE_AGENTS = {
   bramwell: p(300, 'Callum Bramwell', 'NOP', ['C'], 'free_agent', undefined, 0.21),
-  northcott: p(301, 'Nico Northcott', 'ATL', ['PG'], 'waivers', undefined, 0.34),
+  northcott: { ...p(301, 'Nico Northcott', 'ATL', ['PG'], 'waivers', undefined, 0.34), waiver_until: '2026-11-20' },
   sefton: p(302, 'Jonah Sefton', 'CHI', ['SG', 'SF'], 'free_agent', undefined, 0.12),
   hargreave: p(303, 'Ravi Hargreave', 'MIN', ['PF', 'C'], 'free_agent', undefined, 0.17),
   delacroix: p(304, 'Luc Delacroix', 'PHX', ['SG'], 'free_agent', undefined, 0.09),
-  quillan: p(305, 'Omar Quillan', 'SAS', ['C'], 'waivers', status('probable', { note: 'Illness; expected to play' }), 0.28),
+  quillan: { ...p(305, 'Omar Quillan', 'SAS', ['C'], 'waivers', status('probable', { note: 'Illness; expected to play' }), 0.28), waiver_until: '2026-11-20' },
   everly: p(306, 'Ezra Everly', 'GSW', ['SF'], 'free_agent', undefined, 0.06),
   kingsmill: p(307, 'Aaron Kingsmill', 'DAL', ['PG', 'SG'], 'free_agent', status('questionable', { minutes_cap: 20, note: 'Returning from a calf strain' }), 0.15),
 };

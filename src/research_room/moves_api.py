@@ -201,6 +201,8 @@ def _move_json(
     add, drop = refs.get(m.add), refs.get(m.drop)
     d = single.p_win_week - baseline.p_win_week
     reason = f"Adds {adds_games} game{'s' if adds_games != 1 else ''} from {m.effective:%a}: {top}."
+    if add and add.get("waiver_until"):
+        reason = f"On waivers until {date.fromisoformat(add['waiver_until']):%a}: claim him now. " + reason
     details = [
         f"P(win week) {baseline.p_win_week:.0%} -> {single.p_win_week:.0%} with this move alone.",
         f"Expected categories {baseline.expected_cats:.1f} -> {single.expected_cats:.1f} of "
@@ -234,7 +236,7 @@ def _move_json(
                 },
             ],
         },
-        "deadline": {"kind": "add_before_game", "at": matchup.day_end_ts(m.effective - timedelta(days=1))},
+        "deadline": _deadline(m, add),
         "uses_acquisition": True,
         "playable": None,
         "depends_on": [],
@@ -249,15 +251,26 @@ def _move_json(
     }
 
 
+def _deadline(m: optimizer.Move, add: dict | None) -> dict:
+    """Add before his first game counts; a player on waivers: claim before his waivers clear (the
+    start of that day, Eastern: Yahoo's processing time isn't known)."""
+    if add and add.get("waiver_until"):
+        start = datetime.combine(date.fromisoformat(add["waiver_until"]), datetime.min.time(), matchup.ET)
+        return {"kind": "waiver_clears", "at": start.isoformat()}
+    return {"kind": "add_before_game", "at": matchup.day_end_ts(m.effective - timedelta(days=1))}
+
+
 def _refs_for(con, inp: dict, pool: pd.DataFrame) -> dict:
     now = inp["now"]
     refs = _player_refs(con, inp["me_roster"], {}, now)
     fa = _player_refs(con, pool, {}, now)
     pct = dict(zip(pool["player_id"], pool["pct_rostered"], strict=True))
+    opens = optimizer.available_from(pool)
     for pid, r in fa.items():
-        r["owner"] = "free_agent"
+        r["owner"] = "waivers" if pid in opens else "free_agent"
         v = pct.get(pid)
         r["pct_rostered"] = None if v is None or pd.isna(v) else float(v) / 100.0
+        r["waiver_until"] = opens[pid].isoformat() if pid in opens else None
     return {**refs, **fa}
 
 
@@ -351,12 +364,12 @@ def scenario_response(
             "solve_ms": None,
             "incompatible": [],
         }
-    why = optimizer.check(inp["me_roster"], chosen, left, cfg, inp["days"], earliest)
+    why = optimizer.check(inp["me_roster"], chosen, left, cfg, inp["days"], earliest, pool)
     offered = [m for m in plan.moves if m.move_id not in set(move_ids)]
     incompatible = [
         {"move_id": m.move_id, "reason": r}
         for m in offered
-        if (r := optimizer.check(inp["me_roster"], [*chosen, m], left, cfg, inp["days"], earliest))
+        if (r := optimizer.check(inp["me_roster"], [*chosen, m], left, cfg, inp["days"], earliest, pool))
     ]
     if why:
         return {

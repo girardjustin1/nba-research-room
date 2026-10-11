@@ -19,8 +19,9 @@ Method (weekly MILP, PuLP/CBC), linearized around the current matchup:
 - Constraints: 10 active slots and one slot per player per day; roster spots (active + bench;
   IL occupants stay put); my players only leave (drops), free agents can be added and later
   dropped (streaming), each add uses an acquisition and sum(a) <= acquisitions left; adds take
-  effect `add_takes_effect_days` after today; each add must gain at least
-  `min_gain_per_acquisition` (a penalty in the objective).
+  effect `add_takes_effect_days` after today, and a player on waivers no sooner than the day his
+  waivers clear (`available_from`); each add must gain at least `min_gain_per_acquisition` (a
+  penalty in the objective).
 - The plan is then scored exactly by the matchup engine. The weights are recomputed at the plan
   and the MILP re-solved (`relinearize_iterations`); the plan with the best exact P(win week)
   is kept, and it must beat doing nothing or the plan is empty.
@@ -147,6 +148,14 @@ def roster_cap(cfg: Settings) -> int:
     return cfg.roster.active_per_day + cfg.roster.bench
 
 
+def available_from(pool: pd.DataFrame) -> dict[int, date]:
+    """Player id -> the first day he can play for me: the day his waivers clear (free agents: none)."""
+    if "available_from" not in pool:
+        return {}
+    pairs = zip(pool["player_id"], pool["available_from"], strict=True)
+    return {int(p): pd.Timestamp(d).date() for p, d in pairs if pd.notna(d)}
+
+
 def check(
     base: pd.DataFrame,
     moves: list[Move],
@@ -154,6 +163,7 @@ def check(
     cfg: Settings,
     days: list[date],
     earliest: date | None,
+    pool: pd.DataFrame | None = None,
 ) -> str | None:
     """Why a set of moves can't all be made, or None when it can."""
     adds = [m.add for m in moves if m.add is not None]
@@ -166,6 +176,10 @@ def check(
         return "Drops the same player twice"
     if earliest and any(m.effective < earliest for m in moves):
         return f"Adds count from {earliest.isoformat()} at the earliest"
+    opens = available_from(pool) if pool is not None else {}
+    for m in moves:
+        if m.add in opens and m.effective < opens[m.add]:
+            return f"He's on waivers until {opens[m.add]:%a %b %-d}: he can play from then"
     non_il = base[base["current_slot"].fillna("BN") != IL_SLOT]
     on = set(non_il["player_id"])
     for day in days:
@@ -245,10 +259,11 @@ def _solve(
                 prob += y[(p, t)] == 1  # nothing changes before adds can count
             elif t > 0:
                 prob += y[(p, t)] <= y[(p, t - 1)]  # my players only leave
+    opens = available_from(pool)
     for p in F:
         for t in T:
-            if t < first_add:
-                prob += y[(p, t)] == 0
+            if t < first_add or (p in opens and days[t] < opens[p]):
+                prob += y[(p, t)] == 0                # not yet: adds can't count, or still on waivers
             prob += a[(p, t)] >= y[(p, t)] - (y[(p, t - 1)] if t > 0 else 0)
     prob += pulp.lpSum(a.values()) <= acquisitions_left
     for p in F:  # a dropped free agent goes to waivers: each is added at most once a week
@@ -353,7 +368,7 @@ def optimize(
         moves, status = _solve(base, cands, values, days, first_add, acquisitions_left, cfg)
         if status != "optimal":
             break
-        if check(base, moves, acquisitions_left, cfg, days, days[first_add]) is not None:
+        if check(base, moves, acquisitions_left, cfg, days, days[first_add], cands) is not None:
             status = "invalid"  # never score or return a plan the roster rules reject
             break
         m = evaluate(inp, base, pool, moves, cfg)
@@ -383,10 +398,12 @@ def first_add_index(days: list[date], today: date, cfg: Settings) -> int:
 
 
 def free_agents(con, cfg: Settings | None = None) -> pd.DataFrame:
-    """Latest players.csv free agents matched to a player, without an out / IL status."""
+    """Latest players.csv free agents matched to a player, without an out / IL status;
+    `available_from` is the day a player on waivers clears (null: a free agent now)."""
     cfg = cfg or settings()
     df = con.execute("""
-        SELECT player_id, player_name AS name, eligible_positions, status, pct_rostered
+        SELECT player_id, player_name AS name, eligible_positions, status, pct_rostered,
+               waiver_until AS available_from
         FROM yahoo_players
         WHERE snapshot_at = (SELECT max(snapshot_at) FROM yahoo_players)
           AND owner_team_id IS NULL AND player_id IS NOT NULL

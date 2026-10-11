@@ -143,3 +143,10 @@ def test_backtest_summary_reports_the_streaming_opponent():
     assert s["plan_vs_static_plan"] == pytest.approx(1.5 / n)
     assert s["brier_do_nothing_static_odds"] > s["brier_do_nothing"]   # the static odds ran high here
     assert "opp_adds_per_week" not in backtest.summarize(res.assign(opp_streams=False))
+
+
+def test_he_cannot_pick_up_a_player_before_his_waivers_clear(cfg):
+    inp, fa = opp_week(cfg)
+    held = fa.assign(available_from=DAYS[2])                              # everyone on waivers to day 3
+    s = streaming.opponent_streams(inp, held, cfg)
+    assert s.moves and all(m.effective >= DAYS[2] for m in s.moves)

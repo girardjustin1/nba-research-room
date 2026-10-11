@@ -109,3 +109,62 @@ def test_routes(tmp_path, cfg):
     assert r.status_code == 200 and r.json()["players"][0]["name"] == "Invented Guard"
     assert "never in the database" in r.json()["policy"]
     assert client.post("/season/free_agents", json={"text": "no names"}).status_code == 422
+
+
+# ------------------------------------------------------------------ waivers
+def test_a_waiver_mark_goes_to_the_player_before_it(nba, cfg, tmp_path):
+    import json
+
+    out = free_agents.save(nba, PASTE, cfg, NOW)                      # NOW: Wed Nov 4 (ET)
+    until = {p["player_id"]: p["waiver_until"] for p in out["players"]}
+    assert until == {1: "2026-11-05", 2: None, 3: "2026-11-06", 6: None}
+    assert [p["owner"] for p in out["players"]] == ["waivers", "free_agent", "waivers", "free_agent"]
+    kept = json.loads((tmp_path / "free_agents.json").read_text())
+    assert kept["waivers"] == {"1": "2026-11-05", "3": "2026-11-06"}
+    later = free_agents.response(nba, cfg, datetime(2026, 11, 5, 17, 0, tzinfo=UTC))
+    assert {p["player_id"]: p["waiver_until"] for p in later["players"]}[1] is None   # cleared: a free agent
+
+
+def test_a_waiver_mark_after_an_ambiguous_name_is_not_given_to_anyone(nba, cfg):
+    out = free_agents.save(nba, "Made Up Center  FA\nTwin Name  W (Nov 7)\n", cfg, NOW)
+    assert [p["waiver_until"] for p in out["players"]] == [None]
+
+
+def test_clear_date_reads_yahoo_s_formats():
+    from datetime import date
+
+    wed = date(2026, 11, 4)
+    assert free_agents.clear_date("Nov 6", wed, 2) == date(2026, 11, 6)
+    assert free_agents.clear_date("November 6", wed, 2) == date(2026, 11, 6)
+    assert free_agents.clear_date("11/6", wed, 2) == date(2026, 11, 6)
+    assert free_agents.clear_date("Fri", wed, 2) == date(2026, 11, 6)
+    assert free_agents.clear_date("Wed", wed, 2) == wed                       # today
+    assert free_agents.clear_date("Jan 2", date(2026, 12, 30), 2) == date(2027, 1, 2)
+    assert free_agents.clear_date("soon", wed, 2) == date(2026, 11, 6)        # unreadable: waiver_days
+
+
+def test_waiver_dates_reach_the_optimizer_pool(nba, cfg):
+    from datetime import date
+
+    free_agents.save(nba, PASTE, cfg, NOW)
+    free_agents.apply(nba, cfg)
+    pool = optimizer.free_agents(nba, cfg).set_index("player_id")
+    assert pd.Timestamp(pool.at[3, "available_from"]).date() == date(2026, 11, 6)
+    assert pd.isna(pool.at[2, "available_from"])
+
+
+def test_moves_name_the_waiver_day_on_the_player(nba, cfg):
+    from datetime import date
+
+    from research_room import moves_api
+
+    free_agents.save(nba, PASTE, cfg, NOW)
+    free_agents.apply(nba, cfg)
+    pool = optimizer.free_agents(nba, cfg)
+    mine = pd.DataFrame({"player_id": pd.Series(dtype=int), "name": [], "eligible": []})
+    refs = moves_api._refs_for(nba, {"now": pd.Timestamp(NOW), "me_roster": mine}, pool)
+    assert refs[3]["waiver_until"] == "2026-11-06" and refs[2]["waiver_until"] is None
+    assert refs[3]["owner"] == "waivers" and refs[2]["owner"] == "free_agent"
+    mv = optimizer.Move("m", 3, None, date(2026, 11, 6))
+    assert moves_api._deadline(mv, refs[3]) == {"kind": "waiver_clears", "at": "2026-11-06T00:00:00-05:00"}
+    assert moves_api._deadline(mv, refs[2])["kind"] == "add_before_game"

@@ -17,7 +17,8 @@ The rule, greedy and day by day:
   weakest player without a game that day (least value over the rest of the week, days t..end) is
   swapped for the free agent with a game that day worth the most over the rest of the week, when the
   free agent is worth more. Players in an IL slot or listed injured are never dropped (a manager
-  keeps an injured starter); a free agent he drops isn't added back (waivers).
+  keeps an injured starter); a free agent he drops isn't added back (waivers), and one on waivers
+  joins no sooner than the day they clear.
 - At most `adds_per_day` swaps a day and `adds_per_week` a week (capped at the league's limit),
   less the adds he has made this week when Yahoo's matchup gives them.
 - My roster is never touched. The free-agent pool is shared one way: he picks first, and the
@@ -69,13 +70,15 @@ def opponent_streams(inp: dict, pool: pd.DataFrame, cfg: Settings | None = None,
         on = [int(p) for p in base["player_id"]]
         values = optimizer.day_values(inp["proj"], list(dict.fromkeys(on + free)), days, w, cfg)
         keep, added = _protected(base), set()
+        opens = optimizer.available_from(fa)                 # on waivers: no sooner than they clear
         for t in range(first, len(days)):
             rest = values.loc[:, t:].sum(axis=1)
             for _ in range(o.adds_per_day):
                 if len(moves) >= allowed:
                     break
                 idle = [p for p in on if p not in keep and values.at[p, t] == 0.0]
-                cands = [p for p in free if p not in added and values.at[p, t] != 0.0]
+                cands = [p for p in free if p not in added and values.at[p, t] != 0.0
+                         and not (p in opens and days[t] < opens[p])]
                 if not idle or not cands:
                     break
                 drop = min(idle, key=lambda p: (rest[p], p))

@@ -166,6 +166,8 @@ export interface PlayerRef {
   status: PlayerStatus;
   /** Yahoo % rostered (0..1) for free agents; null when unknown. */
   pct_rostered: number | null;
+  /** owner 'waivers': the day his waivers clear (he plays from then); absent or null otherwise. */
+  waiver_until?: IsoDate | null;
 }
 
 export interface GameRef {

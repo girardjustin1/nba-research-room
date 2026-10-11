@@ -112,6 +112,12 @@ export function weekdayOf(date: IsoDate): string {
   return new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
 }
 
+/** "Waivers until Fri Nov 20" for a player on waivers ("On waivers" without a date), else null. */
+export function waiverLabel(player: Pick<PlayerRef, 'owner' | 'waiver_until'>): string | null {
+  if (player.owner !== 'waivers') return null;
+  return player.waiver_until ? `Waivers until ${weekdayOf(player.waiver_until)} ${shortDate(player.waiver_until)}` : 'On waivers';
+}
+
 /** "Nov 18" for a calendar date. */
 export function shortDate(date: IsoDate): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(

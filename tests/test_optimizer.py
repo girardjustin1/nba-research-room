@@ -104,3 +104,18 @@ def test_every_returned_roster_fits_the_limit(cfg):
     assert all(len(r) <= optimizer.roster_cap(cfg) for r in plan.rosters)
     adds = [m.add for m in plan.moves if m.add is not None]
     assert len(adds) == len(set(adds))                       # no one is added twice in a week
+
+
+def test_a_player_on_waivers_joins_no_sooner_than_they_clear(cfg):
+    inp, fa = week(cfg)
+    free = optimizer.optimize(inp, fa, acquisitions_left=4, cfg=cfg)
+    first_pick = free.moves[0].add
+    opens = DAYS[3]
+    held = fa.assign(available_from=[opens if p == first_pick else None for p in fa["player_id"]])
+    plan = optimizer.optimize(inp, held, acquisitions_left=4, cfg=cfg)
+    assert all(m.effective >= opens for m in plan.moves if m.add == first_pick)
+    assert optimizer.available_from(held) == {first_pick: opens}
+    early = [optimizer.Move("w", first_pick, 12, DAYS[1])]
+    why = optimizer.check(inp["me_roster"], early, 4, cfg, DAYS, DAYS[1], held)
+    assert why and "on waivers until" in why
+    assert optimizer.check(inp["me_roster"], early, 4, cfg, DAYS, DAYS[1], fa) is None

@@ -12,6 +12,7 @@ describe('free agents', { timeout: 20_000 }, () => { // many keystrokes: slow on
     fireEvent.change(screen.getByLabelText("Yahoo's Players page"), { target: { value: SAMPLE_PASTE } });
     fireEvent.click(save);
     await waitFor(() => expect(screen.getByText('Found (5)')).toBeTruthy());
+    expect(screen.getByText(/Waivers until Tue Nov 17/)).toBeTruthy();   // the sample's "W (Nov 17)"
     expect(onSave).toHaveBeenCalledWith({ text: SAMPLE_PASTE });
     expect((screen.getByLabelText("Yahoo's Players page") as HTMLTextAreaElement).value).toBe('');
   });

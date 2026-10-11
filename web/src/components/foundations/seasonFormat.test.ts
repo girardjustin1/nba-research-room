@@ -27,6 +27,7 @@ import {
   signedNum,
   statValue,
   until,
+  waiverLabel,
   weekdayOf,
   whenLabel,
   worstLevel,
@@ -158,5 +159,13 @@ describe('heat scale', () => {
   it('picks the higher-contrast ink for a fill', () => {
     expect(inkOn('#104281')).toBe('#ffffff');
     expect(inkOn('#86b6ef')).toBe('#0b0b0b');
+  });
+});
+
+describe('waivers', () => {
+  it('names the day a player on waivers clears', () => {
+    expect(waiverLabel({ owner: 'waivers', waiver_until: '2026-11-20' })).toBe('Waivers until Fri Nov 20');
+    expect(waiverLabel({ owner: 'waivers' })).toBe('On waivers');
+    expect(waiverLabel({ owner: 'free_agent', waiver_until: '2026-11-20' })).toBeNull();
   });
 });
