@@ -404,6 +404,7 @@ class RundownConfig(BaseModel):
     days_ahead: int
     pregame_days_ahead: int = 0
     requests_per_second: float
+    books: dict[int, str] = Field(default_factory=dict)   # affiliate id -> book key (one quote per book)
 
 
 class ParlayConfig(BaseModel):

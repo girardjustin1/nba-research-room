@@ -1,7 +1,8 @@
 """Market-informed projections: where a liquid prop ladder exists, the market sets the game.
 
-Inputs: props_ladder (Kalshi mid-prices and TheRundown de-vigged sportsbook lines, archived by
-ingest/kalshi.py and ingest/rundown.py), the baseline's projection rows, settings.markets.overlay.
+Inputs: props_ladder (Kalshi mid-prices, and de-vigged sportsbook lines from TheRundown and
+ParlayAPI: ingest/kalshi.py, rundown.py, parlay.py), the baseline's projection rows,
+settings.markets.overlay and settings.markets.rundown.books.
 Outputs: the same projection rows, with mean and sd replaced for the player-game-stats that have a
 recent liquid ladder, and a `market` flag. Tables: reads props_ladder.
 
@@ -11,7 +12,9 @@ actual stats (points RMSE 7.75 vs 8.84, rebounds 2.96 vs 3.12, assists 2.48 vs 2
 Only the tested stats are overlaid (settings).
 
 Method: each source's latest snapshot gives P(stat > threshold) at one or more thresholds
-(threshold = x.5 lines). Several sources or books at one threshold are combined by their median.
+(threshold = x.5 lines). Several sources or books at one threshold are combined by their median,
+each book once: a book read through two feeds (DraftKings via TheRundown and via ParlayAPI) keeps
+its most recent quote only.
 With two or more thresholds, a normal is fitted through them on the probit scale,
 z = Phi^-1(1 - p) = (threshold - mu) / sigma, which is a straight line in the threshold. With one,
 the baseline's sd is kept and mu is solved from that line. The market's sd stays within
@@ -54,7 +57,29 @@ def ladder_points(
     return combine(ladder_rows(con, game_ids, stats, now, max_age_hours))
 
 
-LADDER_ROWS = ["player_id", "game_id", "stat", "threshold", "prob", "source", "priced_at"]
+LADDER_ROWS = ["player_id", "game_id", "stat", "threshold", "prob", "source", "priced_at", "book"]
+
+
+def book_key(source: str, vendor: str | None, rundown_books: dict[int, str]) -> str:
+    """The book behind a ladder row, the same name whichever feed carried it: "kalshi",
+    "rundown:19" -> "draftkings" (settings.markets.rundown.books), "parlay:draftkings" ->
+    "draftkings". An unmapped TheRundown id stays "rundown:<id>" (counted on its own)."""
+    v = str(vendor or source)
+    feed, _, book = v.partition(":")
+    if feed == "rundown" and book.isdigit():
+        return rundown_books.get(int(book), v)
+    if feed == "parlay" and book:
+        return book
+    return v
+
+
+def one_per_book(rows: pd.DataFrame) -> pd.DataFrame:
+    """Each book's most recent quote per player, game, stat and line."""
+    if rows.empty:
+        return rows
+    return (rows.sort_values("priced_at")
+            .drop_duplicates(["player_id", "game_id", "stat", "threshold", "book"], keep="last")
+            .sort_index())
 
 
 def ladder_rows(
@@ -63,9 +88,10 @@ def ladder_rows(
     stats: list[str],
     now: datetime | None = None,
     max_age_hours: float = 30,
+    rundown_books: dict[int, str] | None = None,
 ) -> pd.DataFrame:
-    """Each source's latest liquid snapshot, one row per book and threshold, with when it was
-    priced (the quote's own time, else when it was read)."""
+    """Each source's latest liquid snapshot, one row per book and threshold (each book once across
+    feeds), with when it was priced (the quote's own time, else when it was read)."""
     if not game_ids or not stats:
         return pd.DataFrame(columns=LADDER_ROWS)
     as_of = pd.Timestamp(now or store.utcnow())
@@ -78,7 +104,7 @@ def ladder_rows(
             SELECT source, game_id, max(fetched_at) AS f FROM props_ladder
             WHERE game_id IN (SELECT unnest(?)) AND fetched_at >= ? AND fetched_at <= ? GROUP BY 1, 2)
         SELECT l.player_id, l.game_id, l.stat, l.threshold, l.prob, l.source,
-               coalesce(l.ts, l.fetched_at) AS priced_at
+               coalesce(l.ts, l.fetched_at) AS priced_at, l.vendor
         FROM props_ladder l
         JOIN latest t ON t.source = l.source AND t.game_id = l.game_id AND t.f = l.fetched_at
         WHERE l.side = 'over' AND l.prob IS NOT NULL AND l.stat IN (SELECT unnest(?))
@@ -86,7 +112,11 @@ def ladder_rows(
     """,
         [list(map(int, game_ids)), since, as_of, stats, since, as_of],
     ).df()
-    return df if not df.empty else pd.DataFrame(columns=LADDER_ROWS)
+    if df.empty:
+        return pd.DataFrame(columns=LADDER_ROWS)
+    books = settings().markets.rundown.books if rundown_books is None else rundown_books
+    df["book"] = [book_key(s, v, books) for s, v in zip(df["source"], df["vendor"], strict=True)]
+    return one_per_book(df.drop(columns="vendor"))[LADDER_ROWS]
 
 
 def combine(rows: pd.DataFrame) -> pd.DataFrame:

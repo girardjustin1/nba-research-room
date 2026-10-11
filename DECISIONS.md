@@ -1444,3 +1444,23 @@ So the books pass is a forward test on this season. Fixed now, before any of its
   `markets.overlay.stats` only after the owner sees the result.
 - Caveat known now: the baseline has no news, the books do; the gap that comes from availability
   is removed by scoring if he plays, the rest (minutes caps, starts) is not.
+
+**Live sportsbook props from ParlayAPI, each book counted once (2026-10-11).** The nightly and
+pre-game market pulls now also read ParlayAPI's live player props (`ingest/parlay.py` `sync`, 3
+credits a pull, only when `PARLAY_API_KEY` is set) into props_ladder beside TheRundown's: source
+"parlay", vendor "parlay:<book>", each book's over/under de-vigged within its pair. Kept: the
+tracked stats, full-game lines, x.5 lines, both sides priced by a sportsbook, games not yet started.
+Left out: DFS flat payouts, the skipped sources (DFS apps, exchanges, prediction markets) and
+opening lines, and game titles or template text listed as players. On Oct 11 it found two-way
+lines for opening-week games from Pinnacle only (the books post closer to tip); every name matched.
+- One quote per book in the overlay: the median across sources and books (projections/market.py)
+  would have counted DraftKings twice, once through each feed, and TheRundown also carries Kalshi,
+  Polymarket, Novig and ProphetX. Each ladder row now names its book (TheRundown's affiliate ids
+  mapped in `markets.rundown.books`) and keeps that book's most recent quote only.
+- Found on the way: props_ladder's key had no book, so two books quoting the same line at the same
+  second overwrote each other (TheRundown too). The key now includes vendor; `init_schema` widens
+  an older table's key in place, keeping every row (it refuses a key that would narrow). The table
+  was still empty: nothing was lost.
+- The overlay's tested stats are unchanged ([pts, reb, ast]): more books feed the same lines.
+  Tests can't reach the paid feed: the conftest blanks PARLAY_API_KEY, and dry runs stub the
+  market pulls as before.

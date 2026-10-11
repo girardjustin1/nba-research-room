@@ -1,5 +1,6 @@
 """Archive betting markets now: Kalshi player-prop ladders and game markets, TheRundown sportsbook
-lines and props (see research_room.ingest.kalshi / rundown). Nightly runs this too; run it by hand
+lines and props, and ParlayAPI sportsbook props when PARLAY_API_KEY is set (see
+research_room.ingest.kalshi / rundown / parlay). Nightly runs this too; run it by hand
 before tip on game days for fresher prop ladders.
 
 Usage: make markets

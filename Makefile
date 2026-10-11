@@ -50,7 +50,7 @@ mock-draft:  ## timed end-to-end mock draft (12 teams by default)
 doctor:  ## draft-night readiness: projections, Yahoo eligibility, slot, keepers, board speed
 	$(PY) jobs/doctor.py
 
-markets:  ## archive Kalshi props / game markets and TheRundown lines now (nightly does it too)
+markets:  ## archive Kalshi, TheRundown and ParlayAPI (with its key) lines now (nightly does it too)
 	$(PY) jobs/markets.py
 
 backtest:  ## replay last season week by week: are the win odds honest, do the plans win more? (ARGS=--opponent-streams)

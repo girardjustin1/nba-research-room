@@ -1,11 +1,16 @@
-"""ParlayAPI (PARLAY_API_KEY): sportsbook player-prop closing lines, for the props test.
+"""ParlayAPI (PARLAY_API_KEY): live sportsbook player props, and closing lines for the props test.
+
+Live (`sync`, in the nightly and pre-game market pulls): GET {base_url}/v1/sports/{sport_key}/props
+(3 credits a call): each book's current over/under for the tracked stats, de-vigged within the
+book's pair and archived to props_ladder (source "parlay", vendor "parlay:<book>"), beside
+TheRundown's; the overlay counts each book once across both (projections/market.py).
 
 Inputs: GET {base_url}/v1/historical/closing-lines.json?date=YYYY-MM-DD&sport_key=... (one UTC day
 per request, 1 credit per 1,000 rows delivered; the Enterprise plan reads one year back) and the
 free GET /v1/meta/api-key-check; settings.markets.parlay; the store's games and teams.
 Outputs: closing rows (one per book, player, stat, line: American over/under prices) and rungs:
 per (game, player, stat, line) the books' consensus P(over), de-vigged within each book's pair.
-Tables: none written; reads games, teams.
+Tables: `sync` writes props_ladder, player_xref, unresolved_names; reads games, teams, players.
 
 Checked against ParlayAPI's published contract (openapi.json, 2026-10-11): a closing-lines.json
 body is {as_of, date, filters, row_count, rows: [{game_date, sport_key, commence_time, home_team,
@@ -25,16 +30,22 @@ header and never printed or logged.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
+import duckdb
+import numpy as np
 import pandas as pd
 
-from research_room.config import ParlayConfig, Secrets
+from research_room import store
+from research_room.config import ParlayConfig, Secrets, Settings, settings
 from research_room.ingest.market_common import ET, GameIndex, RateLimited, american_to_prob, devig_pair
+from research_room.ingest.names import resolve_and_record
 
 SOURCE = "parlay"
 CLOSING = "/v1/historical/closing-lines.json"
+PROPS = "/v1/sports/{sport_key}/props"
 ROW_LIMIT = 50_000
+LIVE_PAGE = 10_000                                    # the props endpoint's largest page
 COLUMNS = ["source", "player_name", "stat", "threshold", "over_price", "under_price", "home_team",
            "away_team", "game_date", "commence_time", "snapshot_time"]
 
@@ -75,6 +86,18 @@ class Client:
             out["subscription"] = d["subscription"].get("state")
         return out
 
+    def live_props(self) -> list[dict]:
+        """Every book's current line for the tracked stats (paged when a page comes back full)."""
+        out, offset = [], 0
+        while True:
+            params = {"markets": ",".join(self.cfg.prop_markets), "limit": LIVE_PAGE, "offset": offset}
+            page = self.get(PROPS.format(sport_key=self.cfg.sport_key), params)
+            rows = page if isinstance(page, list) else []
+            out += rows
+            if len(rows) < LIVE_PAGE:
+                return out
+            offset += LIVE_PAGE
+
     def closing_day(self, day: str) -> dict:
         """One UTC day of NBA prop closing lines (the raw body)."""
         return self.get(CLOSING, {"date": day, "sport_key": self.cfg.sport_key, "limit": ROW_LIMIT})
@@ -101,11 +124,16 @@ def parse_closing(body: dict, cfg: ParlayConfig) -> pd.DataFrame:
     for c in ("commence_time", "snapshot_time"):          # commence_time is often "" (2026-10-11)
         df[c] = pd.to_datetime(df[c].replace("", None), utc=True, errors="coerce", format="ISO8601")
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce").dt.date
-    name = df["player_name"].astype(str)
-    # template text and game titles listed as players
-    junk = name.str.contains("{", regex=False) | name.str.contains(" @ ", regex=False)
-    ok = df["threshold"].notna() & df["over_price"].notna() & df["under_price"].notna() & ~junk
+    ok = df["threshold"].notna() & df["over_price"].notna() & df["under_price"].notna()
+    ok &= ~_junk(df["player_name"])
     return df.loc[ok, COLUMNS].reset_index(drop=True)
+
+
+def _junk(names: pd.Series) -> pd.Series:
+    """Rows listed as players that aren't: template text ("{optionTypeAbbr}{value} Pts") and game
+    titles ("Atlanta Hawks @ Orlando Magic")."""
+    n = names.astype(str)
+    return n.str.contains("{", regex=False) | n.str.contains(" @ ", regex=False) | n.isin(["", "None", "nan"])
 
 
 def team_codes(con) -> dict[str, str]:
@@ -178,3 +206,86 @@ def rungs(
     out = g.agg(p_market=("p_book", "mean"), n_books=("source", "nunique"), p_lo=("p_book", "min"),
                 p_hi=("p_book", "max"))
     return out[cols]
+
+
+# ------------------------------------------------------------------ live props
+LIVE_COLUMNS = ["day", "home", "away", "player_name", "stat", "threshold", "book", "over_price",
+                "under_price", "ts", "market_ref"]
+
+
+def parse_live(rows: list[dict], cfg: ParlayConfig, codes: dict[str, str], now: datetime) -> pd.DataFrame:
+    """Live /props rows -> the quotes we keep: a tracked stat, full game, both sides priced by a
+    sportsbook (no DFS flat payout, skipped source or opening line), an x.5 line, a game not yet
+    started."""
+    df = pd.DataFrame(rows)
+    if df.empty or "market_key" not in df:
+        return pd.DataFrame(columns=LIVE_COLUMNS)
+    book = df["bookmaker"].astype(str).str.lower()
+    skip = {s.lower() for s in cfg.skip_sources}
+    keep = df["market_key"].isin(cfg.prop_markets) & ~book.isin(skip) & ~book.str.endswith("_open")
+    if "is_dfs_flat_payout" in df:
+        keep &= ~df["is_dfs_flat_payout"].fillna(False).astype(bool)
+    if "period" in df:
+        keep &= df["period"].fillna("FULL").astype(str).str.upper().eq("FULL")
+    df = df[keep].assign(book=book[keep])
+    if df.empty:
+        return pd.DataFrame(columns=LIVE_COLUMNS)
+    df["threshold"] = pd.to_numeric(df["line"], errors="coerce")
+    for c in ("over_price", "under_price"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    start = pd.to_datetime(df["commence_time"].replace("", None), utc=True, errors="coerce",
+                           format="ISO8601")
+    listed = pd.to_datetime(df["game_date"], errors="coerce").dt.date
+    df["day"] = [s.tz_convert(ET).date() if pd.notna(s) else d for s, d in zip(start, listed, strict=True)]
+    df["home"] = df["home_team"].map(lambda n: team_code(n, codes))
+    df["away"] = df["away_team"].map(lambda n: team_code(n, codes))
+    df["player_name"] = df["player"].astype(str)
+    df["stat"] = df["market_key"].map(cfg.prop_markets)
+    quoted = pd.to_datetime(df["last_update"], utc=True, errors="coerce", format="ISO8601")
+    df["ts"] = quoted.fillna(pd.Timestamp(now))
+    df["market_ref"] = df.get("event_id")
+    ok = (df["threshold"].notna() & (df["threshold"] % 1 != 0)
+          & df["over_price"].notna() & df["under_price"].notna()
+          & df["home"].notna() & df["away"].notna() & (start.isna() | (start > pd.Timestamp(now)))
+          & ~_junk(df["player_name"]))
+    return df.loc[ok, LIVE_COLUMNS].reset_index(drop=True)
+
+
+def sync(
+    con: duckdb.DuckDBPyConnection,
+    cfg: Settings | None = None,
+    client: Client | None = None,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Archive the books' current player props for upcoming games (one /props read)."""
+    cfg = cfg or settings()
+    pc = cfg.markets.parlay
+    client = client or Client(pc)
+    now = now or store.utcnow()
+    q = parse_live(client.live_props(), pc, team_codes(con), now)
+    counts = {"prop_lines": 0, "unmatched_props": 0}
+    if q.empty:
+        return counts
+    games = GameIndex(con)
+    q["game_id"] = [games.game_id(r.day, r.home, r.away) for r in q.itertuples()]
+    names = q.drop_duplicates("player_name")
+    names = pd.DataFrame({"source_key": names["player_name"], "raw_name": names["player_name"],
+                          "team_abbr": None}).reset_index(drop=True)
+    pid = dict(zip(names["source_key"], resolve_and_record(con, SOURCE, names), strict=True))
+    q["player_id"] = q["player_name"].map(pid)
+    ok = q["player_id"].notna() & q["game_id"].notna()
+    counts["unmatched_props"] = int((~ok).sum())
+    q = q[ok].drop_duplicates(["game_id", "player_id", "stat", "threshold", "book"], keep="last")
+    pairs = [devig_pair(american_to_prob(o), american_to_prob(u))
+             for o, u in zip(q["over_price"], q["under_price"], strict=True)]
+    base = q.assign(game_id=q["game_id"].astype(int), player_id=q["player_id"].astype(int), source=SOURCE,
+                    vendor="parlay:" + q["book"], volume=np.nan, bid=np.nan, ask=np.nan, open_interest=np.nan,
+                    fetched_at=now)
+    rows = pd.concat([
+        base.assign(side="over", price=q["over_price"], prob=[a for a, _ in pairs]),
+        base.assign(side="under", price=q["under_price"], prob=[b for _, b in pairs]),
+    ], ignore_index=True)
+    counts["prop_lines"] = store.upsert(con, "props_ladder", rows[[
+        "source", "game_id", "player_id", "stat", "threshold", "side", "prob", "price", "volume", "vendor",
+        "ts", "bid", "ask", "open_interest", "market_ref", "fetched_at"]])
+    return counts

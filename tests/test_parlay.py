@@ -219,3 +219,100 @@ def test_books_pass_settings():
     assert bp.judged == ["fg3m", "stl", "blk", "tov"] and bp.reference == ["pts", "reb", "ast"]
     assert bp.season == 2026 and 2026 not in bp.train_seasons and bp.first_day == date(2026, 10, 20)
     assert settings().markets.parlay.prop_markets["player_steals"] == "stl"
+
+
+# ------------------------------------------------------------------ live props
+NOW = pd.Timestamp("2026-11-04T18:00:00Z")
+
+
+def live(**kw) -> dict:
+    base = {"event_id": "e1", "sport_key": "basketball_nba", "game_date": "2026-11-04",
+            "home_team": "San Antonio Spurs", "away_team": "New York Knicks",
+            "commence_time": TIP.isoformat(), "bookmaker": "draftkings", "market_key": "player_points",
+            "period": "FULL", "line": 20.5, "over_price": -110, "under_price": -110,
+            "is_dfs_flat_payout": False, "last_update": "2026-11-04T17:55:00Z", "player": "Invented Guard"}
+    return base | kw
+
+
+class LiveClient:
+    def __init__(self, rows):
+        self.rows, self.credits = rows, 3
+
+    def live_props(self):
+        return self.rows
+
+
+def test_parse_live_keeps_book_quotes_for_upcoming_games_only(seeded):
+    codes = parlay.team_codes(seeded)
+    rows = [live(), live(bookmaker="prizepicks", is_dfs_flat_payout=True), live(bookmaker="underdog"),
+            live(period="1Q"), live(line=20.0), live(under_price=None), live(player="Knicks @ Spurs"),
+            live(commence_time=(NOW - pd.Timedelta(minutes=1)).isoformat()), live(home_team="Boston Celtics"),
+            live(bookmaker="FanDuel", market_key="player_blocks", line=0.5)]
+    q = parlay.parse_live(rows, cfg(), codes, NOW)
+    assert list(q["book"]) == ["draftkings", "fanduel"] and list(q["stat"]) == ["pts", "blk"]
+    assert q["day"].iloc[0] == date(2026, 11, 4)              # the league date of a 7:30 pm ET tip
+    assert parlay.parse_live([], cfg(), codes, NOW).empty
+
+
+def test_sync_archives_both_sides_de_vigged(seeded):
+    rows = [live(), live(bookmaker="fanduel", over_price=-130, under_price=110), live(player="Nobody Here")]
+    counts = parlay.sync(seeded, settings(), LiveClient(rows), now=NOW)
+    assert counts == {"prop_lines": 4, "unmatched_props": 1}
+    got = seeded.execute("""SELECT vendor, side, prob, price FROM props_ladder WHERE source = 'parlay'
+                            ORDER BY vendor, side""").df()
+    assert list(got["vendor"]) == ["parlay:draftkings"] * 2 + ["parlay:fanduel"] * 2
+    assert got["prob"].iloc[0] == pytest.approx(0.5) and got["prob"].iloc[1] == pytest.approx(0.5)
+    fd_over = (130 / 230) / (130 / 230 + 100 / 210)
+    assert got.set_index(["vendor", "side"]).loc[("parlay:fanduel", "over"), "prob"] == pytest.approx(fd_over)
+    assert parlay.sync(seeded, settings(), LiveClient([]), now=NOW) == {"prop_lines": 0, "unmatched_props": 0}
+
+
+def test_live_props_pages_until_a_short_page(monkeypatch):
+    c = parlay.Client(cfg(), key="test-key")
+    pages = iter([[{"i": i} for i in range(parlay.LIVE_PAGE)], [{"i": "last"}]])
+    seen = []
+    monkeypatch.setattr(c, "get", lambda path, params=None: seen.append(params["offset"]) or next(pages))
+    assert len(c.live_props()) == parlay.LIVE_PAGE + 1 and seen == [0, parlay.LIVE_PAGE]
+
+
+def test_market_pulls_include_parlay_only_with_a_key(con, monkeypatch):
+    from research_room import pipeline
+
+    called = []
+    monkeypatch.setattr(pipeline.kalshi, "sync", lambda *a, **k: {"x": 0})
+    monkeypatch.setattr(pipeline.rundown, "sync", lambda *a, **k: {"x": 0})
+    monkeypatch.setattr(pipeline.parlay, "sync", lambda *a, **k: called.append(1) or {"prop_lines": 0})
+    assert "parlay" not in pipeline.sync_markets(con, settings())         # the conftest blanks the key
+    monkeypatch.setenv("PARLAY_API_KEY", "test-key")
+    assert "parlay" in pipeline.sync_markets(con, settings()) and called == [1]
+
+
+# ------------------------------------------------------------------ one quote per book in the overlay
+def test_book_key_names_a_book_the_same_through_either_feed():
+    from research_room.projections import market
+
+    books = settings().markets.rundown.books
+    assert market.book_key("rundown", "rundown:19", books) == "draftkings"
+    assert market.book_key("parlay", "parlay:draftkings", books) == "draftkings"
+    assert market.book_key("kalshi", "kalshi", books) == "kalshi"
+    assert market.book_key("rundown", "rundown:25", books) == "kalshi"
+    assert market.book_key("rundown", "rundown:999", books) == "rundown:999"
+    assert market.book_key("kalshi", None, books) == "kalshi"
+
+
+def test_ladder_counts_a_book_once_across_feeds(seeded):
+    from research_room.projections import market
+
+    def lad(source, vendor, prob, ts):
+        return {"source": source, "game_id": 77, "player_id": 501, "stat": "pts", "threshold": 20.5,
+                "side": "over", "prob": prob, "price": -110, "vendor": vendor, "ts": pd.Timestamp(ts),
+                "market_ref": "m", "fetched_at": pd.Timestamp(ts)}
+
+    store.upsert(seeded, "props_ladder", pd.DataFrame([
+        lad("rundown", "rundown:19", 0.40, "2026-11-04T16:00:00Z"),      # DraftKings, older
+        lad("parlay", "parlay:draftkings", 0.60, "2026-11-04T17:00:00Z"),  # DraftKings, newer
+        lad("parlay", "parlay:fanduel", 0.70, "2026-11-04T17:00:00Z"),
+    ]))
+    rows = market.ladder_rows(seeded, [77], ["pts"], NOW, 30)
+    assert sorted(zip(rows["book"], rows["prob"], strict=True)) == [("draftkings", 0.60), ("fanduel", 0.70)]
+    assert market.ladder_points(seeded, [77], ["pts"], NOW, 30)["p_over"].iloc[0] == pytest.approx(0.65)

@@ -24,6 +24,13 @@ def con():
 
 
 @pytest.fixture(autouse=True)
+def no_paid_keys(monkeypatch):
+    """No test reaches a paid feed with the owner's real key: ParlayAPI's is blanked (an env var
+    wins over .env), so a call that isn't stubbed fails on the missing key instead of spending."""
+    monkeypatch.setenv("PARLAY_API_KEY", "")
+
+
+@pytest.fixture(autouse=True)
 def opponent_static(monkeypatch):
     """Tests don't follow the owner's live choice: the opponent's roster is fixed unless a test
     turns streaming on itself (settings.opponent.streaming is a production setting)."""

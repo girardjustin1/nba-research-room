@@ -78,7 +78,9 @@ SCHEMA: dict[str, Table] = {
         "game_id INTEGER", "vendor VARCHAR", "market VARCHAR", "side VARCHAR",
         "is_opening BOOLEAN", "line DOUBLE", "price_american DOUBLE", "prob DOUBLE",
         "ts TIMESTAMPTZ", *_INGEST),
-    "props_ladder": _t(("source", "game_id", "player_id", "stat", "threshold", "side", "ts"),
+    # vendor (the book) is in the key: two books quoting the same line at the same second are two
+    # quotes, not one (2026-10-11; init_schema widens an older table's key in place).
+    "props_ladder": _t(("source", "vendor", "game_id", "player_id", "stat", "threshold", "side", "ts"),
         "game_id INTEGER", "player_id INTEGER", "stat VARCHAR", "threshold DOUBLE",
         "side VARCHAR", "prob DOUBLE", "price DOUBLE", "volume DOUBLE", "vendor VARCHAR",
         "ts TIMESTAMPTZ", "bid DOUBLE", "ask DOUBLE", "open_interest DOUBLE", "market_ref VARCHAR",
@@ -229,9 +231,33 @@ LIVE_ONLY: dict[str, Table] = {
 }
 
 
+def _stored_pk(con: duckdb.DuckDBPyConnection, name: str) -> tuple[str, ...] | None:
+    row = con.execute("""SELECT constraint_column_names FROM duckdb_constraints()
+                         WHERE schema_name = 'main' AND table_name = ? AND constraint_type = 'PRIMARY KEY'""",
+                      [name]).fetchone()
+    return tuple(row[0]) if row else None
+
+
+def _widen_pk(con: duckdb.DuckDBPyConnection, name: str, table: Table) -> None:
+    """Rebuild a table whose stored key is a strict subset of SCHEMA's (a column added to the key):
+    every row is kept, since a wider key can't merge rows. A narrower or different key is refused."""
+    old = _stored_pk(con, name)
+    if old is None or set(old) == set(table.pk):
+        return
+    if not set(old) < set(table.pk):
+        raise RuntimeError(f"{name}: stored key {old} can't become {table.pk} in place")
+    cols = ", ".join(f"{c} {t}" for c, t in table.columns)
+    names = ", ".join(table.names)
+    con.execute(f"CREATE TABLE {name}__new ({cols}, PRIMARY KEY ({', '.join(table.pk)}))")
+    con.execute(f"INSERT INTO {name}__new ({names}) SELECT {names} FROM {name}")
+    con.execute(f"DROP TABLE {name}")
+    con.execute(f"ALTER TABLE {name}__new RENAME TO {name}")
+
+
 def init_schema(con: duckdb.DuckDBPyConnection) -> None:
-    """Create missing tables and add columns added to SCHEMA since a table was created.
-    Safe to call repeatedly. (New columns are nullable; primary keys never change in place.)"""
+    """Create missing tables, add columns added to SCHEMA since a table was created, and widen a
+    key that gained a column. Safe to call repeatedly. (New columns are nullable; a key only ever
+    widens in place.)"""
     for name, table in SCHEMA.items():
         cols = ", ".join(f"{c} {t}" for c, t in table.columns)
         con.execute(f"CREATE TABLE IF NOT EXISTS {name} ({cols}, PRIMARY KEY ({', '.join(table.pk)}))")
@@ -240,6 +266,7 @@ def init_schema(con: duckdb.DuckDBPyConnection) -> None:
         for col, typ in table.columns:
             if col not in have:
                 con.execute(f"ALTER TABLE {name} ADD COLUMN {col} {typ.replace('NOT NULL', '').strip()}")
+        _widen_pk(con, name, table)
     purge_stored_yahoo(con)
 
 

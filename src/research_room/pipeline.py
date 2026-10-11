@@ -35,8 +35,8 @@ from research_room import (
     shadow,
     store,
 )
-from research_room.config import Settings, settings
-from research_room.ingest import bdl, kalshi, nba_injury_report, rundown, x_feed, yahoo, yahoo_live
+from research_room.config import Secrets, Settings, settings
+from research_room.ingest import bdl, kalshi, nba_injury_report, parlay, rundown, x_feed, yahoo, yahoo_live
 from research_room.ingest.external_proj import ProjectionFileError, blend_preseason
 from research_room.projections import market
 from research_room.projections.baseline import BaselineModel, project_window, write_projections
@@ -241,11 +241,14 @@ def driver_model(cfg: Settings) -> BaselineModel:
 
 def sync_markets(con: duckdb.DuckDBPyConnection, cfg: Settings, day: date | None = None,
                  days_ahead: int | None = None) -> dict:
-    """Archive Kalshi and TheRundown lines. A market outage is recorded in ingest_runs (the Jobs
-    health check shows it) and never stops the nightly run: markets are an input, not the core."""
+    """Archive Kalshi, TheRundown and (with PARLAY_API_KEY) ParlayAPI lines. A market outage is
+    recorded in ingest_runs (the Jobs health check shows it) and never stops the nightly run:
+    markets are an input, not the core."""
     out = {}
-    jobs = (("kalshi", lambda: kalshi.sync(con, cfg)),
-            ("rundown", lambda: rundown.sync(con, cfg, today=day, days_ahead=days_ahead)))
+    jobs = [("kalshi", lambda: kalshi.sync(con, cfg)),
+            ("rundown", lambda: rundown.sync(con, cfg, today=day, days_ahead=days_ahead))]
+    if Secrets().parlay_api_key.get_secret_value().strip():   # optional: no key, no ParlayAPI
+        jobs.append(("parlay", lambda: parlay.sync(con, cfg)))
     for name, fn in jobs:
         try:
             with store.ingest_run(con, name, "sync_markets") as run:

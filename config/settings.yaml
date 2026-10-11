@@ -274,6 +274,10 @@ markets:                       # betting-market inputs (ingest/kalshi.py, ingest
     days_ahead: 2              # today plus this many days of events per nightly run
     pregame_days_ahead: 0      # pre-game pulls: today's games only
     requests_per_second: 5
+    # Affiliate id -> the book's key (GET /affiliates, 2026-10-11), so a book read through both
+    # TheRundown and ParlayAPI counts once in the overlay's median (projections/market.py).
+    books: {2: bovada, 3: pinnacle, 19: draftkings, 22: betmgm, 23: fanduel, 24: thescore, 25: kalshi,
+            26: polymarket, 28: hardrock, 29: prophetx, 30: novig, 31: polymarket, 32: circa, 35: caesars}
   parlay:                      # ParlayAPI (PARLAY_API_KEY, Enterprise: one year of history), ingest/parlay.py
     base_url: https://parlay-api.com
     sport_key: basketball_nba
