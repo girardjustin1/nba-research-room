@@ -30,7 +30,12 @@ below say when. Once access is on, Yahoo's data is read live instead and these e
 2. **Fresh Basketball Monster projections.** Export both **Export to CSV** and **Export to Excel**
    into a new `reference/<MMDDYY>/` folder, then run `make projections`.
 3. **Positions.** With Yahoo access, the board uses Yahoo's position eligibility. Without it, it uses
-   each player's Basketball Monster position, and the player sheet says so. Nothing to do.
+   each player's single Basketball Monster position (a guard who is PG and SG counts as PG only)
+   unless you paste Yahoo's: on Yahoo's Players page set Status to **All Players**, sorted by
+   preseason rank, copy the list, and paste it in the Draft screen's ☰ → **Yahoo positions**. Paste
+   each page below the last; 8 pages cover the top 200. Each paste adds to the list, and the board
+   re-values at once. Names pasted on My roster, This week's opponent and Free agents with Yahoo's
+   "BOS - PG,SG" tag add their positions too.
 4. **Test the listener in a Yahoo mock draft.** Use a throwaway draft id such as `yahoo-mock-1` and
    follow the README section *Verify in a Yahoo mock draft*. If it reads every pick, set
    `draft.confirmed.listener: true`. If it doesn't, manual entry works and the draft is not at risk.

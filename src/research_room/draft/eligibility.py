@@ -1,9 +1,10 @@
 """Roster-slot eligibility for the draft pool: Yahoo's multi-position eligibility when we have it,
 Basketball Monster's single primary position otherwise.
 
-Inputs: the latest `yahoo_players` snapshot (players.csv from the inbox: eligible_positions such as
-"PG,SG"), the draft pool (player_id, position), settings.draft.position_eligibility (position ->
-slots it can fill).
+Inputs: the latest `yahoo_players` snapshot (players.csv from the inbox or the Yahoo API:
+eligible_positions such as "PG,SG"), Yahoo positions read from the owner's pastes
+(yahoo_positions.py: for players Yahoo's own rows don't cover), the draft pool (player_id,
+position), settings.draft.position_eligibility (position -> slots it can fill).
 Outputs: per player, the list of starting slots he can fill and where that came from ("yahoo" or
 "bbm"); Yahoo's own position string for display.
 Tables: reads yahoo_players.
@@ -30,8 +31,9 @@ def slots_for(positions: list[str], cfg: Settings) -> list[str]:
     return [s for s in dict.fromkeys(order) if s in allowed] or ["Util"]
 
 
-def load_yahoo(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    """player_id -> Yahoo positions (list) from the latest players.csv snapshot (resolved rows only)."""
+def load_yahoo(con: duckdb.DuckDBPyConnection, pasted: bool = True) -> pd.DataFrame:
+    """player_id -> Yahoo positions (list): Yahoo's own rows (the latest players.csv or API
+    snapshot), plus, with `pasted`, the positions read from the owner's pastes for anyone else."""
     df = con.execute("""
         SELECT player_id, eligible_positions FROM yahoo_players
         WHERE player_id IS NOT NULL AND coalesce(source, '') <> 'manual'   -- pasted lists: NBA positions
@@ -39,11 +41,28 @@ def load_yahoo(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
                              WHERE coalesce(source, '') <> 'manual')
     """).df()
     if df.empty:
+        df = pd.DataFrame({"player_id": pd.Series(dtype=int), "yahoo_positions": pd.Series(dtype=object)})
+    else:
+        df["yahoo_positions"] = df["eligible_positions"].fillna("").map(
+            lambda s: [p for p in s.split(",") if p in PRIMARY])
+        df = df[df["yahoo_positions"].map(bool)].drop_duplicates("player_id")
+        df = df[["player_id", "yahoo_positions"]].assign(player_id=lambda d: d["player_id"].astype(int))
+    return add_pasted(df) if pasted else df.reset_index(drop=True)
+
+
+def add_pasted(yahoo: pd.DataFrame | None) -> pd.DataFrame:
+    """Yahoo's rows plus the pasted positions (yahoo_positions.py) of players they don't cover:
+    Yahoo's own rows win."""
+    from research_room import yahoo_positions
+
+    base = yahoo if yahoo is not None else pd.DataFrame(columns=["player_id", "yahoo_positions"])
+    have = set(base["player_id"])
+    extra = [{"player_id": p, "yahoo_positions": v} for p, v in yahoo_positions.positions().items()
+             if p not in have]
+    out = pd.concat([base, pd.DataFrame(extra)], ignore_index=True) if extra else base.reset_index(drop=True)
+    if out.empty:
         return pd.DataFrame({"player_id": pd.Series(dtype=int), "yahoo_positions": pd.Series(dtype=object)})
-    df["yahoo_positions"] = df["eligible_positions"].fillna("").map(
-        lambda s: [p for p in s.split(",") if p in PRIMARY])
-    df = df[df["yahoo_positions"].map(bool)].drop_duplicates("player_id")
-    return df[["player_id", "yahoo_positions"]].assign(player_id=lambda d: d["player_id"].astype(int))
+    return out.astype({"player_id": int})
 
 
 def resolve(pool: pd.DataFrame, yahoo: pd.DataFrame | None, cfg: Settings | None = None) -> pd.DataFrame:

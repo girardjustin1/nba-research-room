@@ -1,4 +1,5 @@
 import type { DraftApi } from '../../api/client';
+import { sampleSavePositions, yahooPositionsNone } from './yahooPositions';
 import { makeBoard, makeCompare, makeInsights, makePool, makePositional, makeSession, makeStrength, makeTeamDays, makeTeams, makeTeamWeeks } from './fixtures';
 
 /**
@@ -10,6 +11,7 @@ export function createMockDraftApi(currentPick = 30): DraftApi {
   const session = makeSession({ mySlot: 5, currentPick });
   const board = makeBoard(session);
   const ok = async () => session;
+  let positions = yahooPositionsNone;
   return {
     health: async () => ({ ok: true, session: session.draft_id }),
     getSession: ok,
@@ -25,6 +27,8 @@ export function createMockDraftApi(currentPick = 30): DraftApi {
     exportResults: async () => ({ path: 'data/draft_results.csv' }),
     getTeams: async () => ({ teams: makeTeams(session) }),
     setTeamNames: ok,
+    yahooPositions: async () => positions,
+    saveYahooPositions: async (text) => (positions = sampleSavePositions(positions, text)),
     getPositionalValue: async () => ({ positions: makePositional() }),
     getStrength: async () => makeStrength(session),
     compare: async (ids) => ({ players: makeCompare(ids) }),

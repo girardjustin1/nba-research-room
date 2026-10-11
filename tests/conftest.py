@@ -24,6 +24,15 @@ def con():
 
 
 @pytest.fixture(autouse=True)
+def pasted_positions_in_tmp(tmp_path, monkeypatch):
+    """Yahoo positions from pastes (yahoo_positions.py) go to the test's own folder, never the real
+    inbox, whichever settings a code path reads."""
+    from research_room import yahoo_positions
+
+    monkeypatch.setattr(yahoo_positions, "_path", lambda cfg=None: tmp_path / "yahoo_positions.json")
+
+
+@pytest.fixture(autouse=True)
 def no_paid_keys(monkeypatch):
     """No test reaches a paid feed with the owner's real key: ParlayAPI's is blanked (an env var
     wins over .env), so a call that isn't stubbed fails on the missing key instead of spending."""

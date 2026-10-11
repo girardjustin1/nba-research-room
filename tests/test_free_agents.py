@@ -76,7 +76,9 @@ def test_the_list_feeds_the_optimizer_without_rostered_players_or_yahoo_eligibil
     pool = optimizer.free_agents(nba, cfg)
     assert sorted(pool["player_id"]) == [1, 2, 6]
     assert pool.set_index("player_id").at[2, "eligible"] == ["C"]
-    assert eligibility.load_yahoo(nba).empty                            # not taken as Yahoo positions
+    assert eligibility.load_yahoo(nba, pasted=False).empty              # the rows aren't Yahoo positions...
+    tags = dict(zip(*eligibility.load_yahoo(nba).values.T, strict=True))  # ...but its "BOS - PG" tags are
+    assert tags == {1: ["PG", "SG"], 2: ["C"], 3: ["SF", "PF"], 6: ["SG"]}
 
 
 def test_yahoos_own_list_wins(nba, cfg):

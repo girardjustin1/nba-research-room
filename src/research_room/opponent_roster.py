@@ -107,10 +107,14 @@ def read(cfg: Settings | None = None) -> dict | None:
 
 
 def _cards(con: duckdb.DuckDBPyConnection, ids: list[int]) -> list[dict]:
+    """Player cards for these ids; positions are Yahoo's when a paste gave them (yahoo_positions),
+    else the NBA's coarse ones ("G" -> PG and SG)."""
+    from research_room import yahoo_positions
     from research_room.backtest import eligibility
 
     if not ids:
         return []
+    pasted = yahoo_positions.positions()
     rows = con.execute(
         f"""SELECT p.player_id, p.full_name, p.position, t.abbreviation FROM players p
             LEFT JOIN teams t ON t.team_id = p.team_id WHERE p.player_id IN ({",".join("?" * len(ids))})""",
@@ -127,7 +131,7 @@ def _cards(con: duckdb.DuckDBPyConnection, ids: list[int]) -> list[dict]:
                 "player_id": int(r[0]),
                 "name": r[1],
                 "team_abbr": r[3],
-                "eligible": list(dict.fromkeys([*eligibility(r[2]), "Util"])),
+                "eligible": list(dict.fromkeys([*(pasted.get(int(r[0])) or eligibility(r[2])), "Util"])),
                 "headshot_url": f"/images/players/{int(r[0])}.png",
                 "team_logo_url": f"/images/teams/{r[3]}.svg" if r[3] else None,
                 "owner": "opponent",
@@ -207,19 +211,29 @@ def save(
 def _resolve(
     con: duckdb.DuckDBPyConnection, player_ids: list[int], names: list[str], cfg: Settings
 ) -> tuple[list[int], list[dict]]:
-    """Picked players plus pasted names matched to NBA players; misses come back with suggestions."""
+    """Picked players plus pasted names matched to NBA players; misses come back with suggestions.
+    A name pasted from Yahoo with its tag ("Stephen Curry  GS - PG,SG") is matched without it, and
+    the positions are kept (yahoo_positions)."""
+    from research_room import yahoo_positions
+
     resolver = NameResolver(player_universe(con), load_aliases(), load_team_aliases())
     ids = [int(p) for p in player_ids]
-    unmatched = []
+    unmatched, tagged = [], {}
     for raw in names:
         name = raw.strip()
+        tag = yahoo_positions.TAG.search(name)
+        if tag:
+            name = name[: tag.start()].strip()
         if not name:
             continue
         res = resolver.resolve(name, None)
         if res.player_id is not None:
             ids.append(int(res.player_id))
+            if tag:
+                tagged[int(res.player_id)] = yahoo_positions.parse(tag.group(1))
         else:
             unmatched.append({"name": name, "suggestions": list(res.candidates)[:3]})
+    yahoo_positions.merge(tagged, cfg)
     ids = list(dict.fromkeys(ids))
     most = len(cfg.roster.slots)
     if len(ids) > most:

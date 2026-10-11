@@ -1482,3 +1482,23 @@ players in the suggestions with a label rather than hide them:
 - Assumed, not checked against a real paste (Yahoo text never reaches an AI): the mark sits in the
   player's row after his name. If a real paste puts it elsewhere, labels attach to the wrong player;
   the Free agents page shows them, so a check after the first real paste will tell.
+
+**Yahoo positions from the owner's pastes (2026-10-11).** Without Yahoo access the draft board
+used each player's single Basketball Monster position, and hand-entered rosters used the NBA's
+coarse ones ("G" counted as both PG and SG), so slot flexibility was wrong in both directions.
+Yahoo's Players page writes each player's eligibility right after his name ("Stephen Curry  GS -
+PG,SG"), so the pastes the owner already makes can carry it:
+- `yahoo_positions.py` keeps player id -> positions in data/inbox/yahoo_positions.json (ids and
+  positions only; purged by `make yahoo-purge`). Each paste adds to it; a player's newest wins.
+- Read from: the free-agent paste, names pasted on My roster / This week's opponent (the tag is
+  stripped before matching), and a new Draft screen panel, ☰ → Yahoo positions (POST
+  /draft/yahoo_positions), for the Players page with all players. Not from screenshots: that screen
+  promises nothing is kept until the owner saves.
+- Used by: the draft board (`eligibility.add_pasted`; Yahoo's own rows win; the session rebuilds
+  at once, 0.13 s on a copy of the store), and every roster card (`opponent_roster._cards`), so
+  lineups, Moves and the odds use them. The doctor counts them toward its eligibility check.
+- "G" or "F" alone means both spots. A tag goes to the last player found before it (the same rule
+  as the waiver mark), never across a name shared by two players.
+- Assumed from Yahoo's page as it's commonly shown, not from a real paste (Yahoo text never reaches
+  an AI): "TEAM - POS" after the name. The panel says how many players it found, so a paste that
+  doesn't match shows 0 at once.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, ApiUnreachableError, type DraftApi } from './client';
-import type { Board, DraftTeam, PickIn, PickInsight, PoolPlayer, PositionalValue, Session, StrengthResponse, TeamWeeksResponse } from './types';
+import type { Board, DraftTeam, PickIn, PickInsight, PoolPlayer, PositionalValue, Session, StrengthResponse, TeamWeeksResponse, YahooPositions } from './types';
 
 export type Connection = 'connecting' | 'up' | 'down';
 
@@ -54,6 +54,10 @@ export interface DraftRoomActions {
   changePick(pickNo: number, teamId: number, playerId: number): Promise<void>;
   undo(): Promise<void>;
   setTeamNames(names: Record<string, string>): Promise<void>;
+  /** How many players have Yahoo positions from pastes. */
+  yahooPositions(): Promise<YahooPositions>;
+  /** Add the Yahoo positions in a pasted Players page; the board refetches with them. */
+  saveYahooPositions(text: string): Promise<YahooPositions>;
   /** POST /draft/export: writes data/inbox/draft_results.csv; resolves to the path written. */
   exportResults(): Promise<string>;
   refresh(): void;
@@ -263,6 +267,13 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
         await api.setTeamNames(names);
         loadedKey.current = null;
         wake.current();
+      },
+      yahooPositions: () => api.yahooPositions(),
+      saveYahooPositions: async (text) => {
+        const r = await api.saveYahooPositions(text);
+        loadedKey.current = null; // re-valued pool: always refetch
+        wake.current();
+        return r;
       },
       exportResults: async () => (await api.exportResults()).path,
       refresh: () => {

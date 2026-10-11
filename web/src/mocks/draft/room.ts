@@ -1,3 +1,4 @@
+import { sampleSavePositions, yahooPositionsSome } from './yahooPositions';
 import { ApiError } from '../../api/client';
 import type { Board, PoolPlayer, Session } from '../../api/types';
 import type { DraftRoomActions, DraftRoomState } from '../../api/useDraftRoom';
@@ -47,6 +48,11 @@ export function mockActions(failWith?: ApiError): DraftRoomActions {
     changePick: act('changePick'),
     undo: act('undo'),
     setTeamNames: act('setTeamNames'),
+    yahooPositions: async () => yahooPositionsSome,
+    saveYahooPositions: async (text) => {
+      await act('saveYahooPositions')(text);
+      return sampleSavePositions(yahooPositionsSome, text);
+    },
     exportResults: async () => {
       await act('exportResults')();
       return 'data/inbox/draft_results.csv';

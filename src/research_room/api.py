@@ -39,6 +39,7 @@ from research_room import (
     season_api,
     store,
     system,
+    yahoo_positions,
 )
 from research_room.config import Settings, settings
 from research_room.draft import eligibility, tracker
@@ -92,7 +93,7 @@ class Session:
     board: DraftBoard | None = None
     resolver: NameResolver | None = None
     extras: pd.DataFrame | None = None  # player_id, rookie, playoff_games (from the store)
-    yahoo_elig: pd.DataFrame | None = None  # player_id -> Yahoo positions (players.csv snapshot)
+    yahoo_elig: pd.DataFrame | None = None  # player_id -> Yahoo positions (Yahoo's own rows only)
     mock: MockState | None = None
     names: dict[int, str] = field(default_factory=dict)   # saved team names for this draft
     # (inputs, response) of the last insights / strength: polls between picks reuse it
@@ -109,8 +110,9 @@ class Session:
                 for t in range(1, st.teams + 1)}
 
     def rebuild(self) -> None:
-        """Re-value the pool for the current punts and rebuild the board (punt toggles)."""
-        elig = eligibility.resolve(self.pool, self.yahoo_elig, self.cfg)
+        """Re-value the pool for the current punts and rebuild the board (punt toggles, a Yahoo
+        positions paste)."""
+        elig = eligibility.resolve(self.pool, eligibility.add_pasted(self.yahoo_elig), self.cfg)
         pool = self.pool.assign(positions=elig["positions"], eligibility_source=elig["eligibility_source"])
         valued = expected_pick(compute_values(pool, self.cfg, punts=self.punts,
                                               eligibility=elig["eligible"]), self.cfg)
@@ -178,7 +180,7 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         # Team names and eligibility, read live once for this draft session and held in its
         # memory only (never written; a few calls, not one per pick).
         yahoo_live.attach(con, cfg, ("teams", "players"))
-        yahoo_elig = eligibility.load_yahoo(con)
+        yahoo_elig = eligibility.load_yahoo(con, pasted=False)   # pasted positions: at each rebuild
         log = mock.con if mock else con
         order = cfg.draft.order
         if my_slot is None and not mock:
@@ -280,6 +282,10 @@ class FromDraftIn(BaseModel):
 
 class FreeAgentsIn(BaseModel):
     text: str = Field(max_length=300_000)   # pasted from Yahoo's Players page; scanned, not kept
+
+
+class PositionsIn(BaseModel):
+    text: str = Field(max_length=300_000)   # Yahoo's Players page, all players; scanned, not kept
 
 
 class MyRosterIn(BaseModel):
@@ -581,6 +587,29 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                 raise HTTPException(400, str(exc)) from exc
             s.names.update({int(k): v.strip()[:40] for k, v in body.names.items() if v.strip()})
             return session_json(s)
+
+    @app.get("/draft/yahoo_positions")
+    def get_yahoo_positions() -> dict:
+        """YahooPositions: how many players have Yahoo positions from the owner's pastes."""
+        return yahoo_positions.response()
+
+    @app.post("/draft/yahoo_positions")
+    def post_yahoo_positions(body: PositionsIn) -> dict:
+        """Add the Yahoo positions found in a pasted Players page; the board is rebuilt with them."""
+        con = read_con()
+        try:
+            found = free_agents.find_positions(con, body.text)
+            _, ambiguous = free_agents.find_players(con, body.text)
+        finally:
+            con.close()
+        if not found:
+            raise HTTPException(422, "no Yahoo positions found: paste Yahoo's Players page (names with "
+                                     "'TEAM - PG,SG')")
+        yahoo_positions.merge(found)
+        with h.lock:
+            if h.session is not None:
+                h.session.rebuild()
+        return yahoo_positions.response(found=len(found), ambiguous=ambiguous)
 
     @app.delete("/draft/pick/{pick_no}")
     def delete_pick(pick_no: int) -> dict:

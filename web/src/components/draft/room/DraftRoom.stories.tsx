@@ -59,6 +59,8 @@ export const EnterPickAndUndo: Story = { args: { initialPanel: 'entry' } };
 export const DraftLog: Story = { args: { state: mockRoomState(driftSession, driftBoard), initialPanel: 'log' } };
 export const Tiers: Story = { args: { initialPanel: 'tiers' } };
 export const EditTeamNames: Story = { args: { initialPanel: 'names' } };
+/** Paste Yahoo's Players page: multi-position eligibility for the board. */
+export const YahooPositions: Story = { args: { initialPanel: 'positions' } };
 /** The running API predates the new endpoints: panels say so instead of showing made-up numbers. */
 export const NewEndpointsMissing: Story = {
   args: {

@@ -102,18 +102,45 @@ def _names_in(words: list[str], idx: dict[str, set[int]]) -> list[tuple[str, obj
 
 
 def _scan(con: duckdb.DuckDBPyConnection, text: str) -> list[tuple[str, object]]:
-    """The paste as events in reading order: players, ambiguous names, and waiver marks
-    ("waiver", the text in the parentheses)."""
+    """The paste as events in reading order: players, ambiguous names, waiver marks ("waiver", the
+    text in the parentheses) and Yahoo position tags ("positions", e.g. ['PG', 'SG'])."""
+    from research_room import yahoo_positions
+
     idx = _name_index(con)
     events: list[tuple[str, object]] = []
     for line in str(text).splitlines():
+        marks = sorted([(m.start(), m.end(), "waiver", m.group(1)) for m in _WAIVER.finditer(line)]
+                       + [(m.start(), m.end(), "positions", yahoo_positions.parse(m.group(1)))
+                          for m in yahoo_positions.TAG.finditer(line)])
         at = 0
-        for m in _WAIVER.finditer(line):
-            events += _names_in(_tokens(line[at : m.start()]), idx)
-            events.append(("waiver", m.group(1)))
-            at = m.end()
+        for start, end, kind, value in marks:
+            if start < at:
+                continue                                  # overlapping marks: the first one counts
+            events += _names_in(_tokens(line[at:start]), idx)
+            events.append((kind, value))
+            at = end
         events += _names_in(_tokens(line[at:]), idx)
     return events
+
+
+def _marks(events: list[tuple[str, object]], kind: str) -> dict[int, object]:
+    """Each mark of this kind given to the last player found before it (the first mark only; none
+    after a name shared by two players)."""
+    out: dict[int, object] = {}
+    last: int | None = None
+    for k, v in events:
+        if k == "player":
+            last = int(v)
+        elif k == "ambiguous":
+            last = None
+        elif k == kind and last is not None and last not in out:
+            out[last] = v
+    return out
+
+
+def find_positions(con: duckdb.DuckDBPyConnection, text: str) -> dict[int, list[str]]:
+    """Player id -> Yahoo positions, for the players tagged "TEAM - POS" in the paste."""
+    return {p: list(v) for p, v in _marks(_scan(con, text), "positions").items() if v}
 
 
 def clear_date(mark: str, today: date, waiver_days: int) -> date:
@@ -141,16 +168,7 @@ def find_players(con: duckdb.DuckDBPyConnection, text: str) -> tuple[list[int], 
 
 def find_waivers(con: duckdb.DuckDBPyConnection, text: str, today: date, waiver_days: int) -> dict[int, date]:
     """Player id -> the day his waivers clear, for the players marked "W (...)" in the paste."""
-    out: dict[int, date] = {}
-    last: int | None = None
-    for kind, v in _scan(con, text):
-        if kind == "player":
-            last = int(v)
-        elif kind == "ambiguous":
-            last = None
-        elif kind == "waiver" and last is not None and last not in out:
-            out[last] = clear_date(str(v), today, waiver_days)
-    return out
+    return {p: clear_date(str(v), today, waiver_days) for p, v in _marks(_scan(con, text), "waiver").items()}
 
 
 def waivers(e: dict | None, today: date) -> dict[int, date]:
@@ -224,6 +242,9 @@ def save(
     at = pd.Timestamp(now or store.utcnow())
     at = at if at.tzinfo else at.tz_localize("UTC")
     held = find_waivers(con, text, _today(at), cfg.transactions.waiver_days)
+    from research_room import yahoo_positions
+
+    yahoo_positions.merge(find_positions(con, text), cfg, at)
     kept = ids[:MAX_PLAYERS]
     _write(_path(cfg), {"player_ids": kept, "saved_at": at.isoformat(),
                         "waivers": {str(p): held[p].isoformat() for p in kept if p in held}})

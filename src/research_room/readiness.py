@@ -76,8 +76,8 @@ def readiness(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: 
         checks.append(_check("eligibility", "Yahoo position eligibility", "ok" if ok else "warn",
                              f"{share:.0%} of the top {len(top)} have Yahoo eligibility"
                              + ("" if ok else "; the rest use Basketball Monster's primary position"),
-                             "save players.csv (all players, with eligible_positions) to data/inbox, "
-                             "run make inbox"))
+                             "Draft screen: ☰ → Yahoo positions, paste Yahoo's Players page (All players, "
+                             "a few pages); or players.csv in data/inbox, run make inbox"))
 
     unmatched = con.execute("SELECT count(*) FROM unresolved_names WHERE source='yahoo'").fetchone()[0]
     checks.append(_check("names", "Yahoo names", "warn" if unmatched else "ok",

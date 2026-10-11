@@ -141,6 +141,18 @@ export interface DraftTeam {
   picks_until_next: number | null;
 }
 
+/** GET/POST /draft/yahoo_positions: Yahoo positions read from the owner's pastes (names tagged "BOS - PG,SG"). */
+export interface YahooPositions {
+  /** Players with Yahoo positions so far, from every paste. */
+  players: number;
+  saved_at: string | null;
+  /** POST only: players whose positions this paste gave. */
+  found: number | null;
+  /** Names shared by two NBA players: skipped, never guessed. */
+  ambiguous: string[];
+  policy: string;
+}
+
 export interface TeamsResponse {
   teams: DraftTeam[];
 }

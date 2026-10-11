@@ -39,6 +39,7 @@ import { StrengthTable } from '../panels/StrengthTable';
 import { StatusBar } from '../status/StatusBar';
 import { SuggestedPicks } from '../panels/SuggestedPicks';
 import { TeamNamesEditor } from '../tools/TeamNamesEditor';
+import { YahooPositionsEditor } from '../tools/YahooPositionsEditor';
 import { TeamsTab } from '../sheet/TeamsTab';
 
 /** Board: where every team drafted. League: me vs the league per category. Players: the
@@ -367,6 +368,12 @@ export function DraftRoomView({
       />
 
       <TeamNamesEditor open={panel === 'names'} session={s} onClose={() => setPanel(null)} onSave={actions.setTeamNames} />
+      <YahooPositionsEditor
+        open={panel === 'positions'}
+        onClose={() => setPanel(null)}
+        load={actions.yahooPositions}
+        onSave={actions.saveYahooPositions}
+      />
 
       <FullScreenPanel open={panel === 'recommendations'} title="Top 10 with reasons" onClose={() => setPanel(null)}>
         <Box sx={{ p: 2 }}>
