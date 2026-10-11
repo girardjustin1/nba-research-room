@@ -1399,6 +1399,20 @@ export interface MyRoster {
   policy: string;
 }
 
+/** POST /season/opponent_roster/screenshot: what a screenshot of his roster shows (read on this Mac). */
+export interface OpponentScreenshot {
+  /** The registered team whose name is in the screenshot, if any. */
+  team_id: number | null;
+  team_name: string | null;
+  players: PlayerRef[];
+  /** My own players seen in it (a matchup page shows both rosters), left out. */
+  skipped_mine: number;
+  /** More players than a roster holds: only the first are kept. */
+  too_many: boolean;
+  ambiguous: string[];
+  policy: string;
+}
+
 /** GET/POST /season/free_agents: free agents pasted from Yahoo's Players page (used without Yahoo). */
 export interface FreeAgents {
   /** The NBA players found in the paste (names and positions from the NBA data). */
@@ -1455,6 +1469,8 @@ export interface SeasonApi {
   myRoster(): Promise<MyRoster>;
   /** Replace my roster with my picks from the draft room's log; 422 asks for the slot when unknown. */
   myRosterFromDraft(body?: { my_slot?: number }): Promise<MyRoster>;
+  /** Read a screenshot of this week's opponent's roster (saves nothing). */
+  opponentScreenshot(body: { image_base64: string }): Promise<OpponentScreenshot>;
   freeAgents(): Promise<FreeAgents>;
   saveFreeAgents(body: FreeAgentsRequest): Promise<FreeAgents>;
   saveMyRoster(body: MyRosterRequest): Promise<MyRoster>;
@@ -1490,6 +1506,7 @@ export function createSeasonApi(base = '/api', fetchImpl?: FetchLike): SeasonApi
     playerSearch: (q) => get('/season/player_search', { q }),
     myRoster: () => get('/season/my_roster'),
     myRosterFromDraft: (body = {}) => seasonPost<MyRoster>(base, '/season/my_roster/from_draft', body, fetchImpl),
+    opponentScreenshot: (body) => seasonPost<OpponentScreenshot>(base, '/season/opponent_roster/screenshot', body, fetchImpl),
     freeAgents: () => get('/season/free_agents'),
     saveFreeAgents: (body) => seasonPost<FreeAgents>(base, '/season/free_agents', body, fetchImpl),
     saveMyRoster: (body) => seasonPost<MyRoster>(base, '/season/my_roster', body, fetchImpl),

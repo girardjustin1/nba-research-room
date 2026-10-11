@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { OpponentRosterRequest, TeamNamesRequest } from '../../api/season';
-import { opponentRosterEmpty, opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../../mocks/team-profiles/opponentRoster';
+import { SEARCHABLE, opponentRosterEmpty, opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../../mocks/team-profiles/opponentRoster';
 import { renderWithTheme } from '../../test/render';
 import { OpponentRosterEditor } from './OpponentRosterEditor';
 
@@ -61,5 +61,24 @@ describe("this week's opponent", { timeout: 20_000 }, () => { // many keystrokes
     await user.click(screen.getByRole('button', { name: 'Save names' }));
     await waitFor(() => expect(onSaveNames).toHaveBeenCalledOnce());
     expect(onSaveNames.mock.calls[0]![0]).toEqual({ teams: [{ team_id: 2, name: 'Second Invented' }] });
+  });
+
+  it('reads a screenshot into the form for a check, without saving', async () => {
+    const shot = {
+      team_id: 5, team_name: 'Invented Rivals', players: SEARCHABLE.slice(0, 3).map((p) => ({ ...p, owner: 'opponent' as const })),
+      skipped_mine: 2, too_many: false, ambiguous: [], policy: 'Read on this Mac.',
+    };
+    const onScreenshot = vi.fn<(image: string) => Promise<typeof shot>>(async () => shot);
+    const onSave = vi.fn(async () => opponentRosterFilled);
+    renderWithTheme(
+      <OpponentRosterEditor data={{ ...opponentRosterFilled, teams: [{ team_id: 5, label: 'Invented Rivals', name: 'Invented Rivals' }] }}
+        onSearch={async () => []} onSave={onSave} onSaveNames={async () => opponentRosterFilled} onScreenshot={onScreenshot} />,
+    );
+    const file = new File([new Uint8Array([137, 80, 78, 71])], 'roster.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Screenshot of their roster'), file);
+    expect(await screen.findByText(/Read 3 players for Invented Rivals \(left out 2 of yours\)/)).toBeInTheDocument();
+    expect(onScreenshot.mock.calls[0]![0]).toMatch(/^data:image\/png;base64,/);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: `Remove ${SEARCHABLE[0]!.name}` })).toBeInTheDocument();
   });
 });

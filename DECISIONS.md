@@ -1394,3 +1394,16 @@ float-summation noise the page already had.
 - Found while checking, not changed: the lineup page shows starters in different, equally good
   slots from one load to the next (the MILP's tie-breaking). Who starts and who sits is the same
   every time.
+
+**This week's opponent from a screenshot (2026-10-10).** The owner asked to screenshot every team's
+roster for a per-team analysis. That would reverse two standing rules (one opponent's roster at a
+time; no Yahoo data to an AI), so the owner chose screenshots for this week's opponent only, read on
+this Mac. Teams → This week's opponent → From a screenshot (or ⌘V): Apple's Vision framework reads
+the text locally (`scripts/ocr.swift`, compiled on first use into `data/bin/ocr`), the names are
+found as in the free-agent paste, the owner's own players are left out (a matchup page shows both
+rosters), and a registered team name in the image picks the team. Nothing is saved until the
+owner checks and saves as before; the image and its text are deleted once read. A Yahoo-style
+test image with 10 real names (accents, Jr., nicknames, stat columns, status tags): all 10 read in
+1.1 s. Vision's first read on a Mac takes about a minute (it loads its models), then ~0.2 s.
+Per-team analysis of the whole league stays the draft room's (Teams, Me vs league), from the draft
+log.

@@ -7,6 +7,7 @@ import {
   opponentRosterUnmatched,
   sampleSave,
   sampleSaveNames,
+  sampleScreenshot,
   sampleSearch,
 } from '../../mocks/team-profiles/opponentRoster';
 import { OpponentRosterEditor, type OpponentRosterEditorProps } from './OpponentRosterEditor';
@@ -20,6 +21,7 @@ const meta = {
     onSearch: async (q: string) => sampleSearch(q),
     onSave: async (b) => sampleSave(opponentRosterFilled, b),
     onSaveNames: async (b) => sampleSaveNames(opponentRosterFilled, b),
+    onScreenshot: async () => sampleScreenshot(opponentRosterFilled),
     onOpenPlayer: () => {},
   },
   render: (args) => <Interactive {...args} />,
@@ -59,3 +61,24 @@ export const NameAllTeams: Story = { args: { initialNamesOpen: true } };
 export const NamesDidNotMatch: Story = { args: { data: opponentRosterUnmatched } };
 export const Loading: Story = { args: { data: null, loading: true } };
 export const ApiError: Story = { args: { data: null, error: 'Request failed (HTTP 500)', onRetry: () => {} } };
+/** A screenshot read on this Mac: the team and players fill in for a check (choose an image, or ⌘V). */
+export const FromScreenshot: Story = {
+  args: { data: opponentRosterEmpty },
+  play: async ({ canvas, userEvent }) => {
+    const file = new File([new Uint8Array([137, 80, 78, 71])], 'roster.png', { type: 'image/png' });
+    await userEvent.upload(canvas.getByLabelText('Screenshot of their roster'), file);
+  },
+};
+/** The screenshot couldn't be read. */
+export const ScreenshotFailed: Story = {
+  args: {
+    data: opponentRosterEmpty,
+    onScreenshot: async () => {
+      throw new Error("that file isn't an image (PNG, JPEG or HEIC)");
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'roster.png', { type: 'image/png' });
+    await userEvent.upload(canvas.getByLabelText('Screenshot of their roster'), file);
+  },
+};

@@ -13,7 +13,7 @@ import { mockScenarioEngine, probNormal } from '../mocks/matchup-analysis/probab
 import { weekNormal } from '../mocks/matchup-analysis/week';
 import { notificationsNormal } from '../mocks/notifications/notifications';
 import { yahooOff } from '../mocks/app-shell/yahooStatus';
-import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../mocks/team-profiles/opponentRoster';
+import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleScreenshot, sampleSearch } from '../mocks/team-profiles/opponentRoster';
 import { myRosterFilled, sampleFromDraft, sampleSaveMine } from '../mocks/team-profiles/myRoster';
 import { freeAgentsFilled, sampleSaveFree } from '../mocks/team-profiles/freeAgents';
 import { calendarBramwell } from '../mocks/player-profiles/calendar';
@@ -163,6 +163,7 @@ function routes(state: DemoNotes): [string, RegExp, Handler][] {
     ['GET', /^\/season\/league_teams\/(\d+)$/, ({ params }) => (Number(params[0]) === leagueTeamMe.team.team_id ? leagueTeamMe : leagueTeamOpponent)],
     ['GET', /^\/season\/nba_teams\/([A-Za-z]+)$/, () => nbaTeamNOP],
     ['GET', /^\/season\/opponent_roster$/, () => state.opponent],
+    ['POST', /^\/season\/opponent_roster\/screenshot$/, () => sampleScreenshot(state.opponent)],
     ['POST', /^\/season\/opponent_roster$/, ({ body }) => (state.opponent = sampleSave(state.opponent, body as OpponentRosterRequest))],
     ['GET', /^\/season\/player_search$/, ({ query }) => ({ players: sampleSearch(query.get('q') ?? '') })],
     ['GET', /^\/season\/my_roster$/, () => state.mine],

@@ -77,8 +77,9 @@ With Yahoo access on, steps 1–3 happen by themselves; skip them.
    your picks from the draft room. Mark anyone who starts on the IL, then Save.
 2. **This week's opponent.** Teams → This week's opponent (**#/league/teams/opponent**). Pick the
    team you play in week 1 (register its name the first time, or use **Name all teams**: these names
-   go by Yahoo team, separately from the draft room's slot names). Add their players by search, or
-   paste the names from Yahoo's matchup page, one per line.
+   go by Yahoo team, separately from the draft room's slot names). Fastest: screenshot their roster
+   in Yahoo and drop it on **From a screenshot** (or press ⌘V): your Mac reads it, fills in the team
+   and players, and you check them and Save. Or add players by search, or paste names one per line.
 3. **Free agents.** On Yahoo's Players page, set Status to **All Available Players** and Position to
    **All**, select the list and copy it. Paste it into Team → Free agents
    (**#/league/team/free-agents**). Only player names are picked out of the paste. For more than 25
@@ -93,7 +94,8 @@ With Yahoo access on, steps 1–3 happen by themselves; skip them.
 
 ## Every week, until Yahoo access arrives
 
-- **Monday, as the week starts:** update This week's opponent, and paste a fresh free-agent list.
+- **Monday, as the week starts:** update This week's opponent (a screenshot of their roster is
+  quickest), and paste a fresh free-agent list.
 - **After you add or drop anyone in Yahoo:** update My roster (search or paste), and the IL marks.
 - **For fresh add suggestions:** paste the free agents again. The screen asks for a new paste once a
   list is over 24 hours old, because other teams add and drop every day. Players on waivers paste

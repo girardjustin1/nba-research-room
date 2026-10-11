@@ -269,6 +269,10 @@ class OpponentIn(BaseModel):
     team_name: str | None = None
 
 
+class ScreenshotIn(BaseModel):
+    image_base64: str = Field(max_length=17_000_000)   # ~12 MB of image; read on this Mac, not kept
+
+
 class FromDraftIn(BaseModel):
     draft_id: str | None = None   # default: the running draft, else this season's draft id
     my_slot: int | None = None    # default: the running draft's slot, else settings.draft.my_slot
@@ -974,6 +978,20 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
             when = pd.Timestamp(now).to_pydatetime() if now else None
             return opponent_roster.save_mine(con, body.player_ids, body.names, body.il_ids, now=when)
         except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            con.close()
+
+    @app.post("/season/opponent_roster/screenshot")
+    def post_opponent_screenshot(body: ScreenshotIn) -> dict:
+        """OpponentScreenshot: the team and players read from a screenshot of his Yahoo roster (on
+        this Mac; nothing kept). Saves nothing: the screen saves the entry after a check."""
+        from research_room import screenshot
+
+        con = season_con(("teams", "roster", "matchup"))   # my roster, to leave my players out
+        try:
+            return screenshot.opponent_from_screenshot(con, screenshot.decode(body.image_base64))
+        except screenshot.ScreenshotError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:
             con.close()

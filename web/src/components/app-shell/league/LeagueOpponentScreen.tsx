@@ -6,7 +6,7 @@ import { firstError, LEAGUE_NAV_HEIGHT, mockEndpoints } from '../../../app/leagu
 import { SEASON_TAB_PATH } from '../../../app/experiences';
 import { PrototypeDataChip } from '../PrototypeDataChip';
 import { OpponentRosterEditor } from '../../team-profiles/OpponentRosterEditor';
-import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleSearch } from '../../../mocks/team-profiles/opponentRoster';
+import { opponentRosterFilled, sampleSave, sampleSaveNames, sampleScreenshot, sampleSearch } from '../../../mocks/team-profiles/opponentRoster';
 
 /**
  * Teams → This week's opponent: GET/POST /season/opponent_roster, POST /season/league_team_names,
@@ -47,6 +47,9 @@ export function LeagueOpponentScreen({ mode, apis, navigate }: RouteScreenProps)
         onSearch={onSearch}
         onSave={onSave}
         onSaveNames={onSaveNames}
+        onScreenshot={async (image) =>
+          roster.isMock ? sampleScreenshot(data ?? opponentRosterFilled) : apis.season.opponentScreenshot({ image_base64: image })
+        }
         onOpenPlayer={(p) => navigate(`#/league/players/profile?id=${p.player_id}`)}
         onTabChange={(t) => navigate(SEASON_TAB_PATH[t] ?? '#/league/matchup')}
       />

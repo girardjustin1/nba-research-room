@@ -1,4 +1,4 @@
-import type { OpponentRoster, OpponentRosterRequest, PlayerRef, RosterSlot, TeamNamesRequest } from '../../api/season';
+import type { OpponentRoster, OpponentRosterRequest, OpponentScreenshot, PlayerRef, RosterSlot, TeamNamesRequest } from '../../api/season';
 import { THEIRS } from '../foundations/seasonPlayers';
 
 /** This week's opponent, entered by hand. Invented teams and players (ids 200+). */
@@ -102,4 +102,18 @@ export function sampleSaveNames(prev: OpponentRoster, body: TeamNamesRequest): O
     else delete names[t.team_id];
   }
   return { ...prev, teams: prev.teams.map((t) => label(t.team_id, names)) };
+}
+
+/** The sample screenshot read: four sample players and the first named team. */
+export function sampleScreenshot(prev: OpponentRoster): OpponentScreenshot {
+  const team = prev.teams.find((t) => t.name);
+  return {
+    team_id: team?.team_id ?? null,
+    team_name: team?.name ?? null,
+    players: SEARCHABLE.slice(0, 4).map((p) => ({ ...p, owner: 'opponent' as const })),
+    skipped_mine: 1,
+    too_many: false,
+    ambiguous: [],
+    policy: 'Read on this Mac by its own text recognition: the screenshot and its text are deleted once read and never sent anywhere. Check the players, then Save.',
+  };
 }

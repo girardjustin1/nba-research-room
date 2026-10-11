@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -12,7 +12,8 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import type { OpponentRoster, OpponentRosterRequest, PlayerRef, TeamNamesRequest } from '../../api/season';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import type { OpponentRoster, OpponentRosterRequest, OpponentScreenshot, PlayerRef, TeamNamesRequest } from '../../api/season';
 import { SeasonShell, ScreenHeader, type SeasonTab } from '../foundations/ScreenFrame';
 import { RosterPicker, UnmatchedNames } from './RosterPicker';
 import { ErrorState, LoadingState } from '../foundations/ScreenStates';
@@ -29,6 +30,9 @@ export interface OpponentRosterEditorProps {
   /** Register or rename league teams; resolves with the updated entry. */
   onSaveNames: (body: TeamNamesRequest) => Promise<OpponentRoster>;
   onOpenPlayer?: (p: PlayerRef) => void;
+  /** Read a screenshot of his roster (a data: URL); fills the form to check, saves nothing. Without
+   * it, the screenshot card is hidden. */
+  onScreenshot?: (imageBase64: string) => Promise<OpponentScreenshot>;
   /** Stories: open with the "Name all teams" dialog showing. */
   initialNamesOpen?: boolean;
   onTabChange?: (tab: SeasonTab) => void;
@@ -55,6 +59,7 @@ export function OpponentRosterEditor({
   onOpenPlayer,
   onTabChange,
   initialNamesOpen = false,
+  onScreenshot,
 }: OpponentRosterEditorProps) {
   const [teamId, setTeamId] = useState<number | ''>('');
   const [teamName, setTeamName] = useState('');
@@ -79,6 +84,60 @@ export function OpponentRosterEditor({
       setDraftNames(Object.fromEntries(shown.teams.map((t) => [t.team_id, t.name ?? ''])));
     }
   }
+  // A screenshot of his roster, read on this Mac: fills the team and players for a check.
+  const [reading, setReading] = useState(false);
+  const [shot, setShot] = useState<{ ok: OpponentScreenshot | null; error: string | null }>({ ok: null, error: null });
+  const fileInput = useRef<HTMLInputElement>(null);
+  const readShot = (file: File) => {
+    if (!onScreenshot) return;
+    if (!file.type.startsWith('image/')) {
+      setShot({ ok: null, error: "That file isn't an image." });
+      return;
+    }
+    setReading(true);
+    setShot({ ok: null, error: null });
+    const reader = new FileReader();
+    reader.onload = () => {
+      onScreenshot(String(reader.result)).then(
+        (r) => {
+          if (r.team_id != null) {
+            setTeamId(r.team_id);
+            setTeamName(r.team_name ?? '');
+          }
+          setPlayers(r.players);
+          setShot({ ok: r, error: null });
+          setReading(false);
+        },
+        (e: unknown) => {
+          setShot({ ok: null, error: e instanceof Error ? e.message : 'Reading the screenshot failed' });
+          setReading(false);
+        },
+      );
+    };
+    reader.onerror = () => {
+      setShot({ ok: null, error: "That image couldn't be opened." });
+      setReading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+  // ⌘V with a screenshot on the clipboard reads it, anywhere on this screen.
+  const readShotRef = useRef(readShot);
+  useEffect(() => {
+    readShotRef.current = readShot;
+  });
+  useEffect(() => {
+    if (!onScreenshot) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'));
+      const file = item?.getAsFile();
+      if (file) {
+        e.preventDefault();
+        readShotRef.current(file);
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [onScreenshot]);
   const nameOf = (id: number | '') => (id === '' ? '' : (shown?.teams.find((t) => t.team_id === id)?.name ?? ''));
 
 
@@ -124,6 +183,59 @@ export function OpponentRosterEditor({
       <Stack spacing={1.5}>
         <UnmatchedNames unmatched={shown.unmatched} />
         {saveError && <Alert severity="error">{saveError}</Alert>}
+        {onScreenshot && (
+          <Card sx={{ p: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" component="h2">
+                  From a screenshot
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Screenshot their roster in Yahoo, then choose it or paste it here (⌘V).
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                startIcon={<ImageOutlinedIcon />}
+                onClick={() => fileInput.current?.click()}
+                disabled={reading}
+              >
+                {reading ? 'Reading…' : 'Choose'}
+              </Button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                hidden
+                aria-label="Screenshot of their roster"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) readShot(f);
+                  e.target.value = '';
+                }}
+              />
+            </Box>
+            {shot.error && (
+              <Alert severity="error" sx={{ mt: 1.25 }}>
+                {shot.error}
+              </Alert>
+            )}
+            {shot.ok && (
+              <Alert severity={shot.ok.players.length ? 'success' : 'warning'} sx={{ mt: 1.25 }}>
+                {shot.ok.players.length
+                  ? `Read ${shot.ok.players.length} players${shot.ok.team_name ? ` for ${shot.ok.team_name}` : ''}${
+                      shot.ok.skipped_mine ? ` (left out ${shot.ok.skipped_mine} of yours)` : ''
+                    }. Check them${shot.ok.team_id == null ? ', choose the team' : ''}, then Save.`
+                  : 'No NBA player names found in that screenshot.'}
+                {shot.ok.too_many && ' More players than a roster holds: only the first were kept.'}
+                {shot.ok.ambiguous.length > 0 && ` Skipped ${shot.ok.ambiguous.join(', ')} (shared by two players): add him by search.`}
+                <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                  {shot.ok.policy}
+                </Typography>
+              </Alert>
+            )}
+          </Card>
+        )}
         <Card sx={{ p: 1.5 }}>
           <TextField
             select
