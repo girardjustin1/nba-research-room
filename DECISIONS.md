@@ -1502,3 +1502,12 @@ PG,SG"), so the pastes the owner already makes can carry it:
 - Assumed from Yahoo's page as it's commonly shown, not from a real paste (Yahoo text never reaches
   an AI): "TEAM - POS" after the name. The panel says how many players it found, so a paste that
   doesn't match shows 0 at once.
+
+**Yahoo access live; a refused pick ruled out (2026-10-15).** Yahoo's API answers for this league
+(teams, players, matchup read live; checked by state and row counts only). Bringing the app up
+with Yahoo live turned up two 500s: DuckDB refuses a read-only and a read-write connection to the
+same file in one process at the same time, both ways. In the API a page read (read-only, held up to
+the page time limit while it reads Yahoo live) and a draft pick (read-write) can overlap, so a pick
+could have been refused on draft night. `store.connect` now waits (up to 20 s, polling every 50 ms)
+when that specific refusal is the reason, and fails as before for anything else, such as another
+process's lock.

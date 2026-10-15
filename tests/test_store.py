@@ -86,3 +86,27 @@ def test_export_parquet_writes_one_file_per_table(con, tmp_path):
     paths = store.export_parquet(con, tmp_path)
     assert {p.stem for p in paths} == set(store.SCHEMA) - {"api_responses"}
     assert len(pd.read_parquet(tmp_path / "teams.parquet")) == 1
+
+
+def test_an_open_waits_while_this_process_holds_the_file_in_the_other_mode(tmp_path):
+    """A draft pick (read-write) during a page read (read-only), and the reverse: DuckDB refuses to
+    mix modes in one process, so the open waits for the other connection instead of failing."""
+    import threading
+    import time
+
+    import duckdb
+
+    db = tmp_path / "s.duckdb"
+    store.connect(db).close()
+    for first, second in ((True, False), (False, True)):
+        held = store.connect(db, read_only=first)
+        threading.Timer(0.3, held.close).start()
+        t0 = time.monotonic()
+        store.connect(db, read_only=second).close()
+        assert 0.2 < time.monotonic() - t0 < 5
+    held = store.connect(db, read_only=True)
+    try:
+        with pytest.raises(duckdb.ConnectionException, match="different configuration"):
+            store.connect(db, wait_s=0.2)                     # still held: refused after the wait
+    finally:
+        held.close()

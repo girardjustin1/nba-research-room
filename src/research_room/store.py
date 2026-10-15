@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -191,14 +192,35 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def connect(path: Path | str | None = None, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+MIXED_MODE_WAIT_S = 20.0    # how long an open waits for the other mode's connections to close
+_MIXED_MODE = "different configuration"
+
+
+def _open(db_path: str, read_only: bool, wait_s: float) -> duckdb.DuckDBPyConnection:
+    """duckdb.connect, waiting while this process holds the file in the other mode. DuckDB refuses a
+    read-only and a read-write connection to one file in one process at the same time: in the API a
+    page read and a draft pick can overlap by milliseconds (a page reading Yahoo live holds its read
+    up to the page time limit), and a refused pick must not be the result. Only that refusal is
+    retried; another process's lock fails at once as before."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            return duckdb.connect(db_path, read_only=read_only)
+        except duckdb.ConnectionException as exc:
+            if _MIXED_MODE not in str(exc) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+
+
+def connect(path: Path | str | None = None, read_only: bool = False,
+            wait_s: float = MIXED_MODE_WAIT_S) -> duckdb.DuckDBPyConnection:
     """Open the store. Writers also create the schema; readers never write."""
     db_path = Path(path) if path is not None else settings().paths.db
     if str(db_path) != ":memory:":
         if read_only and not db_path.exists():
             raise FileNotFoundError(f"store not found at {db_path}; run `make backfill` first")
         db_path.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(db_path), read_only=read_only)
+    con = _open(str(db_path), read_only, wait_s)
     con.execute("SET TimeZone = 'UTC'")
     if not read_only:
         init_schema(con)
