@@ -1520,3 +1520,24 @@ every board column gets its team's name and my slot comes from team 11's place. 
 only when Yahoo has set every slot 1..14 exactly once; a partial order is ignored, not guessed.
 Settings still win when filled, and names typed in the app still win over Yahoo's. A session
 started before Yahoo posts the order picks it up when it is started again (same draft id).
+
+**Yahoo's draft results as the listener's backup (2026-10-15).** The pick listener reads the Yahoo
+draft-room page and has never been checked against the real room. With API access, Yahoo's own
+draft results list every pick as it's made, so the draft API now reads them every 8 s
+(`draft.yahoo_feed`), from 30 minutes before `starts_at` to 6 hours after, for live sessions only
+(never mocks). Each player Yahoo lists is looked up once (name, NBA team), matched by the same
+resolver as the listener's names, and recorded through `tracker.record_pick` with entry_source
+"yahoo". A pick already in the log is skipped (the listener or the owner got there first); one the
+log has with a different player is reported as a conflict and never overwritten; a name that
+doesn't match is reported for manual entry. The Draft screen shows the feed's state on the status
+bar's second line, and an amber notice lists what needs the owner. Read only, like every Yahoo
+call; the picks land in the draft log exactly as the listener's do, and the Yahoo ids and names
+stay in memory. Tests use a fake league (tests/test_yahoo_feed.py).
+
+**Draft time 8:00 pm, and practice sessions for Yahoo mock drafts (2026-10-15).** The owner read
+the draft time in Yahoo: Sun Oct 18, 8:00 pm EDT, not 7:00 pm. `draft.starts_at` and every
+mention are corrected; the countdown and the Yahoo picks feed's window follow it. A Yahoo mock
+draft runs as a practice session under its own draft id, with its own team and round counts
+(`teams`, `rounds` on POST /draft/session; refused for the real draft id). Only the real draft
+(`hoopdreams-2026`) takes Yahoo's draft order, team names, configured slot, keepers and the Yahoo
+picks feed, so practice picks and league picks can never mix.

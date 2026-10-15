@@ -347,3 +347,113 @@ test('userscript header targets the Yahoo draft room and only the local API', ()
   same(connects, ['127.0.0.1']);
   assert.equal(L.CONFIG.apiUrl, 'http://127.0.0.1:8765');
 });
+
+test("parsePickText reads Yahoo's draft-room rows (seen 2026-10-15)", () => {
+  const rows = [
+    ['8 Nasos A. EDWARDS PG,SG • MIN', 8, 'A. EDWARDS', 'MIN', 'PG,SG'],
+    ['9 Blacks K. DURANT Q SG,SF,PF • HOU', 9, 'K. DURANT', 'HOU', 'SG,SF,PF'],          // injury tag
+    ['12 You T. HALIBURTON PG,SG • IND', 12, 'T. HALIBURTON', 'IND', 'PG,SG'],
+    ['1 joan to you N. JOKIĆ C • DEN', 1, 'N. JOKIĆ', 'DEN', 'C'],                         // long manager name
+    ['4 Shane S. GILGEOUS-ALEXANDER PG • OKC', 4, 'S. GILGEOUS-ALEXANDER', 'OKC', 'PG'],
+    ['79 Earvin J. SMITH JR. PF,C • HOU', 79, 'J. SMITH JR.', 'HOU', 'PF,C'],              // suffix
+  ];
+  for (const [text, no, name, team, pos] of rows) {
+    const p = L.parsePickText(text, 12);
+    assert.ok(p, text);
+    same([p.pick_no, p.player_name, p.nba_team, p.positions], [no, name, team, pos], text);
+  }
+  assert.equal(L.parsePickText('RiskTaker RiskTaker left', 12), null);                    // not a pick
+  assert.equal(L.parsePickText('Last: J. TATUM (SF,PF · BOS)', 12), null);
+});
+
+test("finds Yahoo's pick list by its rows when no selector matches, and skips the players list", () => {
+  // Yahoo's markup (class names are not known in advance): a list of rows, each pick number,
+  // manager, player, positions • team; joins and leaves in between; an available-players list
+  // ranked without managers. Nothing here matches CONFIG.selectors.container.
+  const doc = parseHTML(`<html><body>
+    <div class="x1"><div class="x2">
+      <div class="r"> <span>Topias</span> <span>Topias joined</span> </div>
+      <div class="r"> <span>1</span> <span>joan to you</span> <span>N. JOKIĆ</span> <span>C</span> • <span>DEN</span> </div>
+      <div class="r"> <span>2</span> <span>Topias</span> <span>V. WEMBANYAMA</span> <span>C</span> • <span>SAS</span> </div>
+      <div class="r"> <span>RiskTaker</span> <span>RiskTaker left</span> </div>
+      <div class="r"> <span>3</span> <span>leo</span> <span>L. DONČIĆ</span> <span>Q</span> <span>PG,SG</span> • <span>LAL</span> </div>
+    </div></div>
+    <div class="players">
+      <div class="p"> <span>4</span> <span>S. GILGEOUS-ALEXANDER</span> <span>PG</span> • <span>OKC</span> </div>
+      <div class="p"> <span>5</span> <span>C. CUNNINGHAM</span> <span>PG,SG</span> • <span>DET</span> </div>
+      <div class="p"> <span>6</span> <span>G. ANTETOKOUNMPO</span> <span>PF,C</span> • <span>MIA</span> </div>
+    </div>
+  </body></html>`);
+  const res = L.extractPicks(doc, L.CONFIG, 12);
+  assert.equal(res.strategy, 'auto:yahoo-rows');
+  same(res.picks.map((p) => [p.pick_no, p.player_name, p.nba_team]),
+    [[1, 'N. JOKIĆ', 'DEN'], [2, 'V. WEMBANYAMA', 'SAS'], [3, 'L. DONČIĆ', 'LAL']]);
+  assert.match(L.describe(res.container), /div\.x2$/);
+});
+
+test("Yahoo writes the manager above the pick number: both orders read", () => {
+  for (const [text, no, name, team] of [
+    ['Ivan 8 C. FLAGG Q SG,SF,PF • DAL', 8, 'C. FLAGG', 'DAL'],
+    ['You 12 T. HALIBURTON PG,SG • IND', 12, 'T. HALIBURTON', 'IND'],
+    ['joan to you 1 N. JOKIĆ C • DEN', 1, 'N. JOKIĆ', 'DEN'],
+  ]) {
+    const p = L.parsePickText(text, 14);
+    same([p.pick_no, p.player_name, p.nba_team], [no, name, team], text);
+  }
+  const doc = parseHTML(`<html><body><div class="list">
+    <div class="r"><div>Ivan</div> <div>8</div> <span>C. FLAGG</span> <span>Q</span> <span>SG,SF,PF</span> • <span>DAL</span></div>
+    <div class="r"><div>Nasos</div> <div>9</div> <span>K. DURANT</span> <span>SG,SF,PF</span> • <span>HOU</span></div>
+  </div><div class="players">
+    <div class="p"><span>T. MAXEY</span> <span>PG</span> • <span>PHI</span> <span>8</span> <span>4</span></div>
+  </div></body></html>`);
+  const res = L.extractPicks(doc, L.CONFIG, 14);
+  same(res.picks.map((p) => [p.pick_no, p.player_name]), [[8, 'C. FLAGG'], [9, 'K. DURANT']]);
+});
+
+test("Yahoo's separator dot is CSS: rows read without it", () => {
+  for (const [text, no, name, team] of [
+    ['Ivan 8 C. FLAGG Q SG,SF,PF DAL', 8, 'C. FLAGG', 'DAL'],
+    ['Nasos 8 A. EDWARDS PG,SG MIN', 8, 'A. EDWARDS', 'MIN'],
+    ['RiskTaker 14 K. TOWNS Q PF,C NYK', 14, 'K. TOWNS', 'NYK'],
+    ['Earvin 79 J. SMITH JR. PF,C HOU', 79, 'J. SMITH JR.', 'HOU'],
+  ]) {
+    const p = L.parsePickText(text, 14);
+    assert.ok(p, text);
+    same([p.pick_no, p.player_name, p.nba_team], [no, name, team], text);
+  }
+  const doc = parseHTML(`<html><body><div class="list">
+    <div class="r"><div>Ivan</div> <div>8</div> <span>C. FLAGG</span> <span>Q</span> <span>SG,SF,PF</span> <span>DAL</span></div>
+    <div class="r"><div>Nasos</div> <div>9</div> <span>K. DURANT</span> <span>SG,SF,PF</span> <span>HOU</span></div>
+  </div><div class="players">
+    <div class="p"><span>T. MAXEY</span> <span>PG</span> <span>PHI</span> <span>8</span> <span>4</span> <span>9.8</span></div>
+  </div></body></html>`);
+  same(L.extractPicks(doc, L.CONFIG, 14).picks.map((p) => [p.pick_no, p.player_name]), [[8, 'C. FLAGG'], [9, 'K. DURANT']]);
+});
+
+test("reads picks from Yahoo's page lines (the real text, seen 2026-10-15)", () => {
+  const text = ['YAHOO FANTASY BASKETBALL DRAFT', "Team 8's Pick • You're up in 3 Picks • Round 2, Pick 9", 'Last:', 'T. MAXEY',
+    '(PG · PHI)', 'Team 8', 'Queue', 'Picks', 'Girardjustin', 'Girardjustin joined', 'Pick and roll', 'Pick and roll left',
+    '1', 'hooper', 'V. Wembanyama', 'C', 'SAS', 'Pick and roll', 'Pick and roll joined',
+    '2', 'Dr. K', 'N. Jokić', 'C', 'DEN',
+    '4', 'Team 4', 'L. Dončić', 'Q', 'PG,SG', 'LAL',
+    '5', 'You', 'S. Gilgeous-Alexander', 'PG', 'OKC',
+    '79', 'Earvin', 'J. Smith Jr.', 'PF,C', 'HOU',
+    'hooper', 'Dr. K', 'zed', 'Team 4', 'You',
+    // the available-players table: name, positions, team, then numbers (never a pick)
+    'T. Haliburton', 'PG,SG', 'IND', '10', '11', '13.2', '68', '.463'].join('\n');
+  same(L.picksFromLines(text).map((p) => [p.pick_no, p.player_name, p.nba_team, p.positions]), [
+    [1, 'V. Wembanyama', 'SAS', 'C'], [2, 'N. Jokić', 'DEN', 'C'], [4, 'L. Dončić', 'LAL', 'PG,SG'],
+    [5, 'S. Gilgeous-Alexander', 'OKC', 'PG'], [79, 'J. Smith Jr.', 'HOU', 'PF,C']]);
+  // and a whole row's text in normal case reads too
+  const p = L.parsePickText('hooper 1 V. Wembanyama C SAS', 8);
+  same([p.pick_no, p.player_name, p.nba_team], [1, 'V. Wembanyama', 'SAS']);
+});
+
+test("reads the Picks list from the page's text nodes even when its tab is hidden", () => {
+  const doc = parseHTML(`<html><body><div class="hdr"><span>Last:</span><span>E. Mobley</span></div>
+    <div class="tabs" style="display:none"><div class="pick"><div>1</div><div>hooper</div><div>V. Wembanyama</div>
+    <div>C</div><div>SAS</div></div><div class="pick"><div>2</div><div>Dr. K</div><div>N. Jokić</div><div>C</div>
+    <div>DEN</div></div></div></body></html>`);
+  const body = doc.querySelector('body');
+  same(L.picksFromLines(L.textLines(body)).map((p) => [p.pick_no, p.player_name]), [[1, 'V. Wembanyama'], [2, 'N. Jokić']]);
+});

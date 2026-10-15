@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Slide from '@mui/material/Slide';
+import Collapse from '@mui/material/Collapse';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Snackbar from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import { ApiError, errorMessage, type DraftApi } from '../../../api/client';
 import type { ComparePlayer, PickRecord, PoolPlayer, Recommendation, TeamDay } from '../../../api/types';
-import { useDraftRoom, type DraftRoomActions, type DraftRoomState } from '../../../api/useDraftRoom';
+import { isPractice, useDraftRoom, type DraftRoomActions, type DraftRoomState } from '../../../api/useDraftRoom';
 import { latestInsightByTeam, MAX_COMPARE, strengths } from '../../../lib/draftHelpers';
 import { useFavorites } from '../../../lib/favorites';
 import { categoryLabel } from '../../../lib/format';
@@ -33,23 +37,23 @@ import { PlayerDetailSheet } from '../compare/PlayerDetailSheet';
 import { DraftBoardGrid, type GridCell, type TeamMeta } from '../grid/DraftBoardGrid';
 import { DraftMenu, type MenuPanel } from '../tools/DraftMenu';
 import { FullScreenPanel } from '../../app-shell/FullScreenPanel';
-import { LatestPickCard } from '../status/LatestPickCard';
+import { PickFeedBell } from '../status/PickFeedBell';
 import { PositionalValuePanel } from '../panels/PositionalValuePanel';
 import { StrengthTable } from '../panels/StrengthTable';
 import { DraftCountdown } from '../status/DraftCountdown';
+import { YahooFeedAlert } from '../status/YahooFeedAlert';
 import { StatusBar } from '../status/StatusBar';
 import { SuggestedPicks } from '../panels/SuggestedPicks';
 import { TeamNamesEditor } from '../tools/TeamNamesEditor';
 import { YahooPositionsEditor } from '../tools/YahooPositionsEditor';
 import { TeamsTab } from '../sheet/TeamsTab';
 
-/** Board: where every team drafted. League: me vs the league per category. Players: the
- * market (positional value, suggested picks) and Available / Favorites. */
+/** Board: the market (positional value, suggested picks) over where every team drafted.
+ * League: me vs the league per category. Players: Available / Favorites. */
 export type RoomTab = 'board' | 'league' | 'players';
 /** Scrolled past this many px, the status bar collapses to one row. */
 const COLLAPSE_AT = 24;
 export type PlayersFilter = 'available' | 'favorites';
-const LATEST_MS = 12_000;
 
 export interface DraftRoomViewProps {
   state: DraftRoomState;
@@ -81,9 +85,9 @@ function lastLivePick(picks: PickRecord[]): PickRecord | null {
 
 /**
  * The live draft room for the league's real Yahoo draft, in three tabs under the status bar:
- * Board (the grid of every team's picks; tap any cell to record or fix a pick), Me vs league
- * (my standing per category against the league) and Players (the market left by position,
- * suggested picks, then Available / Favorites under a pinned toolbar). Scrolling any tab
+ * Board (the market left by position and the suggested picks, over the grid of every team's
+ * picks; tap any cell to record or fix a pick), Me vs league (my standing per category against
+ * the league) and Players (Available / Favorites under a pinned toolbar). Scrolling any tab
  * collapses the status bar to one row. Picks arrive from the Yahoo listener. My roster and every team's
  * roster are in the tools menu. Every number comes from the draft API.
  */
@@ -106,6 +110,7 @@ export function DraftRoomView({
   const onScrollTop = (top: number) => setCompact((c) => (c ? top > COLLAPSE_AT / 2 : top > COLLAPSE_AT));
   const [cell, setCell] = useState<GridCell | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
   const [panel, setPanel] = useState<MenuPanel | null>(initialPanel);
   const [compare, setCompare] = useState<number[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -116,19 +121,11 @@ export function DraftRoomView({
   const [favorites, toggleFavorite] = useFavorites(session?.draft_id ?? 'none');
   const shell = useAppShell();
 
-  // Latest-pick card: appears when an insight newer than the first one we saw arrives.
+  // The bell: picks after the newest one seen when the room opened (or after the last look) are new.
   const insights = state.insights.data;
   const latest = insights && insights.length ? (insights[insights.length - 1] ?? null) : null;
-  const [baseline, setBaseline] = useState<number | undefined>(showLatestOnLoad ? 0 : undefined);
-  const [dismissed, setDismissed] = useState<number | null>(null);
-  if (baseline === undefined && insights) setBaseline(latest?.pick_no ?? 0);
-  const showLatest = latest != null && baseline !== undefined && latest.pick_no > baseline && dismissed !== latest.pick_no;
-  const latestPickNo = latest?.pick_no ?? null;
-  useEffect(() => {
-    if (!showLatest || latestPickNo == null || showLatestOnLoad) return;
-    const id = setTimeout(() => setDismissed(latestPickNo), LATEST_MS);
-    return () => clearTimeout(id);
-  }, [showLatest, latestPickNo, showLatestOnLoad]);
+  const [seenPick, setSeenPick] = useState<number | undefined>(showLatestOnLoad ? 0 : undefined);
+  if (seenPick === undefined && insights) setSeenPick(latest?.pick_no ?? 0);
 
   const drafted = useMemo(() => new Set(session?.picks.map((p) => p.player_id) ?? []), [session]);
   const live = board && !board.complete ? board : null;
@@ -214,6 +211,19 @@ export function DraftRoomView({
           lastPickSeenAt={state.lastPickSeenAt}
           onEnterPick={enterCurrentPick}
           onMenu={() => setMenuOpen(true)}
+          bell={
+            <PickFeedBell
+              insights={insights ?? null}
+              teams={s.teams}
+              seenPick={seenPick ?? 0}
+              onSeen={(n) => setSeenPick((v) => Math.max(v ?? 0, n))}
+              onOpenTeam={(teamId) => {
+                setFocusTeam(teamId);
+                setPanel('teams');
+              }}
+              defaultOpen={showLatestOnLoad}
+            />
+          }
           leading={shell?.menuButton}
           demoBadge={shell?.demoBadge}
           now={now}
@@ -221,6 +231,7 @@ export function DraftRoomView({
         />
         <DraftCountdown startsAt={draftStartsAt} now={now} />
       </Box>
+      <YahooFeedAlert session={s} />
 
       <Tabs
         value={tab}
@@ -250,24 +261,21 @@ export function DraftRoomView({
               <DriftAlert drift={live.drift} categories={s.categories} />
             </Box>
           )}
+          {/* What to take next sits above the grid; it folds away while the grid scrolls, like the header. */}
+          <Collapse in={!compact} sx={{ flexShrink: 0 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1.5, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+              <PositionalValuePanel positions={state.positional.data} error={state.positional.error} loading={state.boardLoading} note={state.positionalNote} />
+              <SuggestedPicks
+                recommendations={recs}
+                onTheClock={mine}
+                loading={state.boardLoading && !live}
+                pendingId={pendingId}
+                onDraft={(r: Recommendation) => void draftCurrent(r)}
+              />
+            </Box>
+          </Collapse>
           <DraftBoardGrid session={s} pool={state.pool} onCellTap={setCell} onEditNames={() => setPanel('names')} teamMeta={teamMeta} onScroll={onScrollTop} />
 
-          <Slide direction="down" in={showLatest} mountOnEnter unmountOnExit>
-            <Box sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 4 }}>
-              {latest && (
-                <LatestPickCard
-                  insight={latest}
-                  teams={s.teams}
-                  onDismiss={() => setDismissed(latest.pick_no)}
-                  onOpenTeam={(teamId) => {
-                    setDismissed(latest.pick_no);
-                    setFocusTeam(teamId);
-                    setPanel('teams');
-                  }}
-                />
-              )}
-            </Box>
-          </Slide>
         </Box>
       )}
 
@@ -286,16 +294,6 @@ export function DraftRoomView({
 
       {tab === 'players' && (
         <Box component="main" onScroll={(e) => onScrollTop(e.currentTarget.scrollTop)} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: SAFE_BOTTOM }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2, px: 2, pt: 1.5, pb: 1.5 }}>
-            <PositionalValuePanel positions={state.positional.data} error={state.positional.error} loading={state.boardLoading} note={state.positionalNote} />
-            <SuggestedPicks
-              recommendations={recs}
-              onTheClock={mine}
-              loading={state.boardLoading && !live}
-              pendingId={pendingId}
-              onDraft={(r: Recommendation) => void draftCurrent(r)}
-            />
-          </Box>
           <AvailableList
             stickyToolbar
             toolbarLead={
@@ -473,7 +471,30 @@ export function DraftRoomView({
             .then((path) => setNotice({ text: `Exported to ${path}` }))
             .catch((err: unknown) => setNotice({ text: errorMessage(err), error: true }))
         }
+        onNewDraft={() => setConfirmNew(true)}
       />
+
+      <Dialog open={confirmNew} onClose={() => setConfirmNew(false)} aria-labelledby="new-draft-title">
+        <DialogTitle id="new-draft-title">Start a new draft?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {isPractice(s.draft_id) ? 'This practice draft' : 'The real draft'} ({s.draft_id}) ends here. Its {s.picks.length} picks
+            stay saved: start the same draft again any time to pick up where it left off.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmNew(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setConfirmNew(false);
+              actions.newDraft().catch((err: unknown) => setNotice({ text: errorMessage(err), error: true }));
+            }}
+          >
+            Start a new draft
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={notice != null}

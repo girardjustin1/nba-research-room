@@ -15,6 +15,7 @@ import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import ContentPasteOutlinedIcon from '@mui/icons-material/ContentPasteOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { useColorScheme } from '@mui/material/styles';
 import { SAFE_TOP } from '../../../lib/layout';
 import { useResolvedMode } from '../../../theme/viz';
@@ -27,6 +28,8 @@ export interface DraftMenuProps {
   onOpenPanel: (panel: MenuPanel) => void;
   /** Save the draft results for the inbox (and to compare with Yahoo's). */
   onExport?: () => void;
+  /** End this session and go back to the start screen (another practice draft, or the real one). */
+  onNewDraft?: () => void;
 }
 
 const ITEMS: { panel: MenuPanel; label: string; detail: string; icon: React.ReactNode }[] = [
@@ -41,7 +44,7 @@ const ITEMS: { panel: MenuPanel; label: string; detail: string; icon: React.Reac
 ];
 
 /** Side menu for the less frequent draft tools. */
-export function DraftMenu({ open, onClose, onOpenPanel, onExport }: DraftMenuProps) {
+export function DraftMenu({ open, onClose, onOpenPanel, onExport, onNewDraft }: DraftMenuProps) {
   const { setMode } = useColorScheme();
   const mode = useResolvedMode();
   const next = mode === 'dark' ? 'light' : 'dark';
@@ -76,6 +79,20 @@ export function DraftMenu({ open, onClose, onOpenPanel, onExport }: DraftMenuPro
               <FileDownloadOutlinedIcon />
             </ListItemIcon>
             <ListItemText primary="Export results" secondary="Saves draft_results.csv to the inbox" />
+          </ListItemButton>
+        )}
+        {onNewDraft && (
+          <ListItemButton
+            onClick={() => {
+              onClose();
+              onNewDraft();
+            }}
+            sx={{ minHeight: 56 }}
+          >
+            <ListItemIcon>
+              <RestartAltOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary="Start a new draft" secondary="Practice or real; this draft's picks stay saved" />
           </ListItemButton>
         )}
         <ListItemButton onClick={() => setMode(next)} sx={{ minHeight: 56 }}>

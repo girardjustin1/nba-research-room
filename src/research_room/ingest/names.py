@@ -58,7 +58,7 @@ def load_team_aliases(path=None) -> dict[str, str]:
 @dataclass
 class Resolution:
     player_id: int | None
-    method: str | None = None          # alias_id | alias_name | exact | exact_team
+    method: str | None = None          # alias_id | alias_name | exact | exact_team | initial[_team]
     reason: str | None = None          # no_match | ambiguous | alias_target_missing
     candidates: list[str] = field(default_factory=list)
 
@@ -76,6 +76,17 @@ class NameResolver:
             team = getattr(row, "team_abbr", None)
             self._by_name.setdefault(key, []).append((int(row.player_id), team if team else None))
         self._ids = {pid for entries in self._by_name.values() for pid, _ in entries}
+        # Yahoo's draft room writes "A. EDWARDS", "S. GILGEOUS-ALEXANDER", "K. TOWNS": first
+        # initial + surname (the rest of the name, or its last word: "Karl-Anthony Towns").
+        self._by_initial: dict[tuple[str, str], list[tuple[int, str | None]]] = {}
+        for key, entries in self._by_name.items():
+            tokens = key.split()
+            if len(tokens) < 2:
+                continue
+            for rest in {" ".join(tokens[1:]), tokens[-1]}:
+                for e in entries:
+                    if e not in self._by_initial.setdefault((tokens[0][0], rest), []):
+                        self._by_initial[(tokens[0][0], rest)].append(e)
         self._alias: dict[str, tuple[str, int | None, str]] = {}
         for entry in aliases or []:
             canonical = entry.get("name", "")
@@ -110,6 +121,17 @@ class NameResolver:
                 return Resolution(on_team[0], method="exact_team")
             return Resolution(None, reason="ambiguous",
                               candidates=[f"{pid} ({t or '?'})" for pid, t in matches])
+        tokens = key.split()
+        if len(tokens) >= 2 and len(tokens[0]) == 1:          # "a edwards": an initial and a surname
+            hits = self._by_initial.get((tokens[0], " ".join(tokens[1:])), [])
+            if len(hits) == 1:
+                return Resolution(hits[0][0], method="initial")
+            on_team = [pid for pid, t in hits if team and t == team]
+            if len(on_team) == 1:
+                return Resolution(on_team[0], method="initial_team")
+            if hits:
+                return Resolution(None, reason="ambiguous",
+                                  candidates=[f"{pid} ({t or '?'})" for pid, t in hits][:5])
         close = difflib.get_close_matches(key, self._by_name.keys(), n=3, cutoff=0.85)
         return Resolution(None, reason="no_match", candidates=close)
 

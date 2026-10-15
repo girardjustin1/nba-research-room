@@ -16,6 +16,8 @@ import { SAFE_TOP } from '../../../lib/layout';
 import { myNextPick, roundPickLong, teamName } from '../../../lib/picks';
 import { agoLabel, useNow } from '../../../lib/useNow';
 import { STATUS, useResolvedMode } from '../../../theme/viz';
+import { feedLine } from './yahooFeed';
+import { isPractice } from '../../../api/useDraftRoom';
 
 /**
  * Bar fills, white text on both (>= 4.5:1). "On the clock" is the deep status crimson in BOTH
@@ -34,6 +36,8 @@ export interface StatusBarProps {
   onEnterPick: () => void;
   /** Opens the draft tools menu (right). */
   onMenu: () => void;
+  /** The latest-picks bell (left of the tools menu). */
+  bell?: React.ReactNode;
   /** The app's left ☰ (experience drawer), from the app shell; absent in plain stories. */
   leading?: React.ReactNode;
   /** Demo build: shown in place of the Yahoo listener status. */
@@ -49,7 +53,7 @@ export interface StatusBarProps {
  * and the listener status (no local pick clock: Yahoo's room has the real one): picks arrive
  * from the Tampermonkey listener in the Yahoo draft room; manual entry is the fallback.
  */
-export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, leading, demoBadge, now, compact = false }: StatusBarProps) {
+export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, onEnterPick, onMenu, bell, leading, demoBadge, now, compact = false }: StatusBarProps) {
   const mode = useResolvedMode();
   const t = useNow(1000, now);
   const current = session.current_pick;
@@ -88,7 +92,8 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
           </Typography>
           {!complete && (
             <Typography variant="body2" component="p" className="tabular" sx={{ opacity: 0.92, mt: compact ? 0 : 0.25, fontSize: compact ? 12.5 : undefined }} noWrap>
-              Pick {roundPickLong(current ?? 0, session.teams)} · {mine ? 'your pick' : `${teamName(session, session.on_the_clock ?? 0)} on the clock`}
+              {isPractice(session.draft_id) ? 'Practice draft · ' : ''}Pick {roundPickLong(current ?? 0, session.teams)} ·{' '}
+              {mine ? 'your pick' : `${teamName(session, session.on_the_clock ?? 0)} on the clock`}
             </Typography>
           )}
         </Box>
@@ -97,6 +102,7 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
             <EditNoteOutlinedIcon />
           </IconButton>
         )}
+        {bell}
         <IconButton aria-label="Draft tools" onClick={onMenu} sx={{ color: 'inherit', mr: -1.5 }}>
           <MoreVertIcon />
         </IconButton>
@@ -127,6 +133,11 @@ export function StatusBar({ session, decisionPick, connection, lastPickSeenAt, o
           Enter pick
         </Button>
       </Stack>
+      {!demoBadge && feedLine(session.yahoo_feed) && (
+        <Typography variant="caption" component="p" sx={{ opacity: 0.92, mt: 0.25 }} noWrap>
+          {feedLine(session.yahoo_feed)}
+        </Typography>
+      )}
       </Collapse>
     </Box>
   );

@@ -1,16 +1,19 @@
 // ==UserScript==
 // @name         NBA Research Room - draft listener (read-only)
 // @namespace    research-room.local
-// @version      0.1.0
+// @version      0.7.2
 // @description  Watches the Yahoo draft room's pick list and reports each new pick to the local draft API (127.0.0.1:8765). It never clicks, types or submits anything on Yahoo.
 // @match        https://basketball.fantasysports.yahoo.com/*draft*
 // @match        https://*.fantasysports.yahoo.com/*draftclient*
+// @match        https://*.yahoo.com/*draft*
 // @match        file:///*mock_draft_room.html*
 // @match        http://127.0.0.1/*mock_draft_room.html*
 // @match        http://localhost/*mock_draft_room.html*
 // @grant        GM_xmlhttpRequest
 // @connect      127.0.0.1
 // @run-at       document-idle
+// @updateURL    http://127.0.0.1:8765/listener.user.js
+// @downloadURL  http://127.0.0.1:8765/listener.user.js
 // ==/UserScript==
 
 /*
@@ -21,7 +24,7 @@
  *
  * UNVERIFIED SELECTORS. Nobody has seen the live Yahoo draft room with this script yet. Every
  * selector below is a guess with fallbacks, tested only against scripts/mock_draft_room.html.
- * Check them in a Yahoo MOCK draft before the real draft (Sun Oct 18, 7:00 pm EDT), using a
+ * Check them in a Yahoo MOCK draft before the real draft (Sun Oct 18, 8:00 pm EDT), using a
  * throwaway draft id on the Draft page. If the badge says "pick list not found" or sends
  * nothing, enter picks manually on the Draft page (the fallback) and update CONFIG.selectors.
  * README.md "Live draft listener (Tampermonkey)" explains how.
@@ -77,6 +80,8 @@
       WSH: 'WAS', BRK: 'BKN', CHO: 'CHA', CHAR: 'CHA' },
   };
 
+  const VERSION = '0.7.2';
+
   // ==================================================================== text parsing
   const NAME = "([\\p{L}][\\p{L}\\p{M}'’.\\- ]*?[\\p{L}\\p{M}.])";
   const TEAM = '([A-Z]{2,4})';                                   // NBA team code, upper case
@@ -86,7 +91,17 @@
   const TEAM_POS = `(?:\\s*\\(\\s*|\\s+)${TEAM}\\s*[-–—]\\s*${POS}(?=\\s*\\)|\\s|$)`;
   const TEAM_POS_FIELD = new RegExp(`^\\(?\\s*${TEAM}\\s*[-–—]\\s*${POS}\\s*\\)?$`, 'u');
   // Row-text patterns, tried in order. Each names its groups' meaning in `fields`.
+  // Yahoo's draft room (seen 2026-10-15): "Nasos 8 A. EDWARDS PG,SG • MIN": the manager's name
+  // (shown above the number; before or after it in the text), the pick number, the player as
+  // initial + surname in capitals (an injury tag like "Q" may follow), positions, then a dot and
+  // the NBA team. Rows like "Ezo left" have none of this.
+  const Y_POS = '(?:PG|SG|G|SF|PF|F|C|Util)';
+  const YAHOO_ROW = new RegExp(
+    `^(?:.*?\\s)??(\\d{1,3})\\s+(?:.*?\\s)??(\\p{Lu}\\.(?:\\s?\\p{Lu}\\.)?\\s?\\p{Lu}[\\p{L}\\p{M}'’.\\-]+(?:\\s[\\p{L}\\p{M}'’.\\-]+)*?)`
+    + `(?:\\s+(?:Q|O|D|DTD|GTD|INJ|IL\\+?|NA|SUSP|OUT|NEW))?`
+    + `\\s+(${Y_POS}(?:\\s*,\\s*${Y_POS})*)\\s*[•·]?\\s*([A-Za-z]{2,4})$`, 'u');   // the dot is drawn by CSS
   const PATTERNS = [
+    { re: YAHOO_ROW, fields: ['pick_no', 'name', 'pos', 'team'] },
     // "12. Nikola Jokić (DEN - C)" / "#12 Name (DEN - C)" / "Pick 12: Name DEN - C"
     { re: new RegExp(`^(?:#|Pick\\s*)?(\\d{1,3})\\s*[.):#-]?\\s+${NAME}${TEAM_POS}`, 'u'),
       fields: ['pick_no', 'name', 'team', 'pos'] },
@@ -164,6 +179,76 @@
     return firstMatch(doc, (cfg || CONFIG).selectors.container);
   }
 
+  // A Yahoo pick row names its manager between the pick number and the player ("8 Nasos A.
+  // EDWARDS ..."); the available-players list ranks players without one, so it never matches.
+  const HAS_MANAGER = /^(\S.*?\s)??\d{1,3}\s+(\S.*?\s)??\p{Lu}\.\s?\p{Lu}[\p{L}\p{M}]/u;
+  const isPickRowText = (t) => {
+    if ((t.match(/(?:^|\s)\p{Lu}\.\s?\p{Lu}[\p{L}\p{M}'’\-]+/gu) || []).length !== 1) return false;   // one player
+    const m = YAHOO_ROW.test(t) && t.match(HAS_MANAGER);
+    return Boolean(m && (m[1] || m[2]));                          // a manager before or after the number
+  };
+  let autoList = null;                          // {doc, el}: the discovered pick list, reused on its page
+
+  /** When no configured selector finds the pick list: the element holding the most rows that read
+   *  like Yahoo picks (pick number, manager, player, positions • team). Returns {container, rows}
+   *  or null. Reads only; the result is cached until it leaves the page. */
+  /** Every element under `root`, including those inside open shadow roots (web components hide
+   *  their content from querySelectorAll). */
+  function allElements(root) {
+    const out = [];
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      for (const k of Array.from(n.children || [])) {
+        out.push(k);
+        stack.push(k);
+        if (k.shadowRoot) stack.push(k.shadowRoot);
+      }
+    }
+    return out;
+  }
+
+  function discoverPickList(doc) {
+    const inPage = (el) => (el.isConnected != null ? el.isConnected
+      : (doc.documentElement && doc.documentElement.contains ? doc.documentElement.contains(el) : true));
+    if (autoList && autoList.doc === doc && inPage(autoList.el)) {
+      const rows = Array.from(autoList.el.children).filter((r) => isPickRowText(clean(textOf(r))));
+      if (rows.length) return { container: autoList.el, rows };
+    }
+    autoList = null;
+    const hits = [];
+    const TAGS = new Set(['LI', 'DIV', 'TR', 'ARTICLE', 'SECTION', 'A']);
+    for (const el of allElements(doc.documentElement || doc)) {
+      if (!TAGS.has(el.tagName)) continue;
+      const raw = el.textContent || '';
+      if (raw.length < 8 || raw.length > 240) continue;              // cheap filter before innerText
+      if (isPickRowText(clean(textOf(el)))) hits.push(el);
+    }
+    const set = new Set(hits);
+    const groups = new Map();
+    for (const el of hits) {
+      if (set.has(el.parentNode)) continue;                         // keep the outermost row element
+      const parent = el.parentNode;
+      if (!groups.has(parent)) groups.set(parent, []);
+      groups.get(parent).push(el);
+    }
+    let best = null;
+    for (const [container, rows] of groups) if (!best || rows.length > best.rows.length) best = { container, rows };
+    if (best) autoList = { doc, el: best.container };
+    return best;
+  }
+
+  /** "div#id.class1.class2 > ul.picks" (three levels up), for the diagnostics the API keeps. */
+  function describe(el) {
+    const parts = [];
+    for (let n = el, i = 0; n && n.tagName && i < 3; n = n.parentNode, i += 1) {
+      const cls = (n.getAttribute && n.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 3);
+      const id = n.getAttribute && n.getAttribute('id');
+      parts.unshift(`${n.tagName.toLowerCase()}${id ? '#' + id : ''}${cls.map((c) => '.' + c).join('')}`);
+    }
+    return parts.join(' > ');
+  }
+
   function parseRow(row, cfg, teams) {
     const sel = cfg.selectors;
     const parsed = parsePickText(textOf(row), teams) || {};
@@ -189,13 +274,117 @@
 
   /** Read every pick visible in the pick list. Returns {container, strategy, picks}, picks
    *  sorted by pick_no and de-duplicated. Never reads outside the container. */
+  /** The page's own document and every embedded page (iframe) it may read: Yahoo draws the draft
+   *  room inside one. Cross-origin frames can't be read from here; the script runs in them itself
+   *  (its @match covers Yahoo's draft pages). */
+  function readableDocs(doc) {
+    const out = [doc];
+    for (const f of Array.from(doc.querySelectorAll ? doc.querySelectorAll('iframe') : [])) {
+      try {
+        const d = f.contentDocument;
+        if (d && d.documentElement) out.push(d);
+      } catch (e) { /* another origin */ }
+    }
+    return out;
+  }
+
+  /** Where each embedded page points (scheme, host, path; never the query, which can carry a
+   *  sign-in token) and whether it can be read from here. */
+  function frameInfo(doc) {
+    return Array.from(doc.querySelectorAll ? doc.querySelectorAll('iframe') : []).slice(0, 6).map((f) => {
+      let src = '';
+      try { const u = new URL(f.src || '', 'https://x.invalid'); src = `${u.protocol}//${u.host}${u.pathname}`; } catch (e) { src = '?'; }
+      let readable = false;
+      try { readable = Boolean(f.contentDocument && f.contentDocument.documentElement); } catch (e) { readable = false; }
+      return { src, readable };
+    });
+  }
+
+  // Yahoo's page text, one item per line (seen 2026-10-15): "1" / "hooper" / "V. Wembanyama" /
+  // ["Q"] / "C" / "SAS". Read straight from the lines, whatever the markup around them.
+  const L_NUM = /^\d{1,3}$/;
+  const L_PLAYER = /^\p{Lu}\.(?:\s?\p{Lu}\.)?\s?\p{Lu}[\p{L}\p{M}'’.\-]*(?:\s[\p{L}\p{M}'’.\-]+)*$/u;
+  const L_TAG = /^(?:Q|O|D|DTD|GTD|INJ|IL\+?|NA|SUSP|OUT|NEW)$/;
+  const L_POS = /^(?:PG|SG|G|SF|PF|F|C|Util)(?:\s*,\s*(?:PG|SG|G|SF|PF|F|C|Util))*$/;
+  const L_TEAM = /^[A-Za-z]{2,4}$/;
+
+  /** Every text node's text under `root`, one per line, hidden or not (a tab Yahoo isn't showing,
+   *  such as Picks while Queue is open, drops out of innerText but stays in the page). */
+  function textLines(root) {
+    const out = [];
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n) continue;
+      if (n.nodeType === 3) {
+        const t = clean(n.data);
+        if (t) out.push(t);
+        continue;
+      }
+      if (n.tagName && /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(n.tagName)) continue;
+      const kids = Array.from(n.childNodes || []);
+      for (let i = kids.length - 1; i >= 0; i -= 1) stack.push(kids[i]);
+      if (n.shadowRoot) stack.push(n.shadowRoot);
+    }
+    return out;
+  }
+
+  /** Picks read from lines (an array, or text split at line breaks): number, manager, player,
+   *  [injury tag], positions, team. */
+  function picksFromLines(text) {
+    const lines = (Array.isArray(text) ? text : String(text || '').split(/\n+/)).map(clean).filter(Boolean);
+    const out = [];
+    for (let i = 0; i + 4 < lines.length; i += 1) {
+      if (!L_NUM.test(lines[i]) || L_PLAYER.test(lines[i + 1]) || !L_PLAYER.test(lines[i + 2])) continue;
+      let j = i + 3;
+      if (L_TAG.test(lines[j])) j += 1;
+      if (!L_POS.test(lines[j] || '') || !L_TEAM.test(lines[j + 1] || '')) continue;
+      out.push({ pick_no: parseInt(lines[i], 10), player_name: lines[i + 2], nba_team: normalizeTeam(lines[j + 1]),
+        positions: lines[j].replace(/\s+/g, '') });
+      i = j + 1;
+    }
+    const byNo = new Map();
+    for (const p of out) if (!byNo.has(p.pick_no)) byNo.set(p.pick_no, p);
+    return Array.from(byNo.values()).sort((a, b) => a.pick_no - b.pick_no);
+  }
+
   function extractPicks(doc, cfg, teams) {
     cfg = cfg || CONFIG;
-    const container = findContainer(doc, cfg);
+    const docs = readableDocs(doc);
+    // Read every way and keep the reading with the most picks: one element can hold just the
+    // latest pick (Yahoo's header), while the page's lines hold the whole Picks list.
+    let best = null;
+    for (const d of docs) {
+      const r = extractPicksIn(d, cfg, teams);
+      if (r.container && r.picks.length && (!best || r.picks.length > best.picks.length)) best = r;
+      const lines = d.body ? picksFromLines(textLines(d.body)) : [];
+      if (lines.length && (!best || lines.length > best.picks.length)) {
+        best = { container: d.body, strategy: 'text:yahoo-lines', picks: lines };
+      }
+    }
+    if (best) return best;
+    for (const d of docs) {
+      const r = extractPicksIn(d, cfg, teams);
+      if (r.container) return r;
+    }
+    return { container: null, strategy: null, picks: [] };
+  }
+
+  function extractPicksIn(doc, cfg, teams) {
+    let container = findContainer(doc, cfg);
+    let autoRows = null;
+    if (!container && cfg.autoDiscover !== false) {
+      const found = discoverPickList(doc);
+      if (found) { container = found.container; autoRows = found.rows; }
+    }
     if (!container) return { container: null, strategy: null, picks: [] };
     let picks = [];
     let strategy = null;
-    for (const sel of cfg.selectors.row) {
+    if (autoRows) {
+      picks = autoRows.map((r) => parseRow(r, cfg, teams)).filter(Boolean);
+      strategy = 'auto:yahoo-rows';
+    }
+    for (const sel of (picks.length ? [] : cfg.selectors.row)) {
       let rows = [];
       try { rows = Array.from(container.querySelectorAll(sel)); } catch (e) { continue; }
       const parsed = rows.map((r) => parseRow(r, cfg, teams)).filter(Boolean);
@@ -423,6 +612,37 @@
       const res = extractPicks(doc, CONFIG, st.teams);
       st.containerFound = !!res.container;
       if (res.strategy) st.strategy = res.strategy;
+      // A new draft in this page (another mock): pick 1 is someone else. Forget the old draft
+      // instead of reporting every pick as a conflict and sending none.
+      const first = res.picks.find((p) => p.pick_no === 1);
+      const before = st.seen.get('p1');
+      if (first && before && nameKey(first.player_name) !== nameKey(before.player_name)) {
+        st.seen.clear();
+        st.conflicts.clear();
+      }
+      const bodyChars = doc.body ? clean(textOf(doc.body)).length : 0;
+      if (!dryRun && !res.strategy && (isTop || bodyChars > 0) && Date.now() - (st.missReported || 0) > 60000) {
+        st.missReported = Date.now();
+        const body = bodyChars;
+        const sample = (doc.body ? String(textOf(doc.body)) : '').split(/\n+/).map(clean).filter(Boolean)
+          .slice(0, 120).map((l) => l.slice(0, 80));
+        const lines = (doc.body ? String(textOf(doc.body)) : '').split(/\n+/).map(clean)
+          .filter((l) => /\p{Lu}\.\s?\p{Lu}{2,}/u.test(l) && l.length < 120).slice(0, 8);
+        gmTransport('POST', '/draft/listener_diag', {
+          version: VERSION, strategy: 'not-found', container: null, picks: 0,
+          first: { page_text_chars: body, top: isTop, frames: frameInfo(doc),
+            shadow_hosts: allElements(doc.documentElement || doc).filter((e) => e.shadowRoot).length },
+          last: { lines, sample }, url: (win.location && win.location.pathname) || null,
+        }).catch(() => {});
+      }
+      if (!dryRun && res.strategy && res.strategy !== st.reported) {
+        st.reported = res.strategy;
+        gmTransport('POST', '/draft/listener_diag', {
+          version: VERSION, strategy: res.strategy, container: res.container ? describe(res.container) : null,
+          picks: res.picks.length, first: res.picks[0] || null, last: res.picks[res.picks.length - 1] || null,
+          url: (win.location && win.location.pathname) || null,
+        }).catch(() => {});
+      }
       const { fresh, conflicts } = diffPicks(st.seen, res.picks);
       for (const c of conflicts) st.conflicts.set(`${pickKey(c.now)}|${c.now.player_name}`, c);
       if (fresh.length) st.sender.enqueue(fresh);
@@ -440,11 +660,18 @@
     win.setInterval(scan, CONFIG.rescanMs);
 
     if (!dryRun) {
-      gmTransport('GET', '/draft/session').then((r) => {
-        if (r.status === 200 && r.json) { st.teams = r.json.teams || st.teams; st.draftId = r.json.draft_id; }
-        else st.sender.lastError = 'no draft session: start one on the Draft page';
+      // The session can change while this page is open (a new practice draft, an engine restart):
+      // ask again every 15 s, so the badge and the team count stay current.
+      const refreshSession = () => gmTransport('GET', '/draft/session').then((r) => {
+        if (r.status === 200 && r.json) {
+          st.teams = r.json.teams || st.teams;
+          st.draftId = r.json.draft_id;
+          if (/no draft session|unreachable/.test(st.sender.lastError || '')) st.sender.lastError = null;
+        } else st.sender.lastError = 'no draft session: start one on the Draft page';
         render();
       }).catch(() => { st.sender.lastError = 'draft API unreachable: run make draft-api'; render(); });
+      refreshSession();
+      win.setInterval(refreshSession, 15000);
     } else {
       st.draftId = 'dry-run';
     }
@@ -452,6 +679,6 @@
     scan();
   }
 
-  return { CONFIG, PATTERNS, parsePickText, parsePickNo, extractPicks, diffPicks, pickBody,
-    classifyResponse, PickSender, normalizeTeam, nameKey, badgeText, start };
+  return { CONFIG, PATTERNS, VERSION, picksFromLines, textLines, parsePickText, parsePickNo, extractPicks, discoverPickList, describe,
+    diffPicks, pickBody, classifyResponse, PickSender, normalizeTeam, nameKey, badgeText, start };
 });

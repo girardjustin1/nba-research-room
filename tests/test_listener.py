@@ -170,10 +170,14 @@ def test_listener_queues_while_api_is_down_then_handles_duplicates_and_unmatched
     url = f"{MOCK.as_uri()}?listener=page&interval=100&picks=5"
     done = f"{BADGE} && {BADGE}.dataset.queued === '0' && {BADGE}.dataset.unmatched === '1'"
     out = browser.run(url, until_js=done, result_js=RESULT_JS, preload_js=FAKE_GM, timeout=30)
-    posts = [r for r in out["requests"] if r["method"] == "POST"]
+    posts = [r for r in out["requests"] if r["method"] == "POST" and not r["url"].endswith("/listener_diag")]
     assert all(r["url"] == "http://127.0.0.1:8765/draft/pick" for r in posts)
+    diags = [r for r in out["requests"] if r["url"].endswith("/draft/listener_diag")]
+    assert diags and diags[0]["body"]["version"] == "0.7.2"         # it reports how it found the list
     # pick 1 failed twice (API down) and stayed first in the queue; order is preserved
-    assert [r["body"]["pick_no"] for r in posts] == [1, 1, 1, 2, 3, 4, 5]
+    sent = [r["body"]["pick_no"] for r in posts]               # the outage also covers the diag report
+    retries = sent.index(2)
+    assert retries >= 2 and sent == [1] * retries + [2, 3, 4, 5]
     assert out["badge"]["sent"] == "3"
     assert "draft cdp-test" in out["text"]
     assert "dup 1" in out["text"]

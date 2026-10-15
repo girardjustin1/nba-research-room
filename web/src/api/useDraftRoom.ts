@@ -44,7 +44,8 @@ export interface DraftRoomState {
 }
 
 export interface DraftRoomActions {
-  start(mySlot: number, punts: string[]): Promise<void>;
+  /** Start the real draft, or with `practice` a practice session (a Yahoo mock draft) of that size. */
+  start(mySlot: number, punts: string[], practice?: Practice): Promise<void>;
   setSlot(mySlot: number): Promise<void>;
   setPunts(punts: string[]): Promise<void>;
   pick(body: PickIn): Promise<void>;
@@ -58,10 +59,26 @@ export interface DraftRoomActions {
   yahooPositions(): Promise<YahooPositions>;
   /** Add the Yahoo positions in a pasted Players page; the board refetches with them. */
   saveYahooPositions(text: string): Promise<YahooPositions>;
+  /** End this session and go back to the start screen (its picks stay saved). */
+  newDraft(): Promise<void>;
   /** POST /draft/export: writes data/inbox/draft_results.csv; resolves to the path written. */
   exportResults(): Promise<string>;
   refresh(): void;
 }
+
+export interface Practice {
+  teams: number;
+  rounds: number;
+}
+
+/** A fresh draft id for each practice run ("practice-1015-2143"), so every mock starts empty. */
+export function practiceId(now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `practice-${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}`;
+}
+
+/** Practice sessions are the ones started from the Practice option (any id but the real draft's). */
+export const isPractice = (draftId: string | null | undefined) => Boolean(draftId?.startsWith('practice-'));
 
 export const POLL_MS = 1500;
 
@@ -249,7 +266,14 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
 
   const actions = useMemo<DraftRoomActions>(
     () => ({
-      start: async (mySlot, punts) => applySession(await api.startSession({ my_slot: mySlot, punts })),
+      start: async (mySlot, punts, practice) =>
+        applySession(
+          await api.startSession({
+            my_slot: mySlot,
+            punts,
+            ...(practice ? { draft_id: practiceId(), teams: practice.teams, rounds: practice.rounds } : {}),
+          }),
+        ),
       setSlot: async (mySlot) => applySession(await api.setSlot(mySlot)),
       setPunts: async (punts) => {
         const session = await api.setPunts(punts);
@@ -274,6 +298,12 @@ export function useDraftRoom(api: DraftApi, pollMs = POLL_MS): [DraftRoomState, 
         loadedKey.current = null; // re-valued pool: always refetch
         wake.current();
         return r;
+      },
+      newDraft: async () => {
+        await api.endSession();
+        loadedKey.current = null;
+        latest.current = null;
+        setState((s) => ({ ...s, session: null, noSession: true, board: null, boardError: null }));
       },
       exportResults: async () => (await api.exportResults()).path,
       refresh: () => {

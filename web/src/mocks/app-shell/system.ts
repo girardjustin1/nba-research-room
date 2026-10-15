@@ -139,7 +139,7 @@ export const notesNormal: NotesResponse = {
 export const notesEmpty: NotesResponse = { notes: [] };
 
 /** Draft readiness two days out: the usual gaps, each with its fix (invented, no league data). */
-const DRAFT_AT = '2026-10-18T19:00:00-04:00';
+const DRAFT_AT = '2026-10-18T20:00:00-04:00';
 export const readinessWarn: ReadinessResponse = {
   as_of: '2026-10-16T20:15:00-04:00',
   draft_starts_at: DRAFT_AT,

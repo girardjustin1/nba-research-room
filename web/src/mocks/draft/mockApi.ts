@@ -30,6 +30,7 @@ export function createMockDraftApi(currentPick = 30): DraftApi {
     exportResults: async () => ({ path: 'data/draft_results.csv' }),
     getTeams: async () => ({ teams: makeTeams(session) }),
     setTeamNames: ok,
+    endSession: async () => ({ ok: true, ended: session.draft_id }),
     yahooPositions: async () => positions,
     saveYahooPositions: async (text) => (positions = sampleSavePositions(positions, text)),
     getPositionalValue: async () => ({ positions: makePositional() }),

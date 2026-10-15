@@ -19,6 +19,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -41,13 +42,13 @@ from research_room import (
     system,
     yahoo_positions,
 )
-from research_room.config import Settings, settings
-from research_room.draft import eligibility, tracker
+from research_room.config import REPO_ROOT, Settings, settings
+from research_room.draft import eligibility, tracker, yahoo_feed
 from research_room.draft.availability import expected_pick, picks_for_slot, slot_of
 from research_room.draft.board import DraftBoard, slot_assignment, split_starters
 from research_room.draft.bots import BOT_POSITION_CAP, bot_choice
 from research_room.draft.value import category_balance, compute_values
-from research_room.ingest import yahoo_live
+from research_room.ingest import yahoo_api, yahoo_live
 from research_room.ingest.external_proj import blend_preseason
 from research_room.ingest.names import NameResolver
 
@@ -98,6 +99,7 @@ class Session:
     names: dict[int, str] = field(default_factory=dict)   # saved team names for this draft
     # (inputs, response) of the last insights / strength: polls between picks reuse it
     cached: dict[str, tuple] = field(default_factory=dict)
+    yahoo_feed: yahoo_feed.FeedStatus | None = None   # Yahoo's draft results, the listener's backup
 
     @property
     def mode(self) -> str:
@@ -179,14 +181,15 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         extras = load_extras(con, cfg)
         # Team names and eligibility, read live once for this draft session and held in its
         # memory only (never written; a few calls, not one per pick).
-        yahoo_live.attach(con, cfg, ("teams", "players"))
+        yahoo_live.attach(con, settings(), ("teams", "players"))   # the league's own size, even for practice
         yahoo_elig = eligibility.load_yahoo(con, pasted=False)   # pasted positions: at each rebuild
         log = mock.con if mock else con
-        order = cfg.draft.order or tracker.league_draft_order(con, cfg.league.teams)   # settings win
-        if my_slot is None and not mock:
+        real = not mock and draft_id == real_draft_id(cfg)
+        order = (cfg.draft.order or tracker.league_draft_order(con, cfg.league.teams)) if real else []
+        if my_slot is None and real:
             my_slot = cfg.draft.my_slot or tracker.slot_from_order(order, cfg.league.my_team_id)
         state = tracker.load_state(log, draft_id, cfg, my_slot)
-        if cfg.draft.keepers:
+        if cfg.draft.keepers and real:
             state = apply_configured_keepers(log, state, cfg, pool)
         # Names typed in the app win; otherwise the draft order names each slot from teams.csv.
         saved = {} if mock else tracker.slot_names_from_order(order, tracker.league_team_names(con))
@@ -307,10 +310,18 @@ class ScenarioIn(BaseModel):
     move_ids: list[str] = Field(default_factory=list)
 
 
+def real_draft_id(cfg: Settings | None = None) -> str:
+    """The league's real draft: the only session Yahoo's draft order, team names and picks feed."""
+    return f"hoopdreams-{(cfg or settings()).season.nba_season}"
+
+
 class SessionIn(BaseModel):
-    draft_id: str = Field(default_factory=lambda: f"hoopdreams-{settings().season.nba_season}")
+    draft_id: str = Field(default_factory=real_draft_id)
     my_slot: int | None = None
     punts: list[str] = Field(default_factory=list)
+    # A practice session (a Yahoo mock draft) may differ from the league; the real draft never does.
+    teams: int | None = Field(default=None, ge=2, le=20)
+    rounds: int | None = Field(default=None, ge=1, le=30)
 
 
 class PickIn(BaseModel):
@@ -387,11 +398,13 @@ def session_json(s: Session) -> dict:
             "pick_owners": [slot_of(p, st.teams) for p in range(1, st.total_picks + 1)],
             "mock": ({"speed_s": s.mock.speed_s, "paused": s.mock.paused, "finished": s.mock.finished}
                      if s.mock else None),
+            "yahoo_feed": s.yahoo_feed.as_dict() if s.yahoo_feed else None,
             "picks": records(st.picks)}
 
 
 # ------------------------------------------------------------------ app
-def create_app(db_path: str | None = None, image_root=None, run_mock_thread: bool = True) -> FastAPI:
+def create_app(db_path: str | None = None, image_root=None, run_mock_thread: bool = True,
+               run_yahoo_feed: bool | None = None, feed: yahoo_feed.YahooFeed | None = None) -> FastAPI:
     app = FastAPI(title="NBA Research Room", version="0.1.0")
     app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"],
                        allow_headers=["*"])
@@ -421,6 +434,86 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
                     tick()
         threading.Thread(target=loop, name="mock-draft-ticker", daemon=True).start()
 
+    # ---------------------------------------------------------------- Yahoo's picks (backup feed)
+    feed = feed or yahoo_feed.YahooFeed()
+    app.state.yahoo_feed = feed
+    app.state.db_path = db_path
+
+    def yahoo_feed_step(now: datetime | None = None) -> int:
+        """One read of Yahoo's draft results into the running live session (not mocks): the picks
+        the log lacks are recorded like the listener's. Returns how many were added."""
+        s, cfg = h.session, settings()
+        if s is None or s.mock is not None or s.yahoo_feed is None:
+            return 0
+        if s.draft_id != real_draft_id(cfg):           # practice sessions never get the league's picks
+            s.yahoo_feed.state = "off"
+            s.yahoo_feed.detail = "practice session: Yahoo's league picks go to the real draft only"
+            return 0
+        st = s.yahoo_feed
+        if not cfg.draft.yahoo_feed.enabled:
+            st.state, st.detail = "off", "switched off in settings"
+            return 0
+        if feed._connect is None and not yahoo_api.signed_in():
+            st.state, st.detail = "off", "not signed in to Yahoo"
+            return 0
+        if not yahoo_feed.in_window(now or store.utcnow(), cfg):
+            st.state, st.detail = "waiting", "reads Yahoo's picks from 30 min before the draft"
+            return 0
+        with feed.lock:
+            try:
+                picks = feed.read(cfg)                      # the network read, outside the room's lock
+            except Exception as exc:  # noqa: BLE001 - reported on the Draft screen; next read retries
+                st.state, st.detail = "error", f"Yahoo didn't answer ({yahoo_api.problem(exc)})"
+                return 0
+        with h.lock:
+            if h.session is not s:
+                return 0
+            recorded = {int(r.pick_no): int(r.player_id) for r in s.state.picks.itertuples(index=False)}
+
+            def record(pick_no: int, pid: int, _name: str) -> None:
+                row = s.valued[s.valued["player_id"] == pid]
+                if row.empty:
+                    raise tracker.PickError(f"player {pid} is not in the draft pool")
+                name = row.iloc[0]["name"]
+                s.state = write(lambda con: tracker.record_pick(
+                    con, s.state, pid, name, pick_no=pick_no, entry_source="yahoo"), s)
+
+            added = yahoo_feed.apply(picks, recorded, lambda n, t: s.resolver.resolve(n, t).player_id,
+                                     record, st)
+            st.state = "live"
+            return added
+    app.state.yahoo_feed_step = yahoo_feed_step
+
+    if run_mock_thread if run_yahoo_feed is None else run_yahoo_feed:
+        def feed_loop() -> None:
+            while True:
+                time.sleep(settings().draft.yahoo_feed.poll_s)
+                with contextlib.suppress(Exception):       # keep the feed alive
+                    yahoo_feed_step()
+        threading.Thread(target=feed_loop, name="yahoo-picks-feed", daemon=True).start()
+
+    listener_diag: dict = {}
+
+    @app.post("/draft/listener_diag")
+    def post_listener_diag(body: dict) -> dict:
+        """What the listener found on the Yahoo page (its version, how it found the pick list, the
+        first and last pick it read), kept in memory to check a new room's markup."""
+        listener_diag.clear()
+        listener_diag.update({k: body.get(k) for k in ("version", "strategy", "container", "picks", "first",
+                                                       "last", "url")})
+        listener_diag["at"] = pd.Timestamp(store.utcnow()).isoformat()
+        return {"ok": True}
+
+    @app.get("/draft/listener_diag")
+    def get_listener_diag() -> dict:
+        return dict(listener_diag)
+
+    @app.get("/listener.user.js")
+    def listener_script() -> FileResponse:
+        """The Yahoo draft-room listener for Tampermonkey: opening this link installs it, and
+        Tampermonkey's update check fetches new versions from here (its @updateURL)."""
+        return FileResponse(REPO_ROOT / "scripts" / "draft_listener.user.js", media_type="text/javascript")
+
     @app.get("/health")
     def health() -> dict:
         """Up, the running draft session, and when the league's draft starts (settings: the Draft
@@ -433,14 +526,35 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def post_session(body: SessionIn) -> dict:
         with h.lock:
             try:
-                h.session = start_session(body.draft_id, body.my_slot, set(body.punts), db_path=db_path)
+                practice = body.draft_id != real_draft_id()
+                if not practice and (body.teams or body.rounds):
+                    raise ValueError("the real draft uses the league's teams and rounds (settings)")
+                cfg = None
+                if practice and (body.teams or body.rounds):
+                    cfg = league_with_teams(body.teams or settings().league.teams)
+                    if body.rounds:
+                        draft = cfg.draft.model_copy(update={"rounds": body.rounds})
+                        cfg = cfg.model_copy(update={"draft": draft})
+                h.session = start_session(body.draft_id, body.my_slot, set(body.punts), cfg=cfg,
+                                          db_path=db_path)
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
+            feed.reset()
+            h.session.yahoo_feed = feed.status
             return session_json(h.session)
 
     @app.get("/draft/session")
     def get_session() -> dict:
         return session_json(h.require())
+
+    @app.delete("/draft/session")
+    def end_session() -> dict:
+        """End the running session (to start another draft). Its picks stay in the log, so the same
+        draft id can always be started again."""
+        with h.lock:
+            ended = h.session.draft_id if h.session else None
+            h.session = None
+            return {"ok": True, "ended": ended}
 
     @app.put("/draft/slot")
     def put_slot(body: SlotIn) -> dict:
@@ -637,6 +751,13 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
     def post_pick(body: PickIn) -> dict:
         with h.lock:
             s = h.require()
+            if body.source == "listener" and s.mock is None and s.draft_id == real_draft_id(s.cfg):
+                opens = pd.Timestamp(s.cfg.draft.starts_at) - pd.Timedelta(minutes=30)   # the room opens
+                if pd.Timestamp(store.utcnow()) < opens:
+                    # Before the room opens the listener can only be reading a mock draft: never into
+                    # the real draft's log (2026-10-15: two mocks landed there).
+                    raise HTTPException(409, "the real draft's room isn't open yet: this is a mock draft. "
+                                             "Start a Practice draft on the Draft screen for it.")
             pid, name = body.player_id, body.player_name
             if pid is None:
                 if not name:

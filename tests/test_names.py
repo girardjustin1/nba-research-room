@@ -94,3 +94,29 @@ def test_player_universe_joins_team_abbreviation(con):
     store.upsert(con, "players", pd.DataFrame([{"player_id": 1, "full_name": "Nikola Jokić", "team_id": 8,
                                                  "source": "t", "fetched_at": now}]))
     assert player_universe(con).iloc[0]["team_abbr"] == "DEN"
+
+
+def test_yahoo_draft_room_names_resolve_by_initial_and_surname():
+    """Yahoo's draft room writes "A. EDWARDS", "K. TOWNS", "J. SMITH JR.": initial + surname,
+    with the team breaking ties; a real tie stays unresolved, never guessed."""
+    import pandas as pd
+
+    from research_room.ingest.names import NameResolver
+
+    players = pd.DataFrame({
+        "player_id": [1, 2, 3, 4, 5, 6],
+        "full_name": ["Anthony Edwards", "Karl-Anthony Towns", "Jabari Smith Jr.", "Jalen Johnson",
+                      "James Johnson", "Jalen Williams"],
+        "team_abbr": ["MIN", "NYK", "HOU", "ATL", "TOR", "OKC"],
+    })
+    players = pd.concat([players, pd.DataFrame({"player_id": [7], "full_name": ["Jaylin Williams"],
+                                                "team_abbr": ["OKC"]})], ignore_index=True)
+    r = NameResolver(players)
+    assert r.resolve("A. EDWARDS", "MIN").player_id == 1
+    assert r.resolve("K. TOWNS", "NYK").player_id == 2                  # the last word of the surname
+    assert r.resolve("J. SMITH JR.", "HOU").player_id == 3
+    jj = r.resolve("J. JOHNSON", "ATL")
+    assert jj.player_id == 4 and jj.method == "initial_team"
+    assert r.resolve("J. JOHNSON").player_id is None                    # two J. Johnsons, no team
+    tie = r.resolve("J. WILLIAMS", "OKC")
+    assert tie.player_id is None and tie.reason == "ambiguous"         # both on OKC

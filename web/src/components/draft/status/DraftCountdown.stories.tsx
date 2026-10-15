@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DraftCountdown } from './DraftCountdown';
 
-/** The league's draft: Sun Oct 18, 7:00 pm ET. Each story fixes the clock before it. */
-const STARTS = '2026-10-18T19:00:00-04:00';
+/** The league's draft: Sun Oct 18, 8:00 pm ET. Each story fixes the clock before it. */
+const STARTS = '2026-10-18T20:00:00-04:00';
 const before = (ms: number) => () => new Date(STARTS).getTime() - ms;
 const MIN = 60_000;
 

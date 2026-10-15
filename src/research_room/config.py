@@ -137,6 +137,15 @@ class Readiness(BaseModel):
     api_url: str
 
 
+class YahooPicksFeed(BaseModel):
+    """Yahoo's own draft results, polled during the live draft as the listener's backup
+    (draft/yahoo_feed.py). Read only, like every Yahoo call."""
+    enabled: bool = True
+    poll_s: float = 8                 # between reads of Yahoo's draft results
+    minutes_before: float = 30        # start polling this long before draft.starts_at
+    hours_after: float = 6            # and stop this long after it
+
+
 class Draft(BaseModel):
     type: str
     starts_at: datetime
@@ -156,6 +165,7 @@ class Draft(BaseModel):
     board: BoardConfig
     confirmed: DraftConfirmed = Field(default_factory=DraftConfirmed)
     readiness: Readiness
+    yahoo_feed: YahooPicksFeed = Field(default_factory=YahooPicksFeed)
 
 
 class Paths(BaseModel):

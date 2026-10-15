@@ -87,6 +87,8 @@ export interface DraftApi {
   exportResults(): Promise<{ path: string }>;
   getTeams(): Promise<TeamsResponse>;
   setTeamNames(names: Record<string, string>): Promise<Session | TeamsResponse>;
+  /** DELETE /draft/session: end the running session (its picks stay saved). */
+  endSession(): Promise<{ ok: boolean; ended: string | null }>;
   /** GET /draft/yahoo_positions: how many players have Yahoo positions from pastes. */
   yahooPositions(): Promise<YahooPositions>;
   /** POST /draft/yahoo_positions: add the positions found in a pasted Players page (the board is rebuilt). */
@@ -160,6 +162,7 @@ export function createDraftApi(baseUrl = '/api', fetchImpl: FetchLike = (i, init
     removePick: (pickNo) => request('DELETE', `/draft/pick/${encodeURIComponent(String(pickNo))}`),
     getTeams: () => request('GET', '/draft/teams'),
     setTeamNames: (names) => request('PUT', '/draft/teams/names', { names }),
+    endSession: () => request('DELETE', '/draft/session'),
     yahooPositions: () => request('GET', '/draft/yahoo_positions'),
     saveYahooPositions: (text) => request('POST', '/draft/yahoo_positions', { text }),
     getPositionalValue: () => request('GET', '/draft/positional_value'),

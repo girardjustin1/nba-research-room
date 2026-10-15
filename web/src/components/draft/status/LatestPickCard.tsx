@@ -14,13 +14,20 @@ export interface LatestPickCardProps {
   teams: number;
   /** Open that team's detail (Teams view). */
   onOpenTeam: (teamId: number) => void;
-  onDismiss: () => void;
+  /** Shows a close button (the bell's list has none). */
+  onDismiss?: () => void;
+  /** In the bell's list: flat, no shadow. */
+  flat?: boolean;
 }
 
 /** The live read after the newest pick. Every number and note is the engine's text. */
-export function LatestPickCard({ insight, teams, onOpenTeam, onDismiss }: LatestPickCardProps) {
+export function LatestPickCard({ insight, teams, onOpenTeam, onDismiss, flat = false }: LatestPickCardProps) {
   return (
-    <Paper elevation={6} sx={{ borderRadius: 3, overflow: 'hidden', border: 1, borderColor: 'divider' }} role="status" aria-live="polite">
+    <Paper
+      elevation={flat ? 0 : 6}
+      sx={{ borderRadius: flat ? 2 : 3, overflow: 'hidden', border: 1, borderColor: 'divider' }}
+      {...(flat ? {} : { role: 'status', 'aria-live': 'polite' as const })}
+    >
       <Stack direction="row" sx={{ alignItems: 'stretch' }}>
         <ButtonBase
           onClick={() => onOpenTeam(insight.team_id)}
@@ -49,9 +56,11 @@ export function LatestPickCard({ insight, teams, onOpenTeam, onDismiss }: Latest
             </Box>
           )}
         </ButtonBase>
-        <IconButton aria-label="Dismiss latest pick" onClick={onDismiss} sx={{ alignSelf: 'flex-start' }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
+        {onDismiss && (
+          <IconButton aria-label="Dismiss latest pick" onClick={onDismiss} sx={{ alignSelf: 'flex-start' }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
       </Stack>
     </Paper>
   );

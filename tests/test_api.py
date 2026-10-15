@@ -236,3 +236,88 @@ def test_health_says_when_the_draft_starts(client):
     body = client.get("/health").json()
     assert body["ok"] is True and body["session"] is None
     assert body["draft_starts_at"] == settings().draft.starts_at.isoformat()
+
+
+def test_a_practice_session_can_match_a_yahoo_mock_drafts_size(client, monkeypatch):
+    seen = {}
+    real_start = api.start_session
+
+    def spy(draft_id, my_slot, punts, cfg=None, db_path=None, mock=None):
+        seen["cfg"] = cfg
+        return real_start(draft_id, my_slot, punts, cfg=cfg, db_path=db_path, mock=mock)
+
+    monkeypatch.setattr(api, "start_session", spy)
+    body = {"draft_id": "practice-1", "my_slot": 3, "teams": 12, "rounds": 13}
+    s = client.post("/draft/session", json=body)
+    assert s.status_code == 200 and (s.json()["draft_id"], s.json()["teams"]) == ("practice-1", 12)
+    assert seen["cfg"].league.teams == 12 and seen["cfg"].draft.rounds == 13
+    assert client.post("/draft/session", json={"teams": 12}).status_code == 400      # the real draft: never
+
+
+def test_a_practice_session_smaller_than_the_league_still_reads_yahoo(tmp_path, monkeypatch):
+    """Yahoo's league has 14 teams; a 12-team practice board must not reject team 13 or 14."""
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def attach(con, cfg=None, parts=None, **kw):
+        seen["teams"] = cfg.league.teams
+        raise Stop                              # the read is all this test needs
+
+    monkeypatch.setattr(api, "blend_preseason", lambda con, cfg: make_pool())
+    monkeypatch.setattr(api, "load_extras", lambda con, cfg: None)
+    monkeypatch.setattr(api.schedule, "load_games", lambda con, season: None)
+    monkeypatch.setattr(api.schedule, "games_per_week", lambda games, season: 3.1)
+    monkeypatch.setattr(api.yahoo_live, "attach", attach)
+    with pytest.raises(Stop):
+        api.start_session("practice-1", 3, set(), cfg=api.league_with_teams(12),
+                          db_path=str(tmp_path / "x.duckdb"))
+    assert seen["teams"] == settings().league.teams
+
+
+def test_listener_picks_never_reach_the_real_draft_before_its_room_opens(client, monkeypatch):
+    """A Yahoo mock draft before the real draft's room opens must not write into the real log."""
+    import pandas as pd
+
+    from research_room import store
+
+    s = client.post("/draft/session", json={"my_slot": 2}).json()
+    assert s["draft_id"] == api.real_draft_id()
+    starts = pd.Timestamp(settings().draft.starts_at)
+    recs = [r["name"] for r in client.get("/draft/board").json()["recommendations"][:3]]
+    monkeypatch.setattr(store, "utcnow", lambda: (starts - pd.Timedelta(hours=2)).to_pydatetime())
+    r = client.post("/draft/pick", json={"player_name": recs[0], "source": "listener"})
+    assert r.status_code == 409 and "Practice draft" in r.json()["detail"]
+    assert client.post("/draft/pick", json={"player_name": recs[0]}).status_code == 200   # by hand: allowed
+    monkeypatch.setattr(store, "utcnow", lambda: (starts - pd.Timedelta(minutes=10)).to_pydatetime())
+    assert client.post("/draft/pick", json={"player_name": recs[1], "source": "listener"}).status_code == 200
+    client.post("/draft/session", json={"draft_id": "practice-1", "my_slot": 2})
+    monkeypatch.setattr(store, "utcnow", lambda: (starts - pd.Timedelta(days=2)).to_pydatetime())
+    assert client.post("/draft/pick", json={"player_name": recs[2], "source": "listener"}).status_code == 200
+
+
+def test_ending_a_session_keeps_its_picks_for_next_time(client):
+    client.post("/draft/session", json={"draft_id": "practice-9", "my_slot": 2})
+    name = client.get("/draft/board").json()["recommendations"][0]["name"]
+    client.post("/draft/pick", json={"player_name": name})
+    assert client.delete("/draft/session").json() == {"ok": True, "ended": "practice-9"}
+    assert client.get("/draft/session").status_code == 409                       # the start screen
+    assert client.get("/health").json()["session"] is None
+    assert client.delete("/draft/session").json()["ended"] is None               # nothing to end: fine
+
+
+def test_the_listener_installs_and_updates_from_the_engine(client):
+    r = client.get("/listener.user.js")
+    assert r.status_code == 200 and "==UserScript==" in r.text
+    assert "@updateURL    http://127.0.0.1:8765/listener.user.js" in r.text
+
+
+def test_the_listener_reports_what_it_found(client):
+    assert client.get("/draft/listener_diag").json() == {}
+    body = {"version": "0.3.0", "strategy": "auto:yahoo-rows", "container": "div.x2", "picks": 3,
+            "first": {"pick_no": 1}, "last": {"pick_no": 3}, "url": "/draftclient/nba/1/2",
+            "extra": "dropped"}
+    assert client.post("/draft/listener_diag", json=body).json() == {"ok": True}
+    got = client.get("/draft/listener_diag").json()
+    assert got["strategy"] == "auto:yahoo-rows" and got["picks"] == 3 and "extra" not in got and got["at"]

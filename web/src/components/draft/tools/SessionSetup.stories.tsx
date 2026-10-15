@@ -20,8 +20,8 @@ export const NewDraft: Story = {};
 /** Before the draft: the countdown above the slot choice. */
 export const NewDraftWithCountdown: Story = {
   args: {
-    draftStartsAt: '2026-10-18T19:00:00-04:00',
-    now: () => new Date('2026-10-18T19:00:00-04:00').getTime() - (5 * 60 + 12) * 60_000,
+    draftStartsAt: '2026-10-18T20:00:00-04:00',
+    now: () => new Date('2026-10-18T20:00:00-04:00').getTime() - (5 * 60 + 12) * 60_000,
   },
 };
 /** A session exists (e.g. started by the listener) but has no draft slot yet. */
@@ -41,3 +41,6 @@ export const SlotAndPuntChosen: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'FG%' }));
   },
 };
+
+/** Practice (a Yahoo mock draft): its own team count and a fresh log; never the real draft. Tap "Practice". */
+export const PracticeOption: Story = { args: { initialPractice: { teams: 14, rounds: 13 } } };

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { countdownLabel, draftStartLabel } from './countdown';
 import { DraftCountdown } from './DraftCountdown';
 
-const STARTS = '2026-10-18T19:00:00-04:00';
+const STARTS = '2026-10-18T20:00:00-04:00';
 const at = (msBefore: number) => () => new Date(STARTS).getTime() - msBefore;
 const MIN = 60_000;
 
@@ -16,7 +16,7 @@ describe('draft countdown', () => {
   });
 
   it('names the start in league time', () => {
-    expect(draftStartLabel(STARTS)).toBe('Sun, Oct 18, 7:00 pm ET');
+    expect(draftStartLabel(STARTS)).toBe('Sun, Oct 18, 8:00 pm ET');
   });
 
   it('counts down until the start, then disappears', () => {

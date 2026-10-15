@@ -1,3 +1,4 @@
+import { feedNeedsYou, withFeed } from '../../../mocks/draft/yahooFeed';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ApiError } from '../../../api/client';
 import {
@@ -41,13 +42,16 @@ export const UpInPicks: Story = {};
 /** Red "On the clock": Suggested picks' Draft buttons are live. */
 export const OnTheClock: Story = { args: { state: mockRoomState(onTheClockSession, onTheClockBoard) } };
 /** The live read after the newest pick slides in (tap it for that team). */
-export const LatestPick: Story = { args: { state: mockRoomState(midSession, midBoard), showLatestOnLoad: true } };
+/** The latest-picks bell open: every recent pick with the engine's read, newest first (nothing pops over the board). */
+export const LatestPicksBell: Story = { args: { state: mockRoomState(midSession, midBoard), showLatestOnLoad: true } };
 export const PuntDrift: Story = { args: { state: mockRoomState(driftSession, driftBoard) } };
+/** Yahoo's picks feed found a name it couldn't match and a pick that differs from the log. */
+export const YahooPicksNeedYou: Story = { args: { state: mockRoomState(withFeed(midSession, feedNeedsYou), midBoard) } };
 /** Before the draft: the countdown under the status bar (a fixed clock, 2 days 21 hours out). */
 export const BeforeTheDraft: Story = {
   args: {
-    draftStartsAt: '2026-10-18T19:00:00-04:00',
-    now: () => new Date('2026-10-18T19:00:00-04:00').getTime() - ((2 * 24 + 21) * 60 + 14) * 60_000,
+    draftStartsAt: '2026-10-18T20:00:00-04:00',
+    now: () => new Date('2026-10-18T20:00:00-04:00').getTime() - ((2 * 24 + 21) * 60 + 14) * 60_000,
   },
 };
 /** Me vs league: my standing per category against the league (its own tab). */

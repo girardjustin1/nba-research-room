@@ -15,7 +15,7 @@ export function countdownLabel(ms: number): string {
   return `${m}:${pad(s)}`;
 }
 
-/** "Sun Oct 18, 7:00 pm ET": the draft's start in league time. */
+/** "Sun Oct 18, 8:00 pm ET": the draft's start in league time. */
 export function draftStartLabel(iso: string): string {
   const date = new Date(iso);
   const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' }).format(date);

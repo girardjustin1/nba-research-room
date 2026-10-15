@@ -48,6 +48,7 @@ export function mockActions(failWith?: ApiError): DraftRoomActions {
     changePick: act('changePick'),
     undo: act('undo'),
     setTeamNames: act('setTeamNames'),
+    newDraft: act('newDraft'),
     yahooPositions: async () => yahooPositionsSome,
     saveYahooPositions: async (text) => {
       await act('saveYahooPositions')(text);

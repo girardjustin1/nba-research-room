@@ -23,7 +23,7 @@ Build plan: [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md). Assumptions and devi
 | Phase | What | State |
 |---|---|---|
 | 0 | Store, BallDontLie backfill, name resolution, schedule, Yahoo CSV inbox, Data page | built |
-| D | Draft helper (before Sun Oct 18, 7:00 pm EDT) | built; runbook in [`docs/draft-night.md`](docs/draft-night.md), check with `make doctor` |
+| D | Draft helper (before Sun Oct 18, 8:00 pm EDT) | built; runbook in [`docs/draft-night.md`](docs/draft-night.md), check with `make doctor` |
 | 1–6 | Projections, optimizer, models, playoffs | later |
 
 ## First run
@@ -140,7 +140,7 @@ the Draft page is always the fallback.
 
 > **The selectors have not been checked against the live Yahoo room.** They are educated guesses
 > with fallbacks, tested only against `scripts/mock_draft_room.html`. Check them in a Yahoo mock
-> draft before the real draft (Sun Oct 18, 7:00 pm EDT), as described below.
+> draft before the real draft (Sun Oct 18, 8:00 pm EDT), as described below.
 
 **Install (Chrome)**
 1. Install the Tampermonkey extension from the Chrome Web Store. In `chrome://extensions`, open

@@ -20,6 +20,22 @@ export interface PickRecord {
 }
 
 /** GET/POST /draft/session, PUT /draft/slot, PUT /draft/punts, POST /draft/pick, POST /draft/undo */
+/** The Yahoo picks feed (draft/yahoo_feed.py): picks Yahoo lists that the log lacks are recorded. */
+export interface YahooFeedStatus {
+  /** off: not signed in / switched off; waiting: before the draft window; live: reading; error: Yahoo didn't answer. */
+  state: 'off' | 'waiting' | 'live' | 'error';
+  detail: string;
+  checked_at: string | null;
+  /** Picks Yahoo lists so far. */
+  yahoo_picks: number;
+  /** Recorded by this feed this session. */
+  added: number;
+  /** Names Yahoo lists that matched no player: enter those picks by hand. */
+  unmatched: string[];
+  /** Pick numbers where the log has a different player than Yahoo: check them. */
+  conflicts: number[];
+}
+
 export interface Session {
   draft_id: string;
   my_slot: number | null;
@@ -37,6 +53,8 @@ export interface Session {
   picks: PickRecord[];
   /** Saved team names keyed by draft slot ("1".."14"); default "Team N", "You" for my slot. Newer API only. */
   team_names?: Record<string, string>;
+  /** Yahoo's own draft results, read during the draft as the listener's backup (live drafts only). */
+  yahoo_feed?: YahooFeedStatus | null;
 }
 
 export type AdpSource = 'yahoo' | 'bbm_adp' | 'bbm_rank';
@@ -245,6 +263,9 @@ export interface SessionIn {
   draft_id?: string;
   my_slot?: number | null;
   punts?: string[];
+  /** A practice session (a Yahoo mock draft) only: its own size. The real draft uses the league's. */
+  teams?: number;
+  rounds?: number;
 }
 
 export interface PickIn {

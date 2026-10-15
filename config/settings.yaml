@@ -57,7 +57,7 @@ season:
 
 draft:
   type: live_standard_snake
-  starts_at: "2026-10-18T19:00:00-04:00"
+  starts_at: "2026-10-18T20:00:00-04:00"   # Yahoo: Sun Oct 18 8:00pm EDT (owner, 2026-10-15)
   pick_clock_seconds: 60
   my_slot: null                # [DRAFT SLOT] - fill in once Yahoo assigns order (or set order)
   order: []                    # Yahoo team ids by draft slot, e.g. [7, 3, 11, ...]; names the
@@ -71,6 +71,11 @@ draft:
     yahoo_eligibility_min_share: 0.9   # of the top pool_size players by value
     board_refresh_budget_ms: 500
     api_url: http://127.0.0.1:8765
+  yahoo_feed:                  # Yahoo's own draft results as the listener's backup (draft/yahoo_feed.py)
+    enabled: true
+    poll_s: 8                  # between reads; picks Yahoo lists that the log lacks are recorded
+    minutes_before: 30         # polling runs from 30 min before starts_at ...
+    hours_after: 6             # ... to 6 h after
   rounds: 12                   # ASSUMED: one per non-IL roster slot (10 starters + 2 bench); check in Yahoo
   pool_size: 200               # z-scores are computed over the top N by value
   tiers: 16                    # natural-break tiers across the top pool (1-D optimal clustering)

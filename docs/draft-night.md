@@ -1,6 +1,6 @@
 # Draft night runbook
 
-The Hoop Dreams draft is **Sun Oct 18, 2026 at 7:00 pm EDT**: live snake, 14 teams, 60-second pick
+The Hoop Dreams draft is **Sun Oct 18, 2026 at 8:00 pm EDT**: live snake, 14 teams, 60-second pick
 clock. The season opens two days later, on Tue Oct 20. This page is the checklist. `make doctor`
 checks most of it for you, and every warning it prints comes with the action that fixes it.
 
@@ -66,9 +66,13 @@ below say when. Once access is on, Yahoo's data is read live instead and these e
 
 - **On the clock:** take the top recommendation unless you have a reason not to. The card shows why
   each player ranks where he does and the chance he lasts to your next pick.
-- **Other teams' picks** arrive from the listener. If the badge shows `UNMATCHED` or `CONFLICT`, or
-  stops counting, enter that pick by hand: ☰ → **Enter pick / Undo**, type the name. A name that
-  matches no player is refused with suggestions; Undo fixes a mistake.
+- **Other teams' picks** arrive two ways: the listener in the Yahoo room (instant), and Yahoo's own
+  draft results, which the app reads every 8 seconds from 30 minutes before the start (the status
+  bar's second line: "Yahoo picks: live · N added"). Whichever comes first records the pick; the
+  other skips it. An amber notice under the bar means the app needs you: a name it couldn't match
+  (enter that pick by hand: ☰ → **Enter pick / Undo**) or a pick where the log and Yahoo disagree
+  (check it in the Draft log; the app never overwrites a pick). A name that matches no player is
+  refused with suggestions; Undo fixes a mistake.
 - **Entering every pick by hand** (no listener): keep the app beside the Yahoo room and enter picks
   in batches while you're not on the clock. The board only needs to be current by your turn.
 - If the API stops, restart `make draft-api` and start the session again with the same draft id.

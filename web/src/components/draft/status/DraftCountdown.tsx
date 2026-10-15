@@ -12,7 +12,7 @@ export interface DraftCountdownProps {
 }
 
 /**
- * "Draft in 2d 21h 14m · Sun Oct 18, 7:00 pm ET": a countdown to the league's draft, ticking every
+ * "Draft in 2d 21h 14m · Sun Oct 18, 8:00 pm ET": a countdown to the league's draft, ticking every
  * second, amber in the last 15 minutes, gone once the draft has started.
  */
 export function DraftCountdown({ startsAt, now = Date.now }: DraftCountdownProps) {
