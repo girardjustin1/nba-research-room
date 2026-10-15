@@ -90,15 +90,18 @@ def readiness(con: duckdb.DuckDBPyConnection, cfg: Settings | None = None, now: 
     checks.append(_check("team_names", "Team names", "ok" if len(named) == teams else "warn",
                          f"{len(named)} of {teams} loaded from teams.csv",
                          "save teams.csv (team_id,team_name) to data/inbox, run make inbox"))
-    slot = d.my_slot or tracker.slot_from_order(d.order, cfg.league.my_team_id)
-    checks.append(_check("order", "Draft order", "ok" if d.order else "warn",
-                         "set: every board column is named" if d.order
+    order = d.order or tracker.league_draft_order(con, teams)
+    slot = d.my_slot or tracker.slot_from_order(order, cfg.league.my_team_id)
+    checks.append(_check("order", "Draft order", "ok" if order else "warn",
+                         ("set: every board column is named" if d.order
+                          else "from Yahoo: every board column is named") if order
                          else "not posted yet; board columns read Team 1..14 until it is",
-                         "once Yahoo posts the order, set draft.order to the team ids by slot"))
+                         "Yahoo sets the order before the draft; then start (or restart) the draft "
+                         "session. Or set draft.order to the team ids by slot"))
     checks.append(_check("slot", "My draft slot", "ok" if slot else "warn",
                          f"slot {slot} of {teams}" + ("" if d.my_slot else " (from the draft order)")
                          if slot else "not set",
-                         "set draft.order (or draft.my_slot, or pick it on the Draft screen)"))
+                         "pick it on the Draft screen (or set draft.my_slot)"))
     checks.append(_check("rounds", "Draft rounds", "ok" if d.confirmed.rounds else "warn",
                          f"{d.rounds} rounds" + ("" if d.confirmed.rounds else " (assumed)"),
                          "check Yahoo draft settings, then set draft.confirmed.rounds: true"))

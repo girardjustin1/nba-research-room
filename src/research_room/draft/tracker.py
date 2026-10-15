@@ -132,6 +132,19 @@ def league_team_names(con: duckdb.DuckDBPyConnection) -> dict[int, str]:
     """).fetchall())
 
 
+def league_draft_order(con: duckdb.DuckDBPyConnection, teams: int) -> list[int]:
+    """Yahoo team ids by draft slot, from the teams' draft positions once Yahoo has set the whole
+    order (every slot 1..teams exactly once); [] before that, so nothing is guessed."""
+    rows = con.execute("""
+        SELECT draft_position, team_id FROM yahoo_teams
+        WHERE snapshot_at = (SELECT max(snapshot_at) FROM yahoo_teams) AND draft_position IS NOT NULL
+        ORDER BY draft_position
+    """).fetchall()
+    if [int(p) for p, _ in rows] != list(range(1, teams + 1)):
+        return []
+    return [int(t) for _, t in rows]
+
+
 def slot_names_from_order(order: list[int], league_names: dict[int, str]) -> dict[int, str]:
     """Draft slot (1-based) -> team name, for slots whose Yahoo team has a name."""
     return {slot: league_names[tid] for slot, tid in enumerate(order, start=1) if tid in league_names}

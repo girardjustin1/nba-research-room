@@ -182,7 +182,7 @@ def start_session(draft_id: str, my_slot: int | None, punts: set[str], cfg: Sett
         yahoo_live.attach(con, cfg, ("teams", "players"))
         yahoo_elig = eligibility.load_yahoo(con, pasted=False)   # pasted positions: at each rebuild
         log = mock.con if mock else con
-        order = cfg.draft.order
+        order = cfg.draft.order or tracker.league_draft_order(con, cfg.league.teams)   # settings win
         if my_slot is None and not mock:
             my_slot = cfg.draft.my_slot or tracker.slot_from_order(order, cfg.league.my_team_id)
         state = tracker.load_state(log, draft_id, cfg, my_slot)

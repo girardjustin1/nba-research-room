@@ -231,6 +231,7 @@ def test_snapshots_match_the_csv_schemas(lg):
     assert set(b.available()) == set(yahoo.SCHEMAS)
     teams = b.read("teams").set_index("team_id")
     assert teams.at[11, "team_name"] == "Team Eleven"
+    assert teams.at[11, "draft_position"] == 1 and teams.at[1, "draft_position"] == 2   # Yahoo's order
     roster = b.read("roster").set_index("team_id")
     assert roster.at[1, "selected_slot"] == "Util" and roster.at[1, "eligible_positions"] == "PG,SG,G,Util"
     assert roster.at[11, "yahoo_player_key"] == "466.p.111"

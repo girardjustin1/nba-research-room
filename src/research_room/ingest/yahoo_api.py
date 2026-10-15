@@ -241,7 +241,10 @@ class ApiBackend:
 
     # ---------------------------------------------------------------- snapshots
     def teams(self) -> pd.DataFrame:
-        rows = [{"team_id": _team_id(k), "team_name": t.get("name")} for k, t in self.teams_raw().items()]
+        rows = [
+            {"team_id": _team_id(k), "team_name": t.get("name"), "draft_position": t.get("draft_position")}
+            for k, t in self.teams_raw().items()
+        ]
         return _frame(rows, "teams")
 
     def roster(self) -> pd.DataFrame:

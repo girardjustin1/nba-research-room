@@ -1511,3 +1511,12 @@ the page time limit while it reads Yahoo live) and a draft pick (read-write) can
 could have been refused on draft night. `store.connect` now waits (up to 20 s, polling every 50 ms)
 when that specific refusal is the reason, and fails as before for anything else, such as another
 process's lock.
+
+**Draft order and team names from Yahoo (2026-10-15).** With API access, Yahoo's team list carries
+each team's `draft_position` once the order is set (none yet on Oct 15: the league is predraft).
+The live teams table now keeps it (in memory only, like every Yahoo read), and when
+`draft.order` in settings is empty the draft session and the doctor take the order from Yahoo:
+every board column gets its team's name and my slot comes from team 11's place. The order counts
+only when Yahoo has set every slot 1..14 exactly once; a partial order is ignored, not guessed.
+Settings still win when filled, and names typed in the app still win over Yahoo's. A session
+started before Yahoo posts the order picks it up when it is started again (same draft id).

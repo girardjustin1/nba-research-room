@@ -74,3 +74,30 @@ def test_unmatched_keeper_is_an_error(loaded, cfg):
     r = readiness.readiness(loaded, bad, now=pd.Timestamp("2026-10-17T12:00:00Z"), check_api=False)
     assert by_key(r)["keepers"]["status"] == "error" and r["overall"] == "error"
     assert loaded.execute("SELECT count(*) FROM draft_picks").fetchone()[0] == 0   # real log untouched
+
+
+def test_the_draft_order_and_my_slot_come_from_yahoo_once_it_sets_them(loaded, cfg):
+    """No draft.order in settings: Yahoo's draft positions name the columns and give my slot."""
+    from research_room.draft import tracker
+
+    def teams(positions):
+        store.upsert(loaded, "yahoo_teams", pd.DataFrame({
+            "snapshot_at": pd.Timestamp("2026-10-18T22:00:00Z"), "team_id": [1, 2, 3, 4],
+            "team_name": ["Invented A", "Invented B", "Invented C", "Invented D"],
+            "draft_position": positions, "source": "yahoo",
+            "fetched_at": pd.Timestamp("2026-10-18T22:00:00Z")}))
+
+    mine = cfg.model_copy(update={"league": cfg.league.model_copy(update={"my_team_id": 4})})
+    mine = _with(mine, order=[], my_slot=None)
+    teams([None, None, None, None])                                   # predraft: nothing yet
+    assert tracker.league_draft_order(loaded, 4) == []
+    r = by_key(readiness.readiness(loaded, mine, now=pd.Timestamp("2026-10-17T12:00:00Z"), check_api=False))
+    assert r["order"]["status"] == "warn" and r["slot"]["status"] == "warn"
+    teams([2, 4, 1, None])                                            # partly set: still nothing guessed
+    assert tracker.league_draft_order(loaded, 4) == []
+    teams([2, 4, 1, 3])
+    assert tracker.league_draft_order(loaded, 4) == [3, 1, 4, 2]
+    r = by_key(readiness.readiness(loaded, mine, now=pd.Timestamp("2026-10-17T12:00:00Z"), check_api=False))
+    assert r["order"]["status"] == "ok" and "from Yahoo" in r["order"]["detail"]
+    assert r["slot"]["status"] == "ok" and "slot 3 of 4" in r["slot"]["detail"]
+    assert tracker.slot_names_from_order([3, 1, 4, 2], tracker.league_team_names(loaded))[1] == "Invented C"

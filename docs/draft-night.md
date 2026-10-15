@@ -51,12 +51,15 @@ below say when. Once access is on, Yahoo's data is read live instead and these e
    - `make web`: the app. Open **http://127.0.0.1:5173/#/draft**, at phone size if you like.
    - one free terminal for `make doctor`.
 3. Run **`make doctor`**. "Draft API: running" should now be ok.
-4. **Start the session.** On the Draft screen, choose your slot once Yahoo posts the order. Leave
-   punts off unless you've decided: you can turn one on at any point, and the board re-values
-   instantly. Keepers are placed automatically; an unmatched keeper name stops the session with a
-   message, so fix it in settings and start again.
-5. **Name the teams.** ☰ → **Edit team names**: name slots 1 to 14 as Yahoo's draft order lists
-   them. The board's columns follow the draft order, so this is the order and the names in one go.
+4. **Start the session once Yahoo posts the order.** With Yahoo access on, the app reads the order
+   from Yahoo: every column gets its team's name and your slot is filled in (`make doctor` says
+   "Draft order: from Yahoo" once it's there). Started earlier? Start the session again with the
+   same draft id after the order appears; nothing is lost. Leave punts off unless you've decided:
+   you can turn one on at any point, and the board re-values instantly. Keepers are placed
+   automatically; an unmatched keeper name stops the session with a message, so fix it in settings
+   and start again.
+5. **Team names, only without Yahoo access.** ☰ → **Edit team names**: name slots 1 to 14 as
+   Yahoo's draft order lists them (names typed here win over Yahoo's).
 6. Open the Yahoo draft room in Chrome. The listener badge should read `draft hoopdreams-2026`.
 
 ## During the draft

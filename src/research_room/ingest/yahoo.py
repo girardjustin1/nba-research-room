@@ -42,7 +42,11 @@ class Column:
 
 
 SCHEMAS: dict[str, tuple[Column, ...]] = {
-    "teams": (Column("team_id", "int"), Column("team_name", "str")),
+    "teams": (
+        Column("team_id", "int"),
+        Column("team_name", "str"),
+        Column("draft_position", "int", required=False),
+    ),
     "roster": (
         Column("team_id", "int"),
         Column("player_name", "str"),

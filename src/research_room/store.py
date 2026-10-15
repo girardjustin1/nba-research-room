@@ -235,8 +235,10 @@ def connect(path: Path | str | None = None, read_only: bool = False,
 LIVE_ONLY: dict[str, Table] = {
     "yahoo_league": _t(("league_id", "snapshot_at"),
         "league_id INTEGER", "snapshot_at TIMESTAMPTZ", "settings JSON", *_INGEST),
+    # draft_position: the team's draft slot once Yahoo sets the order (null before; teams.csv may omit)
     "yahoo_teams": _t(("snapshot_at", "team_id"),
-        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "team_name VARCHAR", *_INGEST),
+        "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "team_name VARCHAR", "draft_position INTEGER",
+        *_INGEST),
     "yahoo_rosters": _t(("snapshot_at", "team_id", "yahoo_player_key"),
         "snapshot_at TIMESTAMPTZ", "team_id INTEGER", "yahoo_player_key VARCHAR",
         "player_name VARCHAR", "player_id INTEGER", "selected_slot VARCHAR",
