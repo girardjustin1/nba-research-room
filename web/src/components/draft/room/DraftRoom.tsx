@@ -36,6 +36,7 @@ import { FullScreenPanel } from '../../app-shell/FullScreenPanel';
 import { LatestPickCard } from '../status/LatestPickCard';
 import { PositionalValuePanel } from '../panels/PositionalValuePanel';
 import { StrengthTable } from '../panels/StrengthTable';
+import { DraftCountdown } from '../status/DraftCountdown';
 import { StatusBar } from '../status/StatusBar';
 import { SuggestedPicks } from '../panels/SuggestedPicks';
 import { TeamNamesEditor } from '../tools/TeamNamesEditor';
@@ -64,6 +65,8 @@ export interface DraftRoomViewProps {
   /** Stories: show the latest-pick card on first render instead of waiting for a new pick. */
   showLatestOnLoad?: boolean;
   now?: () => number;
+  /** When the league's draft starts: a countdown under the status bar until then. */
+  draftStartsAt?: string | null;
 }
 
 /** Friendlier text for endpoints the running API may not have yet. */
@@ -94,6 +97,7 @@ export function DraftRoomView({
   initialPanel = null,
   showLatestOnLoad = false,
   now,
+  draftStartsAt = null,
 }: DraftRoomViewProps) {
   const { session, board, connection } = state;
   const [tab, setTab] = useState<RoomTab>(initialTab);
@@ -144,7 +148,9 @@ export function DraftRoomView({
   }, [state.teams.data, insights, categories]);
 
   if (!session) {
-    if (state.noSession) return <SessionSetup session={null} categories={DEFAULT_CATEGORIES} onStart={actions.start} />;
+    if (state.noSession) {
+      return <SessionSetup session={null} categories={DEFAULT_CATEGORIES} onStart={actions.start} draftStartsAt={draftStartsAt} now={now} />;
+    }
     return (
       <Box sx={{ minHeight: '100dvh', pt: SAFE_TOP, bgcolor: 'background.default' }}>
         {shell?.menuButton && <Box sx={{ px: 2, pt: 0.5 }}>{shell.menuButton}</Box>}
@@ -153,7 +159,16 @@ export function DraftRoomView({
     );
   }
   if (session.my_slot == null || state.boardError?.isNoSlot) {
-    return <SessionSetup session={session} categories={session.categories} onStart={actions.start} onResume={actions.setSlot} />;
+    return (
+      <SessionSetup
+        session={session}
+        categories={session.categories}
+        onStart={actions.start}
+        onResume={actions.setSlot}
+        draftStartsAt={draftStartsAt}
+        now={now}
+      />
+    );
   }
 
   const s = session;
@@ -204,6 +219,7 @@ export function DraftRoomView({
           now={now}
           compact={compact}
         />
+        <DraftCountdown startsAt={draftStartsAt} now={now} />
       </Box>
 
       <Tabs
@@ -495,8 +511,28 @@ export function DraftRoomView({
 /** Container: wires the live API (polling) into the view. */
 export function DraftRoom({ api, initialTab }: { api: DraftApi; initialTab?: RoomTab }) {
   const [state, actions] = useDraftRoom(api);
+  const [draftStartsAt, setDraftStartsAt] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.health().then(
+      (h) => live && setDraftStartsAt(h.draft_starts_at ?? null),
+      () => {}, // no countdown when the API can't say; the room shows the connection itself
+    );
+    return () => {
+      live = false;
+    };
+  }, [api]);
   const loadCompare = useMemo(() => (ids: number[]) => api.compare(ids).then((r) => r.players), [api]);
   // One request per team for the whole season; the schedule does not change mid-draft.
   const loadTeamDays = useMemo(() => teamDaysLoader(api), [api]);
-  return <DraftRoomView state={state} actions={actions} loadCompare={loadCompare} loadTeamDays={loadTeamDays} initialTab={initialTab} />;
+  return (
+    <DraftRoomView
+      state={state}
+      actions={actions}
+      loadCompare={loadCompare}
+      loadTeamDays={loadTeamDays}
+      initialTab={initialTab}
+      draftStartsAt={draftStartsAt}
+    />
+  );
 }

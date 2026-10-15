@@ -228,3 +228,11 @@ def test_strength_compares_me_with_the_league(client):
     client.post("/draft/pick", json={"player_id": best if best != 1 else 2})
     after = client.get("/draft/strength").json()["expected_cats"]
     assert after["me"] > first["expected_cats"]["me"]
+
+
+def test_health_says_when_the_draft_starts(client):
+    from research_room.config import settings
+
+    body = client.get("/health").json()
+    assert body["ok"] is True and body["session"] is None
+    assert body["draft_starts_at"] == settings().draft.starts_at.isoformat()

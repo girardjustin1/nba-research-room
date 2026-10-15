@@ -423,7 +423,11 @@ def create_app(db_path: str | None = None, image_root=None, run_mock_thread: boo
 
     @app.get("/health")
     def health() -> dict:
-        return {"ok": True, "session": h.session.draft_id if h.session else None}
+        """Up, the running draft session, and when the league's draft starts (settings: the Draft
+        screen counts down to it)."""
+        starts = settings().draft.starts_at
+        return {"ok": True, "session": h.session.draft_id if h.session else None,
+                "draft_starts_at": starts.isoformat() if starts else None}
 
     @app.post("/draft/session")
     def post_session(body: SessionIn) -> dict:

@@ -13,6 +13,7 @@ import { ordinal } from '../../../lib/format';
 import { PuntChips } from '../sheet/PuntChips';
 import { useAppShell } from '../../app-shell/AppShellContext';
 import { SAFE_BOTTOM, SAFE_TOP } from '../../../lib/layout';
+import { DraftCountdown } from '../status/DraftCountdown';
 
 export interface SessionSetupProps {
   /** Existing session from the API (resume), or null when none was started. */
@@ -24,13 +25,16 @@ export interface SessionSetupProps {
   onStart: (mySlot: number, punts: string[]) => Promise<void>;
   /** Resume an existing session that has no slot yet (PUT /draft/slot). */
   onResume?: (mySlot: number) => Promise<void>;
+  /** When the league's draft starts: a countdown above the form until then. */
+  draftStartsAt?: string | null;
+  now?: () => number;
 }
 
 /**
  * Start or resume a draft: choose my draft slot (1..teams) and any punts. Starting
  * re-reads the pick log for this draft from the store, so it is safe after a restart.
  */
-export function SessionSetup({ session, teams, categories, onStart, onResume }: SessionSetupProps) {
+export function SessionSetup({ session, teams, categories, onStart, onResume, draftStartsAt, now }: SessionSetupProps) {
   const n = session?.teams ?? teams ?? 14;
   const [slot, setSlot] = useState<number | null>(session?.my_slot ?? null);
   const [punts, setPunts] = useState<string[]>(session?.punts ?? []);
@@ -75,6 +79,11 @@ export function SessionSetup({ session, teams, categories, onStart, onResume }: 
       </Typography>
 
       <Stack spacing={2}>
+        {draftStartsAt && (
+          <Box sx={{ borderRadius: 1, overflow: 'hidden', '& > *': { borderBottom: 0 } }}>
+            <DraftCountdown startsAt={draftStartsAt} now={now} />
+          </Box>
+        )}
         <Card sx={{ p: 1.5 }}>
           <Typography variant="subtitle2" component="h2" id="slot-label" sx={{ mb: 1 }}>
             My draft slot

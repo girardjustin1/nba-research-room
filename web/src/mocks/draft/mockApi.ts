@@ -7,13 +7,16 @@ import { makeBoard, makeCompare, makeInsights, makePool, makePositional, makeSes
  * Storybook's Prototype section with the same sample data as the component stories.
  * Writes (pick, undo, ...) resolve with the unchanged session: nothing is stored.
  */
+/** The demo's draft start: always 2 days, 21 hours and 14 minutes away, so the countdown shows. */
+export const SAMPLE_DRAFT_STARTS_AT = () => new Date(Date.now() + ((2 * 24 + 21) * 60 + 14) * 60_000).toISOString();
+
 export function createMockDraftApi(currentPick = 30): DraftApi {
   const session = makeSession({ mySlot: 5, currentPick });
   const board = makeBoard(session);
   const ok = async () => session;
   let positions = yahooPositionsNone;
   return {
-    health: async () => ({ ok: true, session: session.draft_id }),
+    health: async () => ({ ok: true, session: session.draft_id, draft_starts_at: SAMPLE_DRAFT_STARTS_AT() }),
     getSession: ok,
     startSession: ok,
     setSlot: ok,

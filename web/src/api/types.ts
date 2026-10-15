@@ -237,6 +237,8 @@ export interface RostersResponse {
 export interface HealthResponse {
   ok: boolean;
   session: string | null;
+  /** When the league's draft starts (settings), for the Draft screen's countdown; older APIs omit it. */
+  draft_starts_at?: string | null;
 }
 
 export interface SessionIn {

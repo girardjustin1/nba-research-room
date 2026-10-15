@@ -43,6 +43,13 @@ export const OnTheClock: Story = { args: { state: mockRoomState(onTheClockSessio
 /** The live read after the newest pick slides in (tap it for that team). */
 export const LatestPick: Story = { args: { state: mockRoomState(midSession, midBoard), showLatestOnLoad: true } };
 export const PuntDrift: Story = { args: { state: mockRoomState(driftSession, driftBoard) } };
+/** Before the draft: the countdown under the status bar (a fixed clock, 2 days 21 hours out). */
+export const BeforeTheDraft: Story = {
+  args: {
+    draftStartsAt: '2026-10-18T19:00:00-04:00',
+    now: () => new Date('2026-10-18T19:00:00-04:00').getTime() - ((2 * 24 + 21) * 60 + 14) * 60_000,
+  },
+};
 /** Me vs league: my standing per category against the league (its own tab). */
 export const MeVsLeague: Story = { args: { initialTab: 'league' } };
 export const MeVsLeaguePunting: Story = { args: { state: mockRoomState(puntSession, puntBoard), initialTab: 'league' } };
